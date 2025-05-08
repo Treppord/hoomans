@@ -10,16 +10,16 @@ class Entity:
     def load_cna_file(self, filepath):
         """Load CNA data from a file"""
         try:
-            # Use our local copy of the codec
+                # Use our local CNA utility instead of trying to import from the cna package
             import sys
             import os
-        
+            
             # Add the parent directory to sys.path if needed
             parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             if parent_dir not in sys.path:
                 sys.path.append(parent_dir)
             
-            from cna.cna_codec import CNACodec
+            from cna_utils import CNACodec
             self.cna_data = CNACodec.load_from_file(filepath)
             self.cna_file = filepath
             print(f"Successfully loaded CNA file: {filepath}")
@@ -29,6 +29,7 @@ class Entity:
             import traceback
             traceback.print_exc()
             return False
+
 
     
     def handle_input(self, keys):

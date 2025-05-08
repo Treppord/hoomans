@@ -16,10 +16,28 @@ class Gender(enum.Enum):
 class Culture(enum.Enum):
     RED = 0
     BLUE = 1
+    GREEN = 2
+    YELLOW = 3
+    PURPLE = 4
+    ORANGE = 5
+    PINK = 6
+    BROWN = 7
+    GRAY = 8
+    BLACK = 9
+    WHITE = 10
     
 class Nation(enum.Enum):
     NL = 0
     PL = 1
+    AL = 2
+    FL = 3
+    CL = 4
+    SL = 5
+    DL = 6
+    VL = 7
+    ML = 8
+    GL = 9
+    HL = 10
 
 @dataclass
 class CNAAttributes:

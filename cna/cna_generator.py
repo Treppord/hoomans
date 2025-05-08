@@ -11,15 +11,42 @@ class CNAGenerator:
     """Generator for random CNA entities"""
     
     FIRST_NAMES = [
+        # Gender-neutral names
         "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Avery", 
         "Quinn", "Skyler", "Dakota", "Reese", "Emerson", "Finley", "Rowan",
-        "Sage", "Kai", "River", "Phoenix", "Remy", "Blair"
+        "Sage", "Kai", "River", "Phoenix", "Remy", "Blair",
+        
+        # More diverse names
+        "Aiden", "Amari", "Ari", "Aspen", "Aubrey", "August", "Blake", "Briar",
+        "Brooklyn", "Cameron", "Charlie", "Corey", "Dallas", "Devon", "Drew",
+        "Ellis", "Emery", "Frankie", "Gray", "Harley", "Hayden", "Hunter",
+        "Indigo", "Jamie", "Jesse", "Justice", "Kendall", "Lane", "Logan",
+        "London", "Marlowe", "Micah", "Monroe", "Noah", "Parker", "Peyton",
+        "Phoenix", "Quinn", "Raven", "Reagan", "Remington", "Robin", "Rowan",
+        "Sawyer", "Shawn", "Sidney", "Sloane", "Spencer", "Sterling", "Storm",
+        "Tatum", "Tegan", "Tristan", "Tyler", "Winter", "Zion",
+        
+        # International names
+        "Akira", "Ananya", "Chen", "Chiara", "Darius", "Elena", "Fatima", "Hiroshi",
+        "Ibrahim", "Javier", "Kenji", "Layla", "Mateo", "Nadia", "Omar", "Priya",
+        "Rafi", "Sasha", "Thiago", "Valentina", "Wei", "Yara", "Zara"
     ]
     
     LAST_NAMES = [
+        # Common surnames
         "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
         "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez",
-        "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"
+        "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+        
+        # More diverse surnames
+        "Abara", "Ahmed", "Ali", "Bautista", "Chakrabarti", "Chen", "Choi", "Cohen",
+        "Das", "Diaz", "Dubois", "Feng", "Fernandez", "Fischer", "Gupta", "Hansen",
+        "Ibrahim", "Ivanov", "Jansen", "Johansson", "Kang", "Khan", "Kim", "Kowalski",
+        "Kumar", "Lam", "Lee", "Li", "Liu", "Malhotra", "Mendoza", "Meyer", "Müller",
+        "Murphy", "Nakamura", "Navarro", "Nguyen", "Novak", "O'Brien", "Okafor",
+        "Oliveira", "Ortiz", "Patel", "Petrov", "Ramos", "Rossi", "Russo", "Sanchez",
+        "Santos", "Schmidt", "Sharma", "Silva", "Singh", "Suzuki", "Tanaka", "Tran",
+        "Vasquez", "Wang", "Weber", "Wong", "Wu", "Yamamoto", "Yang", "Zhang", "Zhao"
     ]
     
     @staticmethod
