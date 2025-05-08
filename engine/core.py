@@ -5,6 +5,7 @@ from engine.input_handler import InputHandler
 from engine.ai import AIManager
 from engine.data_manager import DataManager
 from engine.ui import UIManager, StatsPanel, ChatInputBox
+from engine.camera import Camera
 
 class SimpleGameEngine:
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
@@ -17,12 +18,15 @@ class SimpleGameEngine:
         self.screen = pygame.display.set_mode((width, height))
         pygame.display.set_caption(title)
         
+        # Store instance reference
         SimpleGameEngine.instance = self
-
-                
+        
         # Set up the clock for controlling frame rate
         self.clock = pygame.time.Clock()
         self.fps = fps
+        
+        # Initialize camera
+        self.camera = Camera(width, height)
         
         # Game objects storage
         self.objects = []
@@ -48,22 +52,24 @@ class SimpleGameEngine:
         # Player reference (will be set when player is added)
         self.player = None
         
-        # Game state
-        self.running = False
-        self.paused = False  # Add paused state
+        # Paused state
+        self.paused = False
         
         # Set up initial game values
         self.setup_game_data()
         
         # Set up UI elements
         self.setup_ui()
-    
+        
+        # Game state
+        self.running = False
+        
     def setup_game_data(self):
         """Set up initial game values"""
         # Create player stats
         self.data.create_player_stat("health", 20, 0, 20)
         self.data.create_player_stat("hunger", 10, 0, 10)
-        self.data.create_player_stat("thirst", 10, 0, 10)
+        self.data.create_player_stat("thirst", 5, 0, 5)
         self.data.create_player_stat("score", 0, 0, None)
         
         # Create game values
@@ -121,6 +127,8 @@ class SimpleGameEngine:
         # If this is a player-controlled object, store a reference
         if hasattr(obj, 'controllable') and obj.controllable:
             self.player = obj
+            self.camera.set_follow_target(obj)
+
             
         return obj
         
@@ -143,7 +151,7 @@ class SimpleGameEngine:
             # Check for spacebar to toggle pause
             if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and not self.input_handler.chat_mode:
                 self.paused = not self.paused
-                print(f"{'paused' if self.paused else 'resumed'}")
+                print(f"Game {'paused' if self.paused else 'resumed'}")
                 continue
                 
             # Direct check for T key to toggle chat
@@ -153,17 +161,42 @@ class SimpleGameEngine:
                 self.chat_input.toggle()
                 continue
                 
-            # Handle mouse clicks for entity selection
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
-                mouse_pos = pygame.mouse.get_pos()
-                print(f"Mouse clicked at {mouse_pos}")
+            # Handle mouse wheel for zooming
+            if event.type == pygame.MOUSEWHEEL:
+                if event.y > 0:
+                    self.camera.zoom_in(0.1)
+                    print(f"Zoomed in: {self.camera.zoom:.2f}")
+                elif event.y < 0:
+                    self.camera.zoom_out(0.1)
+                    print(f"Zoomed out: {self.camera.zoom:.2f}")
+                continue
                 
-                # Check if any entity was clicked
-                for obj in self.objects:
-                    if hasattr(obj, 'contains_point') and obj.contains_point(mouse_pos[0], mouse_pos[1]):
-                        print(f"Entity clicked: {obj.__class__.__name__}")
-                        self.ui.show_entity_info(obj)
-                        break
+            # Handle mouse buttons for panning
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left mouse button
+                    # Check if we're clicking on the map (not UI)
+                    mouse_pos = pygame.mouse.get_pos()
+                    
+                    # Check if any entity was clicked
+                    entity_clicked = False
+                    for obj in self.objects:
+                        if hasattr(obj, 'contains_point') and obj.contains_point(mouse_pos[0], mouse_pos[1], self.camera):
+                            print(f"Entity clicked: {obj.__class__.__name__}")
+                            self.ui.show_entity_info(obj)
+                            entity_clicked = True
+                            break
+                    
+                    # If no entity was clicked, start panning
+                    if not entity_clicked:
+                        self.camera.start_drag(mouse_pos[0], mouse_pos[1])
+                        
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:  # Left mouse button
+                    self.camera.stop_drag()
+                    
+            elif event.type == pygame.MOUSEMOTION:
+                if self.camera.dragging:
+                    self.camera.update_drag(event.pos[0], event.pos[1])
         
         # Update input handler for continuous key state
         self.input_handler.update()
@@ -177,10 +210,11 @@ class SimpleGameEngine:
     
     def update(self):
         """Update game logic"""
-        # Skip updates if paused
         if self.paused:
             return
             
+        self.camera.update()
+
         # Update game time
         self.data.add_to_value("game_time", 1)
         
@@ -200,8 +234,8 @@ class SimpleGameEngine:
                 self.data.get_player_stat("hunger").subtract(1)
             if self.data.get_player_stat("thirst").value > 0:
                 self.data.get_player_stat("thirst").subtract(1)
-            
-            # Also update player entity's thirst if it exists
+                
+                # Also update player entity's thirst if it exists
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
                     print(f"Player thirst decreased to {self.player.thirst}")
@@ -213,30 +247,15 @@ class SimpleGameEngine:
         
         # Draw the world map first
         if self.world_map:
-            self.world_map.render(self.screen)
+            self.world_map.render(self.screen, self.camera)
         
         # Draw all objects
         for obj in self.objects:
             if hasattr(obj, 'render'):
-                obj.render(self.screen)
+                obj.render(self.screen, self.camera)
         
         # Draw UI elements last (on top)
         self.ui.render(self.screen)
-        
-        # Draw pause indicator if game is paused
-        if self.paused:
-            
-            # Draw "PAUSED" text
-            font = pygame.font.SysFont(None, 72)
-            text = font.render("||", True, (255, 255, 255))
-            text_rect = text.get_rect(center=(self.width // 2, self.height // 1 - 100))
-            self.screen.blit(text, text_rect)
-            
-            # Draw instruction text
-            font_small = pygame.font.SysFont(None, 24)
-            instruction = font_small.render("Press SPACE to resume", True, (200, 200, 200))
-            instruction_rect = instruction.get_rect(center=(self.width // 2, self.height // 1 - 50))
-            self.screen.blit(instruction, instruction_rect)
         
         # Update the display
         pygame.display.flip()

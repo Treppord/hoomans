@@ -16,10 +16,10 @@ class Tile:
             "sand": (194, 178, 128)   # Sand color
         }
     
-    def render(self, screen, x, y):
-        """Render the tile at the specified grid position"""
+    def render(self, screen, x, y, width, height):
+        """Render the tile at the specified position with the given size"""
         color = self.colors.get(self.type, (255, 0, 255))  # Default to magenta for unknown types
-        pygame.draw.rect(screen, color, (x * self.SIZE, y * self.SIZE, self.SIZE, self.SIZE))
+        pygame.draw.rect(screen, color, (x, y, width, height))
     
     def is_water(self):
         """Check if this tile is a water tile"""

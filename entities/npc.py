@@ -21,6 +21,10 @@ class NPC(Rectangle):
         """Set the AI controller for this NPC"""
         self.ai_controller = ai_controller
         self.ai_controller.set_entity(self)
+        
+    def render(self, screen, camera):
+        """Render the NPC with camera transformations"""
+        super().render(screen, camera)
     
     def update(self):
         """Update entity state"""

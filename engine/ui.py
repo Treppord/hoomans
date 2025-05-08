@@ -177,13 +177,28 @@ class TextBubble:
         if self.is_expired():
             return
             
-        # Calculate position above entity
-        x = self.entity.x + self.entity.width // 2 - self.width // 2
-        y = self.entity.y - self.height - 5  # 5px gap between entity and bubble
+        # Get camera from game engine
+        from engine.core import SimpleGameEngine
+        camera = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            camera = SimpleGameEngine.instance.camera
+            
+        if not camera:
+            return
+            
+        # Calculate position above entity in world coordinates
+        world_x = self.entity.x + self.entity.width // 2
+        world_y = self.entity.y - self.height - 5  # 5px gap between entity and bubble
+        
+        # Apply camera transformation
+        screen_x, screen_y, _, _ = camera.apply(world_x, world_y, 0, 0)
+        
+        # Adjust position to center the bubble
+        screen_x -= self.width // 2
         
         # Keep bubble on screen
-        x = max(5, min(x, screen.get_width() - self.width - 5))
-        y = max(5, min(y, screen.get_height() - self.height - 5))
+        screen_x = max(5, min(screen_x, screen.get_width() - self.width - 5))
+        screen_y = max(5, min(screen_y, screen.get_height() - self.height - 5))
         
         # Create a surface with alpha for transparency
         bubble_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -199,7 +214,7 @@ class TextBubble:
                           (self.padding, self.padding))
         
         # Draw the bubble on the screen
-        screen.blit(bubble_surface, (x, y))
+        screen.blit(bubble_surface, (screen_x, screen_y))
 
 class UIManager:
     """Manages all UI elements"""

@@ -11,8 +11,8 @@ if __name__ == "__main__":
     engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600)
     
     # Create and set up the world map (50x38 tiles for an 800x600 screen)
-    world_map = WorldMap(50, 38)
-    world_map.generate_simple_map()
+    world_map = WorldMap(256, 256)
+    world_map.generate_large_map()
     engine.set_world_map(world_map)
     
     # Get absolute path to the project root directory
