@@ -17,6 +17,9 @@ class SimpleGameEngine:
         self.screen = pygame.display.set_mode((width, height))
         pygame.display.set_caption(title)
         
+        SimpleGameEngine.instance = self
+
+                
         # Set up the clock for controlling frame rate
         self.clock = pygame.time.Clock()
         self.fps = fps
@@ -187,12 +190,21 @@ class SimpleGameEngine:
         # Update physics for all objects
         self.physics.update(self.objects)
         
+        # Update player thirst in data manager if player exists
+        if self.player and hasattr(self.player, 'thirst'):
+            self.data.get_player_stat("thirst").set(self.player.thirst)
+        
         # Example: slowly decrease hunger and thirst over time
         if self.data.get_value("game_time").value % 600 == 0:  # Every 10 seconds (at 60 FPS)
             if self.data.get_player_stat("hunger").value > 0:
                 self.data.get_player_stat("hunger").subtract(1)
             if self.data.get_player_stat("thirst").value > 0:
                 self.data.get_player_stat("thirst").subtract(1)
+            
+            # Also update player entity's thirst if it exists
+                if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
+                    self.player.thirst -= 1
+                    print(f"Player thirst decreased to {self.player.thirst}")
     
     def render(self):
         """Render all game objects"""

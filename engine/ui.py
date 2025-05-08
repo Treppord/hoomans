@@ -39,41 +39,42 @@ class StatsPanel(UIElement):
     def render(self, screen):
         if not self.visible:
             return
-            
-        # Create a surface with alpha for transparency
+        
+    # Create a surface with alpha for transparency
         panel_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
-        # Draw background with transparency
+    
+    # Draw background with transparency
         pygame.draw.rect(panel_surface, self.background_color, 
-                        (0, 0, self.width, self.height))
-        
-        # Get stats from data manager
+                    (0, 0, self.width, self.height))
+    
+    # Get stats from data manager
         health = self.data_manager.get_player_stat("health")
         hunger = self.data_manager.get_player_stat("hunger")
         thirst = self.data_manager.get_player_stat("thirst")
-        
-        # Render text for each stat
+    
+    # Render text for each stat
         y_offset = self.padding
-        
+    
         if health:
             health_text = f"Health: {health.value}/{health.max_value}"
             text_surface = self.font.render(health_text, True, self.text_color)
             panel_surface.blit(text_surface, (self.padding, y_offset))
             y_offset += 30
-        
+    
         if hunger:
             hunger_text = f"Hunger: {hunger.value}/{hunger.max_value}"
             text_surface = self.font.render(hunger_text, True, self.text_color)
             panel_surface.blit(text_surface, (self.padding, y_offset))
             y_offset += 30
-        
+    
         if thirst:
             thirst_text = f"Thirst: {thirst.value}/{thirst.max_value}"
             text_surface = self.font.render(thirst_text, True, self.text_color)
             panel_surface.blit(text_surface, (self.padding, y_offset))
-        
-        # Draw the panel on the screen
+    
+    # Draw the panel on the screen
         screen.blit(panel_surface, (self.x, self.y))
+
 
 class ChatInputBox(UIElement):
     """Input box for typing chat messages"""
@@ -306,6 +307,36 @@ class CharacterInfoPanel(UIElement):
             100
         )
         pygame.draw.rect(panel_surface, self.entity.color, entity_rect)
+        
+        # Add entity stats below the visualization
+        stats_y = self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
+        
+        # Display entity stats if available
+        if hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or hasattr(self.entity, 'health'):
+            stats_title = self.font.render("Entity Stats", True, self.title_color)
+            panel_surface.blit(stats_title, (self.padding, stats_y))
+            stats_y += 30
+            
+            # Display thirst if available
+            if hasattr(self.entity, 'thirst'):
+                thirst_text = f"Thirst: {self.entity.thirst}/5"
+                thirst_surface = self.small_font.render(thirst_text, True, self.text_color)
+                panel_surface.blit(thirst_surface, (self.padding, stats_y))
+                stats_y += 25
+            
+            # Display hunger if available
+            if hasattr(self.entity, 'hunger'):
+                hunger_text = f"Hunger: {self.entity.hunger}/5"
+                hunger_surface = self.small_font.render(hunger_text, True, self.text_color)
+                panel_surface.blit(hunger_surface, (self.padding, stats_y))
+                stats_y += 25
+            
+            # Display health if available
+            if hasattr(self.entity, 'health'):
+                health_text = f"Health: {self.entity.health}/5"
+                health_surface = self.small_font.render(health_text, True, self.text_color)
+                panel_surface.blit(health_surface, (self.padding, stats_y))
+                stats_y += 25
         
         # Right side - CNA attributes
         right_x = (self.width // 2) + self.padding

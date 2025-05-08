@@ -1,4 +1,5 @@
 from entities.rectangle import Rectangle
+import pygame
 
 class NPC(Rectangle):
     """An NPC entity controlled by AI"""
@@ -6,6 +7,11 @@ class NPC(Rectangle):
     def __init__(self, grid_x, grid_y, color=(0, 255, 0), speed=1, ai_controller=None):
         super().__init__(grid_x, grid_y, color, speed, controllable=False)
         self.ai_controller = ai_controller
+        
+        # Add thirst attribute (0-5 scale)
+        self.thirst = 5  # Start with full thirst
+        self.last_thirst_update = 0  # Track time for thirst decrease
+        self.last_drink_time = 0  # Track time for drinking
         
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
@@ -15,3 +21,17 @@ class NPC(Rectangle):
         """Set the AI controller for this NPC"""
         self.ai_controller = ai_controller
         self.ai_controller.set_entity(self)
+    
+    def update(self):
+        """Update entity state"""
+        super().update()
+        
+        # Update thirst over time
+        current_time = pygame.time.get_ticks()
+        
+        # Decrease thirst every 10 seconds
+        if current_time - self.last_thirst_update > 10000:  # 10 seconds
+            if self.thirst > 0:
+                self.thirst -= 1
+                print(f"NPC thirst decreased to {self.thirst}")
+            self.last_thirst_update = current_time

@@ -1,9 +1,10 @@
 from engine.core import SimpleGameEngine
 from entities.rectangle import Rectangle
 from entities.npc import NPC
-from engine.ai import RandomWanderAI, FollowPlayerAI
+from engine.ai import RandomWanderAI, FollowPlayerAI, WaterSeekingAI
 from world.map import WorldMap
 import os
+import pygame
 
 if __name__ == "__main__":
     # Create the game engine
@@ -20,6 +21,11 @@ if __name__ == "__main__":
     # Add a player-controlled rectangle (using grid coordinates)
     player = engine.add_object(Rectangle(grid_x=25, grid_y=19, color=(255, 0, 0), speed=1, controllable=True))
     
+    # Add thirst attribute to player
+    player.thirst = 10
+    player.last_thirst_update = pygame.time.get_ticks()
+    player.last_drink_time = 0
+    
     # Load CNA file for player if it exists
     cna_file_path = os.path.join(project_root, "cna", "data", "Alex_Brown.cna")
     if os.path.exists(cna_file_path):
@@ -28,9 +34,9 @@ if __name__ == "__main__":
     else:
         print(f"CNA file not found: {cna_file_path}")
     
-    # Add an NPC with random wandering AI
+    # Add an NPC with water-seeking AI
     wanderer = engine.add_object(NPC(grid_x=6, grid_y=6, color=(0, 255, 0), speed=1))
-    engine.add_ai_controller(RandomWanderAI(wanderer))
+    engine.add_ai_controller(WaterSeekingAI(wanderer, detection_range=8))
     
     # Load CNA file for wanderer if it exists
     cna_file_path = os.path.join(project_root, "cna", "data", "Skyler_Smith.cna")

@@ -37,24 +37,49 @@ class Rectangle(Entity):
         """Update object state"""
         # If we have a target position, move towards it
         if self.is_moving:
-            # Update grid position
+        # Update grid position
             if self.grid_x < self.target_grid_x:
                 self.grid_x += 1
             elif self.grid_x > self.target_grid_x:
                 self.grid_x -= 1
-                
+            
             if self.grid_y < self.target_grid_y:
                 self.grid_y += 1
             elif self.grid_y > self.target_grid_y:
                 self.grid_y -= 1
-            
-            # Check if we've reached the target
+        
+        # Check if we've reached the target
             if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                 self.is_moving = False
-        
-        # Update pixel position based on grid position
+    
+    # Update pixel position based on grid position
         self.x = self.grid_x * 16
         self.y = self.grid_y * 16
+    
+    # Check for drinking if we have thirst attribute
+        if hasattr(self, 'thirst') and hasattr(self, 'last_drink_time'):
+            current_time = pygame.time.get_ticks()
+            
+            # Try to drink if we're near water and it's been at least 1 second since last drink
+            if current_time - self.last_drink_time > 1000:  # 1 second
+            # Get the world map from the game engine
+                from engine.core import SimpleGameEngine
+                world_map = None
+                if hasattr(SimpleGameEngine, 'instance'):
+                    world_map = SimpleGameEngine.instance.world_map
+            
+                if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+                    if self.thirst < 10:  # Max thirst is 5
+                        self.thirst += 1
+                        print(f"Entity drank water, thirst increased to {self.thirst}")
+                    
+                    # Add a text bubble for the player
+                    if hasattr(self, 'controllable') and self.controllable and hasattr(SimpleGameEngine, 'instance'):
+                        if hasattr(SimpleGameEngine.instance, 'ui'):
+                            SimpleGameEngine.instance.ui.add_text_bubble("*Slurp*", self, duration=1.0)
+                
+                self.last_drink_time = current_time
+
     
     def contains_point(self, x, y):
         """Check if this entity contains the given point (for click detection)"""

@@ -20,4 +20,11 @@ class Tile:
         """Render the tile at the specified grid position"""
         color = self.colors.get(self.type, (255, 0, 255))  # Default to magenta for unknown types
         pygame.draw.rect(screen, color, (x * self.SIZE, y * self.SIZE, self.SIZE, self.SIZE))
-        
+    
+    def is_water(self):
+        """Check if this tile is a water tile"""
+        return self.type == "water"
+    
+    def is_walkable(self):
+        """Check if entities can walk on this tile"""
+        return self.type != "wall"
