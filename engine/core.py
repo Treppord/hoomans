@@ -45,14 +45,15 @@ class SimpleGameEngine:
         # Player reference (will be set when player is added)
         self.player = None
         
+        # Game state
+        self.running = False
+        self.paused = False  # Add paused state
+        
         # Set up initial game values
         self.setup_game_data()
         
         # Set up UI elements
         self.setup_ui()
-        
-        # Game state
-        self.running = False
     
     def setup_game_data(self):
         """Set up initial game values"""
@@ -136,18 +137,36 @@ class SimpleGameEngine:
             if self.ui.handle_event(event):
                 continue
                 
+            # Check for spacebar to toggle pause
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and not self.input_handler.chat_mode:
+                self.paused = not self.paused
+                print(f"{'paused' if self.paused else 'resumed'}")
+                continue
+                
             # Direct check for T key to toggle chat
             if event.type == pygame.KEYDOWN and event.key == pygame.K_t and not self.input_handler.chat_mode:
                 print("Chat mode activated")  # Debug output
                 self.input_handler.chat_mode = True
                 self.chat_input.toggle()
                 continue
+                
+            # Handle mouse clicks for entity selection
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
+                mouse_pos = pygame.mouse.get_pos()
+                print(f"Mouse clicked at {mouse_pos}")
+                
+                # Check if any entity was clicked
+                for obj in self.objects:
+                    if hasattr(obj, 'contains_point') and obj.contains_point(mouse_pos[0], mouse_pos[1]):
+                        print(f"Entity clicked: {obj.__class__.__name__}")
+                        self.ui.show_entity_info(obj)
+                        break
         
         # Update input handler for continuous key state
         self.input_handler.update()
         
-        # Only handle movement if not in chat mode
-        if not self.input_handler.chat_mode:
+        # Only handle movement if not in chat mode and not paused
+        if not self.input_handler.chat_mode and not self.paused:
             for obj in self.objects:
                 self.input_handler.handle_entity_movement(obj)
                 self.input_handler.handle_entity_action(obj)
@@ -155,6 +174,10 @@ class SimpleGameEngine:
     
     def update(self):
         """Update game logic"""
+        # Skip updates if paused
+        if self.paused:
+            return
+            
         # Update game time
         self.data.add_to_value("game_time", 1)
         
@@ -187,6 +210,21 @@ class SimpleGameEngine:
         
         # Draw UI elements last (on top)
         self.ui.render(self.screen)
+        
+        # Draw pause indicator if game is paused
+        if self.paused:
+            
+            # Draw "PAUSED" text
+            font = pygame.font.SysFont(None, 72)
+            text = font.render("||", True, (255, 255, 255))
+            text_rect = text.get_rect(center=(self.width // 2, self.height // 1 - 100))
+            self.screen.blit(text, text_rect)
+            
+            # Draw instruction text
+            font_small = pygame.font.SysFont(None, 24)
+            instruction = font_small.render("Press SPACE to resume", True, (200, 200, 200))
+            instruction_rect = instruction.get_rect(center=(self.width // 2, self.height // 1 - 50))
+            self.screen.blit(instruction, instruction_rect)
         
         # Update the display
         pygame.display.flip()

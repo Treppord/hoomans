@@ -199,7 +199,20 @@ class UIManager:
         self.screen_height = screen_height
         self.elements = []
         self.text_bubbles = []
+    
+        # Create character info panel
+        panel_width = 600
+        panel_height = 500
+        panel_x = (screen_width - panel_width) // 2
+        panel_y = (screen_height - panel_height) // 2
+        self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
+        self.elements.append(self.char_info_panel)
         
+        
+    def show_entity_info(self, entity):
+        """Show the character info panel for an entity"""
+        self.char_info_panel.set_entity(entity)
+    
     def add_element(self, element):
         """Add a UI element"""
         self.elements.append(element)
@@ -231,3 +244,124 @@ class UIManager:
         # Render text bubbles
         for bubble in self.text_bubbles:
             bubble.render(screen)
+
+class CharacterInfoPanel(UIElement):
+    """Panel that displays character information from CNA data"""
+    def __init__(self, x, y, width, height):
+        super().__init__(x, y, width, height)
+        self.entity = None
+        self.background_color = (60, 60, 60, 230)  # Dark gray with transparency
+        self.text_color = (255, 255, 255)  # White
+        self.title_color = (200, 200, 100)  # Light yellow
+        self.font = pygame.font.SysFont(None, 24)
+        self.title_font = pygame.font.SysFont(None, 28)
+        self.small_font = pygame.font.SysFont(None, 20)
+        self.padding = 15
+        self.visible = False
+        
+    def set_entity(self, entity):
+        """Set the entity to display information for"""
+        self.entity = entity
+        self.visible = (entity is not None and entity.cna_data is not None)
+        
+    def render(self, screen):
+        if not self.visible or not self.entity or not self.entity.cna_data:
+            return
+            
+        # Create a surface with alpha for transparency
+        panel_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        
+        # Draw background with transparency
+        pygame.draw.rect(panel_surface, self.background_color, 
+                        (0, 0, self.width, self.height),
+                        border_radius=10)
+        
+        # Draw divider line down the middle
+        divider_x = self.width // 2
+        pygame.draw.line(panel_surface, (100, 100, 100, 200),
+                        (divider_x, 10), (divider_x, self.height - 10), 2)
+        
+        # Get CNA data
+        cna = self.entity.cna_data
+        
+        # Draw title
+        title_text = f"{cna.first_name} {cna.last_name}"
+        title_surface = self.title_font.render(title_text, True, self.title_color)
+        panel_surface.blit(title_surface, (self.padding, self.padding))
+        
+        # Left side - Entity visualization
+        # This would be a placeholder for now - could be enhanced later
+        entity_rect = pygame.Rect(
+            self.padding, 
+            self.padding + 40, 
+            (self.width // 2) - (self.padding * 2), 
+            100
+        )
+        pygame.draw.rect(panel_surface, self.entity.color, entity_rect)
+        
+        # Right side - CNA attributes
+        right_x = (self.width // 2) + self.padding
+        y_offset = self.padding
+        
+        # Basic info section
+        y_offset += 10
+        info_text = self.font.render("Basic Information", True, self.title_color)
+        panel_surface.blit(info_text, (right_x, y_offset))
+        y_offset += 30
+        
+        # Gender, Culture, Nation
+        attributes = [
+            f"Gender: {cna.gender.name}",
+            f"Culture: {cna.culture.name}",
+            f"Nation: {cna.nation.name}",
+            f"Age: {cna.age_minutes} minutes"
+        ]
+        
+        for attr in attributes:
+            text_surface = self.small_font.render(attr, True, self.text_color)
+            panel_surface.blit(text_surface, (right_x, y_offset))
+            y_offset += 25
+        
+        # Health section
+        y_offset += 10
+        health_text = self.font.render("Health Attributes", True, self.title_color)
+        panel_surface.blit(health_text, (right_x, y_offset))
+        y_offset += 30
+        
+        health_attrs = [
+            f"Physical: {cna.physical_health}/5",
+            f"Generational: {cna.generational_health}/5",
+            f"Mental: {cna.mental_health}/5"
+        ]
+        
+        for attr in health_attrs:
+            text_surface = self.small_font.render(attr, True, self.text_color)
+            panel_surface.blit(text_surface, (right_x, y_offset))
+            y_offset += 25
+        
+        # Extended attributes section
+        y_offset += 10
+        ext_text = self.font.render("Extended Attributes", True, self.title_color)
+        panel_surface.blit(ext_text, (right_x, y_offset))
+        y_offset += 30
+        
+        ext_attrs = [
+            f"Intelligence: {cna.intelligence_factor:.2f}",
+            f"Adaptability: {cna.adaptability:.2f}",
+            f"Immunity: {cna.immunity_strength:.2f}"
+        ]
+        
+        for attr in ext_attrs:
+            text_surface = self.small_font.render(attr, True, self.text_color)
+            panel_surface.blit(text_surface, (right_x, y_offset))
+            y_offset += 25
+        
+        # Draw the panel on the screen
+        screen.blit(panel_surface, (self.x, self.y))
+        
+    def handle_event(self, event):
+        """Handle input events"""
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.visible = False
+            return True
+        return False

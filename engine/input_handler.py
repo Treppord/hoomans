@@ -129,6 +129,34 @@ class InputHandler:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
+        
+            # Handle mouse clicks for entity selection
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
+                self.mouse_pos = event.pos
+                self.mouse_clicked = True
                 
         self.update()
         return True
+    
+    def check_entity_clicks(self, entities, ui_manager):
+        """Check if any entity was clicked"""
+        if not hasattr(self, 'mouse_clicked') or not self.mouse_clicked:
+            return
+    
+    # Get mouse position
+        mouse_x, mouse_y = self.mouse_pos
+        print(f"Mouse clicked at ({mouse_x}, {mouse_y})")
+    
+    # Reset click state
+        self.mouse_clicked = False
+    
+    # Check each entity
+        for entity in entities:
+            if hasattr(entity, 'contains_point'):
+                if entity.contains_point(mouse_x, mouse_y):
+                    # Entity was clicked
+                    print(f"Entity clicked: {entity.__class__.__name__} at ({entity.x}, {entity.y})")
+                    ui_manager.show_entity_info(entity)
+                    return
+    
+        print("No entity was clicked")

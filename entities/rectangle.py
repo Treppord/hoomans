@@ -55,6 +55,24 @@ class Rectangle(Entity):
         self.x = self.grid_x * 16
         self.y = self.grid_y * 16
     
+    def contains_point(self, x, y):
+        """Check if this entity contains the given point (for click detection)"""
+        rect_x = self.x + self.x_offset
+        rect_y = self.y + self.y_offset
+    
+    # Debug output
+        print(f"Checking if point ({x}, {y}) is in rectangle at ({rect_x}, {rect_y}, {self.width}, {self.height})")
+    
+    # Check if point is inside rectangle
+        is_inside = (rect_x <= x <= rect_x + self.width and 
+                rect_y <= y <= rect_y + self.height)
+    
+        if is_inside:
+            print("Point is inside rectangle!")
+    
+        return is_inside
+
+    
     def perform_action(self):
         """Perform an action when the action button is pressed"""
         # Change color temporarily as a visual indicator
