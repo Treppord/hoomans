@@ -6,11 +6,16 @@ from engine.ai import AIManager
 from engine.data_manager import DataManager
 from engine.ui import UIManager, StatsPanel, ChatInputBox
 from engine.camera import Camera
+from engine.universe_ai import UniverseAI
+
 
 class SimpleGameEngine:
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
         # Initialize pygame
         pygame.init()
+        
+        self.universe_ai = UniverseAI(max_agents=50)
+
         
         # Set up the display
         self.width = width
@@ -214,6 +219,9 @@ class SimpleGameEngine:
             return
             
         self.camera.update()
+        
+        self.universe_ai.update()
+
 
         # Update game time
         self.data.add_to_value("game_time", 1)
@@ -264,12 +272,19 @@ class SimpleGameEngine:
         """Main game loop"""
         self.running = True
         
-        while self.running:
-            self.handle_events()
-            self.update()
-            self.render()
-            self.clock.tick(self.fps)
+        self.universe_ai.start()
+
+        
+        try:
+            while self.running:
+                self.handle_events()
+                self.update()
+                self.render()
+                self.clock.tick(self.fps)
+        finally:
+        # Stop universe AI
+            self.universe_ai.stop()
         
         # Clean up
-        pygame.quit()
-        sys.exit()
+            pygame.quit()
+            sys.exit()

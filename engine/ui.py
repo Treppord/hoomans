@@ -223,20 +223,12 @@ class UIManager:
         self.screen_height = screen_height
         self.elements = []
         self.text_bubbles = []
-    
-        # Create character info panel
-        panel_width = 600
-        panel_height = 500
-        panel_x = (screen_width - panel_width) // 2
-        panel_y = (screen_height - panel_height) // 2
-        self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
-        self.elements.append(self.char_info_panel)
         
+        # Create character info panel for full-screen display
+        self.character_info_panel = self.add_element(
+            CharacterInfoPanel(0, 0, screen_width, screen_height)
+        )
         
-    def show_entity_info(self, entity):
-        """Show the character info panel for an entity"""
-        self.char_info_panel.set_entity(entity)
-    
     def add_element(self, element):
         """Add a UI element"""
         self.elements.append(element)
@@ -247,6 +239,10 @@ class UIManager:
         bubble = TextBubble(text, entity, duration)
         self.text_bubbles.append(bubble)
         return bubble
+    
+    def show_entity_info(self, entity):
+        """Show the character info panel for an entity"""
+        self.character_info_panel.set_entity(entity)
         
     def handle_event(self, event):
         """Handle input events for all UI elements"""
@@ -269,18 +265,21 @@ class UIManager:
         for bubble in self.text_bubbles:
             bubble.render(screen)
 
+
 class CharacterInfoPanel(UIElement):
     """Panel that displays character information from CNA data"""
     def __init__(self, x, y, width, height):
         super().__init__(x, y, width, height)
         self.entity = None
-        self.background_color = (60, 60, 60, 230)  # Dark gray with transparency
+        self.background_color = (20, 20, 30, 230)  # Dark blue-gray with transparency
         self.text_color = (255, 255, 255)  # White
-        self.title_color = (200, 200, 100)  # Light yellow
+        self.title_color = (220, 220, 100)  # Light yellow
+        self.section_color = (180, 180, 220)  # Light blue-gray
         self.font = pygame.font.SysFont(None, 24)
-        self.title_font = pygame.font.SysFont(None, 28)
+        self.title_font = pygame.font.SysFont(None, 32)
+        self.section_font = pygame.font.SysFont(None, 28)
         self.small_font = pygame.font.SysFont(None, 20)
-        self.padding = 15
+        self.padding = 20
         self.visible = False
         
     def set_entity(self, entity):
@@ -292,126 +291,286 @@ class CharacterInfoPanel(UIElement):
         if not self.visible or not self.entity or not self.entity.cna_data:
             return
             
+        # Make the panel full screen
+        self.width = screen.get_width()
+        self.height = screen.get_height()
+        self.x = 0
+        self.y = 0
+            
         # Create a surface with alpha for transparency
         panel_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         
         # Draw background with transparency
         pygame.draw.rect(panel_surface, self.background_color, 
-                        (0, 0, self.width, self.height),
-                        border_radius=10)
-        
-        # Draw divider line down the middle
-        divider_x = self.width // 2
-        pygame.draw.line(panel_surface, (100, 100, 100, 200),
-                        (divider_x, 10), (divider_x, self.height - 10), 2)
+                        (0, 0, self.width, self.height))
         
         # Get CNA data
         cna = self.entity.cna_data
         
-        # Draw title
+        # Draw title at the top
         title_text = f"{cna.first_name} {cna.last_name}"
         title_surface = self.title_font.render(title_text, True, self.title_color)
-        panel_surface.blit(title_surface, (self.padding, self.padding))
+        title_x = (self.width - title_surface.get_width()) // 2  # Center the title
+        panel_surface.blit(title_surface, (title_x, self.padding))
         
-        # Left side - Entity visualization
-        # This would be a placeholder for now - could be enhanced later
-        entity_rect = pygame.Rect(
-            self.padding, 
-            self.padding + 40, 
-            (self.width // 2) - (self.padding * 2), 
-            100
-        )
-        pygame.draw.rect(panel_surface, self.entity.color, entity_rect)
+        # Calculate column widths and positions
+        col_width = (self.width - (self.padding * 4)) // 3
+        col1_x = self.padding
+        col2_x = col1_x + col_width + self.padding
+        col3_x = col2_x + col_width + self.padding
         
-        # Add entity stats below the visualization
-        stats_y = self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
+        # Start y position below title
+        y_pos = self.padding + title_surface.get_height() + 20
         
-        # Display entity stats if available
-        if hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or hasattr(self.entity, 'health'):
-            stats_title = self.font.render("Entity Stats", True, self.title_color)
-            panel_surface.blit(stats_title, (self.padding, stats_y))
-            stats_y += 30
-            
-            # Display thirst if available
-            if hasattr(self.entity, 'thirst'):
-                thirst_text = f"Thirst: {self.entity.thirst}/5"
-                thirst_surface = self.small_font.render(thirst_text, True, self.text_color)
-                panel_surface.blit(thirst_surface, (self.padding, stats_y))
-                stats_y += 25
-            
-            # Display hunger if available
-            if hasattr(self.entity, 'hunger'):
-                hunger_text = f"Hunger: {self.entity.hunger}/5"
-                hunger_surface = self.small_font.render(hunger_text, True, self.text_color)
-                panel_surface.blit(hunger_surface, (self.padding, stats_y))
-                stats_y += 25
-            
-            # Display health if available
-            if hasattr(self.entity, 'health'):
-                health_text = f"Health: {self.entity.health}/5"
-                health_surface = self.small_font.render(health_text, True, self.text_color)
-                panel_surface.blit(health_surface, (self.padding, stats_y))
-                stats_y += 25
+        # Draw entity visualization in the first column
+        self._draw_entity_visualization(panel_surface, col1_x, y_pos, col_width)
         
-        # Right side - CNA attributes
-        right_x = (self.width // 2) + self.padding
-        y_offset = self.padding
+        # Draw basic info in the second column
+        self._draw_basic_info(panel_surface, col2_x, y_pos, col_width, cna)
         
-        # Basic info section
-        y_offset += 10
-        info_text = self.font.render("Basic Information", True, self.title_color)
-        panel_surface.blit(info_text, (right_x, y_offset))
-        y_offset += 30
-        
-        # Gender, Culture, Nation
-        attributes = [
-            f"Gender: {cna.gender.name}",
-            f"Culture: {cna.culture.name}",
-            f"Nation: {cna.nation.name}",
-            f"Age: {cna.age_minutes} minutes"
-        ]
-        
-        for attr in attributes:
-            text_surface = self.small_font.render(attr, True, self.text_color)
-            panel_surface.blit(text_surface, (right_x, y_offset))
-            y_offset += 25
-        
-        # Health section
-        y_offset += 10
-        health_text = self.font.render("Health Attributes", True, self.title_color)
-        panel_surface.blit(health_text, (right_x, y_offset))
-        y_offset += 30
-        
-        health_attrs = [
-            f"Physical: {cna.physical_health}/5",
-            f"Generational: {cna.generational_health}/5",
-            f"Mental: {cna.mental_health}/5"
-        ]
-        
-        for attr in health_attrs:
-            text_surface = self.small_font.render(attr, True, self.text_color)
-            panel_surface.blit(text_surface, (right_x, y_offset))
-            y_offset += 25
-        
-        # Extended attributes section
-        y_offset += 10
-        ext_text = self.font.render("Extended Attributes", True, self.title_color)
-        panel_surface.blit(ext_text, (right_x, y_offset))
-        y_offset += 30
-        
-        ext_attrs = [
-            f"Intelligence: {cna.intelligence_factor:.2f}",
-            f"Adaptability: {cna.adaptability:.2f}",
-            f"Immunity: {cna.immunity_strength:.2f}"
-        ]
-        
-        for attr in ext_attrs:
-            text_surface = self.small_font.render(attr, True, self.text_color)
-            panel_surface.blit(text_surface, (right_x, y_offset))
-            y_offset += 25
+        # Draw extended attributes in the third column
+        self._draw_extended_attributes(panel_surface, col3_x, y_pos, col_width, cna)
         
         # Draw the panel on the screen
         screen.blit(panel_surface, (self.x, self.y))
+        
+        # Draw close button
+        close_text = "Press ESC to close"
+        close_surface = self.small_font.render(close_text, True, self.text_color)
+        screen.blit(close_surface, (
+            self.width - close_surface.get_width() - self.padding,
+            self.height - close_surface.get_height() - self.padding
+        ))
+        
+    def _draw_entity_visualization(self, surface, x, y, width):
+        """Draw entity visualization and stats"""
+        # Section title
+        section_title = "Entity Visualization"
+        title_surface = self.section_font.render(section_title, True, self.section_color)
+        surface.blit(title_surface, (x, y))
+        y += title_surface.get_height() + 10
+        
+        # Entity visualization - a larger rectangle with the entity's color
+        vis_height = 200
+        vis_rect = pygame.Rect(x, y, width, vis_height)
+        pygame.draw.rect(surface, self.entity.color, vis_rect)
+        pygame.draw.rect(surface, (255, 255, 255), vis_rect, 2)  # White border
+        y += vis_height + 20
+        
+        # Entity stats section
+        stats_title = "Entity Stats"
+        stats_surface = self.section_font.render(stats_title, True, self.section_color)
+        surface.blit(stats_surface, (x, y))
+        y += stats_surface.get_height() + 10
+        
+        # Display entity stats if available
+        stats = [
+            ("Physical Health", f"{self.entity.cna_data.physical_health}/5"),
+            ("Mental Health", f"{self.entity.cna_data.mental_health}/5"),
+            ("Generational Health", f"{self.entity.cna_data.generational_health}/5")
+        ]
+        
+        for label, value in stats:
+            # Draw label
+            label_surface = self.font.render(label, True, self.text_color)
+            surface.blit(label_surface, (x, y))
+            
+            # Draw value
+            value_surface = self.font.render(value, True, self.title_color)
+            value_x = x + width - value_surface.get_width()
+            surface.blit(value_surface, (value_x, y))
+            
+            y += label_surface.get_height() + 10
+            
+        # If entity has brain with needs, display them
+        if hasattr(self.entity, 'brain') and hasattr(self.entity.brain, 'needs'):
+            y += 20
+            needs_title = "Current Needs"
+            needs_surface = self.section_font.render(needs_title, True, self.section_color)
+            surface.blit(needs_surface, (x, y))
+            y += needs_surface.get_height() + 10
+            
+            for need, value in self.entity.brain.needs.items():
+                # Draw need name
+                need_surface = self.font.render(need.name, True, self.text_color)
+                surface.blit(need_surface, (x, y))
+                
+                # Draw need value
+                value_text = f"{value:.2f}"
+                value_surface = self.font.render(value_text, True, self.title_color)
+                value_x = x + width - value_surface.get_width()
+                surface.blit(value_surface, (value_x, y))
+                
+                y += need_surface.get_height() + 10
+    
+    def _draw_basic_info(self, surface, x, y, width, cna):
+        """Draw basic information about the entity"""
+        # Section title
+        section_title = "Basic Information"
+        title_surface = self.section_font.render(section_title, True, self.section_color)
+        surface.blit(title_surface, (x, y))
+        y += title_surface.get_height() + 10
+        
+        # Basic info items
+        info_items = [
+            ("Gender", cna.gender.name),
+            ("Culture", cna.culture.name),
+            ("Nation", cna.nation.name),
+            ("Age", f"{cna.age_minutes} minutes")
+        ]
+        
+        for label, value in info_items:
+            # Draw label
+            label_surface = self.font.render(label, True, self.text_color)
+            surface.blit(label_surface, (x, y))
+            
+            # Draw value
+            value_surface = self.font.render(value, True, self.title_color)
+            value_x = x + width - value_surface.get_width()
+            surface.blit(value_surface, (value_x, y))
+            
+            y += label_surface.get_height() + 10
+        
+        # Add genetic markers section if available
+        if hasattr(cna, 'genetic_markers') and cna.genetic_markers:
+            y += 20
+            markers_title = "Genetic Markers"
+            markers_surface = self.section_font.render(markers_title, True, self.section_color)
+            surface.blit(markers_surface, (x, y))
+            y += markers_surface.get_height() + 10
+            
+            # Display first 5 genetic markers
+            for i, marker in enumerate(cna.genetic_markers[:5]):
+                marker_text = f"Marker {i+1}: {marker}"
+                marker_surface = self.font.render(marker_text, True, self.text_color)
+                surface.blit(marker_surface, (x, y))
+                y += marker_surface.get_height() + 5
+            
+            if len(cna.genetic_markers) > 5:
+                more_text = f"... and {len(cna.genetic_markers) - 5} more"
+                more_surface = self.small_font.render(more_text, True, self.text_color)
+                surface.blit(more_surface, (x, y))
+                y += more_surface.get_height() + 10
+        
+        # Add memories section if available
+        if hasattr(self.entity, 'brain') and hasattr(self.entity.brain, 'memories'):
+            y += 20
+            memories_title = "Recent Memories"
+            memories_surface = self.section_font.render(memories_title, True, self.section_color)
+            surface.blit(memories_surface, (x, y))
+            y += memories_surface.get_height() + 10
+            
+            # Display most recent memories
+            for i, memory in enumerate(reversed(self.entity.brain.memories[:5])):
+                # Wrap text to fit column width
+                memory_text = memory['content']
+                wrapped_text = self._wrap_text(memory_text, self.small_font, width - 10)
+                
+                for line in wrapped_text:
+                    line_surface = self.small_font.render(line, True, self.text_color)
+                    surface.blit(line_surface, (x, y))
+                    y += line_surface.get_height() + 2
+                
+                y += 8  # Extra space between memories
+    
+    def _draw_extended_attributes(self, surface, x, y, width, cna):
+        """Draw extended attributes"""
+        # Section title
+        section_title = "Extended Attributes"
+        title_surface = self.section_font.render(section_title, True, self.section_color)
+        surface.blit(title_surface, (x, y))
+        y += title_surface.get_height() + 10
+        
+        # Extended attributes
+        ext_attrs = [
+            ("Intelligence Factor", f"{cna.intelligence_factor:.2f}"),
+            ("Adaptability", f"{cna.adaptability:.2f}"),
+            ("Immunity Strength", f"{cna.immunity_strength:.2f}")
+        ]
+        
+        for label, value in ext_attrs:
+            # Draw label
+            label_surface = self.font.render(label, True, self.text_color)
+            surface.blit(label_surface, (x, y))
+            
+            # Draw value
+            value_surface = self.font.render(value, True, self.title_color)
+            value_x = x + width - value_surface.get_width()
+            surface.blit(value_surface, (value_x, y))
+            
+            y += label_surface.get_height() + 10
+        
+        # Add personality traits section if available
+        if hasattr(cna, 'personality_traits') and cna.personality_traits:
+            y += 20
+            traits_title = "Personality Traits"
+            traits_surface = self.section_font.render(traits_title, True, self.section_color)
+            surface.blit(traits_surface, (x, y))
+            y += traits_surface.get_height() + 10
+            
+            # Define trait names (these are just examples, adjust as needed)
+            trait_names = [
+                "Openness",
+                "Conscientiousness",
+                "Extraversion",
+                "Agreeableness",
+                "Neuroticism"
+            ]
+            
+            # Display personality traits
+            for i, trait_value in enumerate(cna.personality_traits):
+                trait_name = trait_names[i] if i < len(trait_names) else f"Trait {i+1}"
+                
+                # Draw trait name
+                trait_surface = self.font.render(trait_name, True, self.text_color)
+                surface.blit(trait_surface, (x, y))
+                
+                # Draw trait value
+                value_text = f"{trait_value:.2f}"
+                value_surface = self.font.render(value_text, True, self.title_color)
+                value_x = x + width - value_surface.get_width()
+                surface.blit(value_surface, (value_x, y))
+                
+                # Draw visual bar
+                bar_y = y + trait_surface.get_height() + 5
+                bar_height = 10
+                bar_bg_rect = pygame.Rect(x, bar_y, width, bar_height)
+                bar_fill_rect = pygame.Rect(x, bar_y, int(width * trait_value), bar_height)
+                
+                # Draw background and fill
+                pygame.draw.rect(surface, (80, 80, 80), bar_bg_rect)
+                pygame.draw.rect(surface, self.title_color, bar_fill_rect)
+                
+                y += trait_surface.get_height() + bar_height + 15
+    
+    def _wrap_text(self, text, font, max_width):
+        """Wrap text to fit within a given width"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            # Try adding the word to the current line
+            test_line = ' '.join(current_line + [word])
+            test_width = font.size(test_line)[0]
+            
+            if test_width <= max_width:
+                # Word fits, add it to the current line
+                current_line.append(word)
+            else:
+                # Word doesn't fit, start a new line
+                if current_line:
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    # If the word is too long for a line, split it
+                    lines.append(word)
+        
+        # Add the last line
+        if current_line:
+            lines.append(' '.join(current_line))
+            
+        return lines
         
     def handle_event(self, event):
         """Handle input events"""
@@ -419,3 +578,123 @@ class CharacterInfoPanel(UIElement):
             self.visible = False
             return True
         return False
+
+
+class EventLog(UIElement):
+    """Displays recent events in the game world"""
+    def __init__(self, x, y, width, height):
+        super().__init__(x, y, width, height)
+        self.messages = []
+        self.max_messages = 5
+        self.font = pygame.font.SysFont(None, 18)
+        self.background_color = (0, 0, 0, 150)  # Black with transparency
+        self.text_color = (200, 200, 200)  # Light gray
+        self.message_lifetime = 5.0  # Messages disappear after 5 seconds
+        
+    def add_message(self, text):
+        """Add a new message to the log"""
+        self.messages.append({
+            'text': text,
+            'time': time.time()
+        })
+        
+        # Limit the number of messages
+        if len(self.messages) > self.max_messages:
+            self.messages.pop(0)
+    
+    def render(self, screen):
+        """Render the event log"""
+        if not self.visible:
+            return
+            
+        # Remove expired messages
+        current_time = time.time()
+        self.messages = [m for m in self.messages if current_time - m['time'] < self.message_lifetime]
+        
+        if not self.messages:
+            return
+            
+        # Calculate height based on number of messages
+        total_height = len(self.messages) * 25
+        
+        # Create a surface with alpha for transparency
+        log_surface = pygame.Surface((self.width, total_height), pygame.SRCALPHA)
+        
+        # Draw background with transparency
+        pygame.draw.rect(log_surface, self.background_color, 
+                        (0, 0, self.width, total_height),
+                        border_radius=5)
+        
+        # Render messages
+        for i, message in enumerate(self.messages):
+            # Calculate fade based on age
+            age = current_time - message['time']
+            alpha = max(0, min(255, int(255 * (1 - age / self.message_lifetime))))
+            
+            text_color = (*self.text_color, alpha)
+            text_surface = self.font.render(message['text'], True, text_color)
+            
+            log_surface.blit(text_surface, (10, i * 25 + 5))
+        
+        # Draw the log on the screen
+        screen.blit(log_surface, (self.x, self.y))
+
+class EntityInfoPanel(UIElement):
+    """Panel that displays information about a selected entity"""
+    def __init__(self, x, y, width, height):
+        super().__init__(x, y, width, height)
+        self.entity = None
+        self.background_color = (50, 50, 50, 200)  # Dark gray with transparency
+        self.text_color = (255, 255, 255)  # White
+        self.title_color = (200, 200, 100)  # Gold
+        self.font = pygame.font.SysFont(None, 20)
+        self.title_font = pygame.font.SysFont(None, 24)
+        self.padding = 10
+        self.visible = False
+        
+    def set_entity(self, entity):
+        """Set the entity to display information about"""
+        self.entity = entity
+        self.visible = entity is not None
+    
+    def render(self, screen):
+        """Render the entity info panel"""
+        if not self.visible or not self.entity:
+            return
+            
+        # Get entity info
+        if hasattr(self.entity, 'get_info'):
+            info_lines = self.entity.get_info()
+        else:
+            info_lines = [
+                f"Type: {self.entity.__class__.__name__}",
+                f"Position: ({self.entity.grid_x}, {self.entity.grid_y})"
+            ]
+        
+        # Calculate panel height based on content
+        line_height = 22
+        content_height = len(info_lines) * line_height + self.padding * 2
+        panel_height = min(self.height, content_height)
+        
+        # Create a surface with alpha for transparency
+        panel_surface = pygame.Surface((self.width, panel_height), pygame.SRCALPHA)
+        
+        # Draw background with transparency
+        pygame.draw.rect(panel_surface, self.background_color, 
+                        (0, 0, self.width, panel_height),
+                        border_radius=10)
+        
+        # Render info lines
+        y_offset = self.padding
+        
+        for i, line in enumerate(info_lines):
+            # Use title color for the first line
+            color = self.title_color if i == 0 else self.text_color
+            font = self.title_font if i == 0 else self.font
+            
+            text_surface = font.render(line, True, color)
+            panel_surface.blit(text_surface, (self.padding, y_offset))
+            y_offset += line_height
+        
+        # Draw the panel on the screen
+        screen.blit(panel_surface, (self.x, self.y))

@@ -22,9 +22,10 @@ class Tile:
         pygame.draw.rect(screen, color, (x, y, width, height))
     
     def is_water(self):
-        """Check if this tile is a water tile"""
+        """Check if this tile is water"""
         return self.type == "water"
-    
+
     def is_walkable(self):
         """Check if entities can walk on this tile"""
-        return self.type != "wall"
+        return self.type != "wall" and self.type != "water"
+

@@ -5,7 +5,7 @@ CNA Generator for creating random CNA entities
 import random
 import string
 from typing import List, Optional
-from cna_format import CNAAttributes, Gender, Culture, Nation
+from cna.cna_format import CNAAttributes, Gender, Culture, Nation
 
 class CNAGenerator:
     """Generator for random CNA entities"""

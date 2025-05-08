@@ -71,46 +71,48 @@ class WorldMap:
         tile = self.get_tile(x, y)
         return tile and tile.type == "wall"
     
-    def is_adjacent_to_water(self, x, y):
-        """Check if the given position is adjacent to or on water"""
-        # Check the tile itself and adjacent tiles
-        for dx, dy in [(0, 0), (0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if (0 <= nx < self.width and 0 <= ny < self.height and 
-                self.get_tile(nx, ny) and self.get_tile(nx, ny).is_water()):
-                return True
+    def is_adjacent_to_water(self, grid_x, grid_y):
+        """Check if the given position is adjacent to water"""
+    # Check the tile itself and all adjacent tiles
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                nx, ny = grid_x + dx, grid_y + dy
+                if 0 <= nx < self.width and 0 <= ny < self.height:
+                    tile = self.get_tile(nx, ny)
+                    if tile and tile.type == "water":
+                        return True
         return False
     
     def find_nearest_water(self, start_x, start_y, max_distance=8):
         """Find the nearest water tile within the given distance"""
         if not (0 <= start_x < self.width and 0 <= start_y < self.height):
             return None
-            
-        # Simple breadth-first search to find nearest water
+        
+    # Simple breadth-first search to find nearest water
         visited = set()
         queue = [(start_x, start_y, 0)]  # (x, y, distance)
-        
+    
         while queue:
             x, y, distance = queue.pop(0)
-            
-            # Skip if we've already visited this tile or if it's too far
+        
+        # Skip if we've already visited this tile or if it's too far
             if (x, y) in visited or distance > max_distance:
                 continue
-                
-            visited.add((x, y))
             
-            # Check if this is a water tile
-            if self.get_tile(x, y) and self.get_tile(x, y).is_water():
+            visited.add((x, y))
+        
+        # Check if this is a water tile
+            if self.get_tile(x, y) and self.get_tile(x, y).type == "water":
                 return (x, y)
-                
-            # Add adjacent tiles to the queue
+            
+        # Add adjacent tiles to the queue
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 nx, ny = x + dx, y + dy
                 if (0 <= nx < self.width and 0 <= ny < self.height and 
                     (nx, ny) not in visited and
-                    self.get_tile(nx, ny) and self.get_tile(nx, ny).is_walkable()):
+                    not self.is_wall(nx, ny)):
                     queue.append((nx, ny, distance + 1))
-                    
+                
         return None  # No water found within range
     
     def generate_large_map(self):

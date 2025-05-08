@@ -10,8 +10,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, QVB
                             QTreeWidget, QTreeWidgetItem, QGroupBox, QFormLayout, QSplitter)
 from PyQt5.QtCore import Qt, QByteArray
 
-from cna_format import CNAAttributes, Gender, Culture, Nation
-from cna_codec import CNACodec
+from cna.cna_format import CNAAttributes, Gender, Culture, Nation
+from cna.cna_codec import CNACodec
 from cna_generator import CNAGenerator
 
 class CNAApplicationQt(QMainWindow):

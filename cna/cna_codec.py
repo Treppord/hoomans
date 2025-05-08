@@ -5,7 +5,8 @@ CNA Encoder/Decoder for converting between CNA binary format and Python objects
 import struct
 import io
 from typing import BinaryIO, Tuple
-from cna_format import CNAAttributes, Gender, Culture, Nation
+from cna.cna_format import CNAAttributes, Gender, Culture, Nation
+
 
 class CNACodec:
     """Encoder/Decoder for CNA file format"""

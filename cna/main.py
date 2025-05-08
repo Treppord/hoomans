@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def main():
     """Main entry point for the application"""
     try:
-        from cna_gui_qt import CNAApplicationQt
+        from cna.cna_gui_qt import CNAApplicationQt
         
         app = QApplication(sys.argv)
         app.setStyle('Fusion')  # Use Fusion style for a consistent look
