@@ -22,6 +22,12 @@ class Entity:
             from cna_utils import CNACodec
             self.cna_data = CNACodec.load_from_file(filepath)
             self.cna_file = filepath
+            
+            # Update entity color based on CNA attributes
+            if hasattr(self, 'color'):
+                self.color = CNACodec.calculate_entity_color(self.cna_data)
+                print(f"Updated entity color to {self.color} based on CNA attributes")
+            
             print(f"Successfully loaded CNA file: {filepath}")
             return True
         except Exception as e:

@@ -20,7 +20,8 @@ class Rectangle(Entity):
         self.x_offset = (16 - self.width) // 2
         self.y_offset = (16 - self.height) // 2
         
-        self.color = color
+        self.original_color = color  # Store original color
+        self.color = color        # Current color (can be changed for effects)
         self.speed = speed  # Speed in grid cells per update
         self.controllable = controllable  # Flag to indicate if this entity is player-controlled
 
@@ -75,13 +76,21 @@ class Rectangle(Entity):
     
     def perform_action(self):
         """Perform an action when the action button is pressed"""
-        # Change color temporarily as a visual indicator
+        # Store current color
+        current_color = self.color
+    
+    # Change color temporarily as a visual indicator
         self.color = (255, 255, 0)  # Yellow flash
-        
-        # You could add more action logic here
-        
-        # Reset color after a short delay (in a real game, you'd use a timer)
-        self.color = (255, 0, 0)
+    
+    # You could add more action logic here
+    
+    # Reset color after a short delay (in a real game, you'd use a timer)
+    # For now, we'll use a simple approach
+        import pygame
+        pygame.time.delay(100)  # 100ms delay
+    
+    # Restore the original color (which might be CNA-based)
+        self.color = current_color
     
     def interact(self):
         """Interact with objects or tiles near the entity"""

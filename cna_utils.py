@@ -190,3 +190,23 @@ class CNACodec:
         """Load CNAAttributes from a file"""
         with open(filepath, 'rb') as f:
             return CNACodec.decode(f.read())
+        
+    def calculate_entity_color(cna_attributes):
+        """Calculate entity color based on CNA attributes"""
+    # Base colors for different cultures
+        culture_colors = {
+            Culture.RED: (255, 0, 0),    # Red
+            Culture.BLUE: (0, 0, 255),   # Blue
+        }
+    
+    # Get base color for culture
+        base_color = culture_colors.get(cna_attributes.culture, (0, 255, 0))  # Default to green if culture not found
+    
+    # Calculate brightness factor based on age (1.0 for youngest, 0.4 for oldest)
+    # Age range is 0-60 minutes
+        brightness = 1.0 - (cna_attributes.age_minutes / 60.0 * 0.6)
+    
+    # Apply brightness to color
+        color = tuple(int(c * brightness) for c in base_color)
+    
+        return color
