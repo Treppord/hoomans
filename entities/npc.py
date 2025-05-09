@@ -1,5 +1,6 @@
 from entities.rectangle import Rectangle
 import pygame
+import random
 
 class NPC(Rectangle):
     """An NPC entity controlled by AI"""
@@ -41,30 +42,46 @@ class NPC(Rectangle):
             self.last_thirst_update = current_time
             
     def apply_ai_decision(self, decision):
-        """Apply a decision from the AI Universe Controller"""
-        # Handle movement
-        if decision.action == "move_left" and not self.is_moving:
+        """Apply an AI decision to this NPC"""
+        # Handle basic actions
+        if decision.action == "move_left":
             self.target_grid_x = self.grid_x - 1
             self.is_moving = True
-        elif decision.action == "move_right" and not self.is_moving:
+        elif decision.action == "move_right":
             self.target_grid_x = self.grid_x + 1
             self.is_moving = True
-        elif decision.action == "move_up" and not self.is_moving:
+        elif decision.action == "move_up":
             self.target_grid_y = self.grid_y - 1
             self.is_moving = True
-        elif decision.action == "move_down" and not self.is_moving:
+        elif decision.action == "move_down":
             self.target_grid_y = self.grid_y + 1
             self.is_moving = True
-        elif decision.action == "drink" and not self.is_moving:
-            # For drinking, we don't need to move, just update the last_drink_time
-            # to trigger the drinking logic in the update method
-            self.last_drink_time = 0  # This will make the NPC drink on next update
+        elif decision.action == "drink" and self.thirst < 5:
+            # Check if we're adjacent to water
+            from engine.core import SimpleGameEngine
+            world_map = None
+            if hasattr(SimpleGameEngine, 'instance'):
+                world_map = SimpleGameEngine.instance.world_map
+            
+            if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+                self.thirst += 1
+                print(f"NPC drank water, thirst increased to {self.thirst}")
         
-        # If we have specific target coordinates, use those
-        if decision.target_x is not None and decision.target_y is not None:
-            self.target_grid_x = decision.target_x
-            self.target_grid_y = decision.target_y
-            self.is_moving = True
-        
-        # Return True if we applied a movement
-        return self.is_moving
+        # Handle fast movement for critical needs
+        if decision.is_fast_movement and not self.is_moving:
+            # Determine how many steps to take (2-3 when critically thirsty/hungry)
+            steps = random.randint(2, 3)
+            
+            # Calculate target position based on action and steps
+            if decision.action == "move_left":
+                self.target_grid_x = max(0, self.grid_x - steps)
+                self.is_moving = True
+            elif decision.action == "move_right":
+                self.target_grid_x = self.grid_x + steps
+                self.is_moving = True
+            elif decision.action == "move_up":
+                self.target_grid_y = max(0, self.grid_y - steps)
+                self.is_moving = True
+            elif decision.action == "move_down":
+                self.target_grid_y = self.grid_y + steps
+                self.is_moving = True

@@ -245,24 +245,17 @@ class SimpleGameEngine:
             
             # Process AI decisions
             decisions = self.ai_universe.get_pending_decisions()
-            
-            if decisions:
-                print(f"Processing {len(decisions)} AI decisions: {[d.action for d in decisions]}")
-                
             for decision in decisions:
                 # Find the corresponding object
                 for obj in self.objects:
                     if str(id(obj)) == decision.agent_id:
                         # Apply the decision to the NPC
                         if isinstance(obj, NPC):
-                            # Apply the decision and get whether movement was applied
-                            movement_applied = obj.apply_ai_decision(decision)
-                            
-                            # Only show speech bubble if there's actual speech content
-                            if decision.speech and decision.speech.strip() and hasattr(self, 'ui'):
-                                # Limit speech to a reasonable length
-                                speech = decision.speech[:100]  # Limit to 100 chars
-                                self.ui.add_text_bubble(speech, obj, duration=3.0)
+                            obj.apply_ai_decision(decision)
+                        
+                        # Handle speech with text bubbles
+                        if decision.speech and hasattr(self, 'ui'):
+                            self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
                         
                         break
         
@@ -287,6 +280,7 @@ class SimpleGameEngine:
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
                     print(f"Player thirst decreased to {self.player.thirst}")
+
 
     
     def render(self):

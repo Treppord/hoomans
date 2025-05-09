@@ -107,86 +107,14 @@ class AgentDecision:
     target_y: Optional[int] = None  # Target y position if moving
     mood_change: float = 0.0  # How this decision affects mood (-1 to 1)
     memory_update: Optional[str] = None  # New memory to add
+    is_fast_movement: bool = False  # Whether this is a fast movement (multiple steps)
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
         """Create an AgentDecision from AI response JSON"""
         try:
-            # Make sure we're working with a dictionary
-            if isinstance(response_json, str):
-                try:
-                    # Try to parse as JSON
-                    response_json = json.loads(response_json)
-                except:
-                    # If parsing fails, try to extract action and speech
-                    action = "idle"
-                    speech = ""
-                    
-                    # Check for action keywords
-                    action_keywords = {
-                        "move left": "move_left",
-                        "move right": "move_right", 
-                        "move up": "move_up",
-                        "move down": "move_down",
-                        "drink": "drink",
-                        "eat": "eat"
-                    }
-                    
-                    text_lower = response_json.lower()
-                    for keyword, act in action_keywords.items():
-                        if keyword in text_lower:
-                            action = act
-                            break
-                    
-                    # Try to extract speech - look for quotes or speech indicators
-                    speech_match = re.search(r'["\'](.*?)["\']', response_json)
-                    if speech_match:
-                        speech = speech_match.group(1)
-                    elif "says" in text_lower:
-                        speech_parts = text_lower.split("says")
-                        if len(speech_parts) > 1:
-                            speech = speech_parts[1].strip().strip('"\'')
-                    
-                    response_json = {"action": action, "speech": speech}
-            
-            # Extract action, defaulting to idle
             action = response_json.get("action", "idle")
-            
-            # Clean up action string if needed
-            action = action.strip().lower()
-            if "move_" not in action and "move " in action:
-                # Convert "move left" to "move_left" etc.
-                action = action.replace("move ", "move_")
-            
-            # Extract speech
             speech = response_json.get("speech", "")
-            
-            # Clean up speech - remove JSON formatting if present
-            if isinstance(speech, str):
-                # Remove quotes at beginning and end if present
-                speech = speech.strip('"\'')
-                
-                # If speech looks like JSON, try to extract the actual speech
-                if speech.startswith("{") and "speech" in speech:
-                    try:
-                        speech_json = json.loads(speech)
-                        if isinstance(speech_json, dict) and "speech" in speech_json:
-                            speech = speech_json["speech"]
-                    except:
-                        pass
-                
-                # Filter out speech that contains the word "action" or is just "action"
-                if speech.lower() == "action" or speech.lower() == "\"action\"":
-                    speech = ""
-                
-                # Filter out speech that looks like a command or JSON
-                if (speech.startswith("{") or 
-                    speech.startswith("[") or 
-                    "action:" in speech.lower() or 
-                    "speech:" in speech.lower() or
-                    "move_" in speech.lower() or
-                    "action" in speech.lower()):
-                    speech = ""
             
             # Extract target position if provided
             target_x = None
@@ -201,6 +129,9 @@ class AgentDecision:
             # Extract memory update
             memory_update = response_json.get("memory_update")
             
+            # Extract fast movement flag
+            is_fast_movement = response_json.get("is_fast_movement", False)
+            
             return cls(
                 agent_id=agent_id,
                 action=action,
@@ -208,7 +139,8 @@ class AgentDecision:
                 target_x=target_x,
                 target_y=target_y,
                 mood_change=mood_change,
-                memory_update=memory_update
+                memory_update=memory_update,
+                is_fast_movement=is_fast_movement
             )
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
@@ -219,10 +151,34 @@ class AgentDecision:
 
 
 
+
 # ================ AI Interface ================
 
 class AIInterface:
     """Interface for communicating with the AI model"""
+    
+    # Define available actions as class constants
+    ACTIONS = {
+        # Basic movement
+        "move_left": {"description": "Move one step left"},
+        "move_right": {"description": "Move one step right"},
+        "move_up": {"description": "Move one step up"},
+        "move_down": {"description": "Move one step down"},
+        
+        # Multi-step movement (for urgent needs)
+        "move_left_fast": {"description": "Move multiple steps left quickly (when urgent)"},
+        "move_right_fast": {"description": "Move multiple steps right quickly (when urgent)"},
+        "move_up_fast": {"description": "Move multiple steps up quickly (when urgent)"},
+        "move_down_fast": {"description": "Move multiple steps down quickly (when urgent)"},
+        
+        # Need-based actions
+        "drink": {"description": "Drink water (only when adjacent to water)"},
+        "eat": {"description": "Eat food (only when adjacent to food)"},
+        
+        # Other actions
+        "idle": {"description": "Stand still and observe surroundings"},
+        "search": {"description": "Look around for resources"}
+    }
     
     def __init__(self, use_local_model=True, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
         self.use_local_model = use_local_model
@@ -250,39 +206,217 @@ Example response:
 
 Keep your responses concise and focused on the action and speech.
 """
-
-
-
         
         # Initialize local model if enabled
         if use_local_model:
             self.local_model = LocalModelInterface(model_path=model_path)
 
 
-    # Add the _extract_json_from_text function here
-    def _extract_json_from_text(self, text):
-        """Extract JSON from potentially malformed text response"""
-        try:
-            # First try direct parsing
-            return json.loads(text)
-        except json.JSONDecodeError:
-            # Try to find JSON-like structure
+    def _create_adaptive_system_prompt(self, has_critical_thirst, has_critical_hunger):
+        """Create a concise system prompt based on agent's needs"""
+        
+        # Start with available actions
+        action_list = ", ".join(self.ACTIONS.keys())
+        base_prompt = f"You control an NPC in a game. Respond with JSON: {{\"action\": \"[action]\", \"speech\": \"[optional speech]\"}}. Available actions: {action_list}."
+        
+        # Add specific guidance based on critical needs
+        if has_critical_thirst and has_critical_hunger:
+            base_prompt += " NPC is CRITICALLY THIRSTY AND HUNGRY. Prioritize finding water first. Use fast movement actions. Speech should express URGENT need for water."
+        elif has_critical_thirst:
+            base_prompt += " NPC is CRITICALLY THIRSTY. Prioritize finding water. Use fast movement actions. Speech should express URGENT need for water."
+        elif has_critical_hunger:
+            base_prompt += " NPC is CRITICALLY HUNGRY. Prioritize finding food. Use fast movement actions. Speech should express URGENT need for food."
+        else:
+            base_prompt += " NPC is fine. Focus on exploration and personality. Use regular movement actions. Never mention thirst/hunger/water/food."
+        
+        return base_prompt
+
+    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y):
+        """Validate and correct the AI response based on the agent's needs"""
+        
+        # Ensure we're working with a dictionary
+        if isinstance(response_json, str):
             try:
-                # Look for opening and closing braces
-                start = text.find('{')
-                end = text.rfind('}') + 1
-                if start >= 0 and end > start:
-                    json_str = text[start:end]
-                    return json.loads(json_str)
+                response_json = json.loads(response_json)
             except:
-                pass
+                # If parsing fails, create a basic response
+                return {"action": "idle", "speech": ""}
+        
+        action = response_json.get("action", "idle")
+        speech = response_json.get("speech", "")
+        
+        # Handle fast movement actions (convert to regular movement but remember it's fast)
+        is_fast_movement = False
+        if action.endswith("_fast"):
+            is_fast_movement = True
+            action = action.replace("_fast", "")
+        
+        # Validate drink action
+        if action == "drink":
+            # Check if agent has critical thirst
+            if not has_critical_thirst:
+                action = "idle"
+            else:
+                # Check if agent is adjacent to water
+                is_adjacent_to_water = False
+                for tile in nearby_tiles:
+                    if (tile.get("type") == "water" and 
+                        abs(tile["x"] - grid_x) <= 1 and 
+                        abs(tile["y"] - grid_y) <= 1):
+                        is_adjacent_to_water = True
+                        break
                 
-            # If all else fails, create a basic response
-            return {
-                "action": "idle",
-                "speech": text[:50] if text else "",
-                "mood_change": 0.0
-            }
+                if not is_adjacent_to_water:
+                    # If not adjacent to water but critically thirsty, look for water
+                    water_tiles = [tile for tile in nearby_tiles if tile.get("type") == "water"]
+                    if water_tiles:
+                        # Move towards the nearest water
+                        nearest_water = min(water_tiles, key=lambda t: abs(t["x"] - grid_x) + abs(t["y"] - grid_y))
+                        dx = nearest_water["x"] - grid_x
+                        dy = nearest_water["y"] - grid_y
+                        
+                        if abs(dx) > abs(dy):
+                            action = "move_right" if dx > 0 else "move_left"
+                        else:
+                            action = "move_down" if dy > 0 else "move_up"
+                        
+                        # Mark as fast movement since we're critically thirsty
+                        is_fast_movement = True
+                    else:
+                        # No water in sight, search randomly
+                        action = random.choice(["move_left", "move_right", "move_up", "move_down"])
+                        is_fast_movement = True
+        
+        # Validate eat action (similar to drink)
+        if action == "eat":
+            # Check if agent has critical hunger
+            if not has_critical_hunger:
+                action = "idle"
+            else:
+                # For now, just convert to movement since we don't have food tiles
+                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
+                is_fast_movement = True
+        
+        # Handle search action
+        if action == "search":
+            if has_critical_thirst or has_critical_hunger:
+                # If searching with critical needs, convert to movement
+                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
+                is_fast_movement = True
+            else:
+                # Regular search just becomes idle with looking around speech
+                action = "idle"
+                if not speech:
+                    speech = random.choice([
+                        "I should look around for interesting things.",
+                        "Let me see what's nearby.",
+                        "I wonder what I can find here."
+                    ])
+        
+        # Encourage more movement when no critical needs
+        if action == "idle" and not has_critical_thirst and not has_critical_hunger:
+            # 70% chance to convert idle to movement when no critical needs
+            if random.random() < 0.7:
+                # Choose a random direction, but avoid walls
+                possible_directions = []
+                
+                # Check each direction for walls
+                directions = [
+                    ("move_left", grid_x - 1, grid_y),
+                    ("move_right", grid_x + 1, grid_y),
+                    ("move_up", grid_x, grid_y - 1),
+                    ("move_down", grid_x, grid_y + 1)
+                ]
+                
+                for dir_action, x, y in directions:
+                    # Check if there's a wall in this direction
+                    has_wall = False
+                    for tile in nearby_tiles:
+                        if tile.get("type") == "wall" and tile["x"] == x and tile["y"] == y:
+                            has_wall = True
+                            break
+                    
+                    if not has_wall:
+                        possible_directions.append(dir_action)
+                
+                # If we have valid directions, choose one randomly
+                if possible_directions:
+                    action = random.choice(possible_directions)
+        
+        # Generate appropriate speech based on needs and actions
+        if has_critical_thirst:
+            # If critically thirsty, override speech with water-focused dialogue
+            water_speeches = [
+                "I need water desperately!",
+                "So thirsty... must find water...",
+                "Water... I need water now!",
+                "I'm dying of thirst!",
+                "Need to find water immediately!",
+                "My throat is so dry... need water...",
+                "Water! Where is water?!",
+                "Can't... go on... without... water...",
+                "Must... find... water..."
+            ]
+            speech = random.choice(water_speeches)
+        elif has_critical_hunger:
+            # If critically hungry, override speech with food-focused dialogue
+            food_speeches = [
+                "I'm starving!",
+                "Need food... so hungry...",
+                "Must find something to eat!",
+                "My stomach hurts from hunger!",
+                "Food... need food now!",
+                "I haven't eaten in so long...",
+                "So hungry I can barely walk...",
+                "Need to find food before I collapse!"
+            ]
+            speech = random.choice(food_speeches)
+        else:
+            # Filter out problematic speech for non-critical states
+            if speech:
+                # Check if speech is just a number or very short
+                if speech.strip().isdigit() or len(speech.strip()) < 3:
+                    speech = ""
+                
+                # Check if speech contains action commands
+                action_keywords = ["move left", "move right", "move up", "move down", "move_left", "move_right", "move_up", "move_down"]
+                if any(keyword in speech.lower() for keyword in action_keywords):
+                    speech = ""
+                
+                # Check if speech contains implementation details
+                implementation_keywords = ["npc", "agent", "tinted", "mojang", "draft", "action", "speech"]
+                if any(keyword in speech.lower() for keyword in implementation_keywords):
+                    speech = ""
+                
+                # Check if speech is incomplete (ends with certain characters)
+                if speech.endswith(("I", "and I", "I'm", "she", "he", "they", "we", "the", "a", "an", "this", "that")):
+                    speech = ""
+            
+            # If speech was filtered out, provide a generic alternative
+            if not speech:
+                generic_speeches = [
+                    "Hello there!",
+                    "Nice weather today.",
+                    "I'm enjoying my walk.",
+                    "This place is interesting.",
+                    "I wonder what I'll find today.",
+                    "It's good to be out exploring.",
+                    "I like this area.",
+                    "The scenery here is lovely."
+                ]
+                speech = random.choice(generic_speeches)
+            
+            # Reduce speech frequency to make it more natural
+            # Only 20% chance to actually speak when moving
+            if action != "idle" and action != "drink" and action != "eat" and random.random() > 0.2:
+                speech = ""
+        
+        # Add fast movement flag to the response
+        return {
+            "action": action,
+            "speech": speech,
+            "is_fast_movement": is_fast_movement
+        }
 
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
@@ -294,7 +428,7 @@ Keep your responses concise and focused on the action and speech.
             # Create a minimal state representation
             prompt = f"Position: ({agent_state.grid_x}, {agent_state.grid_y})\n"
             
-            # Only include critical needs
+            # Add information about water if critically thirsty
             if has_critical_thirst:
                 prompt += "CRITICAL THIRST! "
                 # Add water locations if any
@@ -302,6 +436,8 @@ Keep your responses concise and focused on the action and speech.
                 if water_tiles:
                     nearest = min(water_tiles, key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
                     prompt += f"Nearest water: ({nearest['x']}, {nearest['y']}). "
+                else:
+                    prompt += "No water visible. "
             
             if has_critical_hunger:
                 prompt += "CRITICAL HUNGER! "
@@ -339,182 +475,6 @@ Keep your responses concise and focused on the action and speech.
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
 
-
-
-    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y):
-        """Validate and correct the AI response based on the agent's needs"""
-        
-        # Ensure we're working with a dictionary
-        if isinstance(response_json, str):
-            try:
-                response_json = json.loads(response_json)
-            except:
-                # If parsing fails, create a basic response
-                return {"action": "idle", "speech": ""}
-        
-        action = response_json.get("action", "idle")
-        speech = response_json.get("speech", "")
-        
-        # Validate drink action
-        if action == "drink":
-            # Check if agent has critical thirst
-            if not has_critical_thirst:
-                action = "idle"
-            else:
-                # Check if agent is adjacent to water
-                is_adjacent_to_water = False
-                for tile in nearby_tiles:
-                    if (tile.get("type") == "water" and 
-                        abs(tile["x"] - grid_x) <= 1 and 
-                        abs(tile["y"] - grid_y) <= 1):
-                        is_adjacent_to_water = True
-                        break
-                
-                if not is_adjacent_to_water:
-                    action = "idle"
-        
-        # Validate eat action
-        if action == "eat":
-            # Check if agent has critical hunger
-            if not has_critical_hunger:
-                action = "idle"
-            else:
-                # Check if agent is adjacent to food
-                is_adjacent_to_food = False
-                for tile in nearby_tiles:
-                    if (tile.get("type") == "food" and 
-                        abs(tile["x"] - grid_x) <= 1 and 
-                        abs(tile["y"] - grid_y) <= 1):
-                        is_adjacent_to_food = True
-                        break
-                
-                if not is_adjacent_to_food:
-                    action = "idle"
-        
-        # Encourage more movement when no critical needs
-        if action == "idle" and not has_critical_thirst and not has_critical_hunger:
-            # 70% chance to convert idle to movement when no critical needs
-            if random.random() < 0.7:
-                # Choose a random direction, but avoid walls
-                possible_directions = []
-                
-                # Check each direction for walls
-                directions = [
-                    ("move_left", grid_x - 1, grid_y),
-                    ("move_right", grid_x + 1, grid_y),
-                    ("move_up", grid_x, grid_y - 1),
-                    ("move_down", grid_x, grid_y + 1)
-                ]
-                
-                for dir_action, x, y in directions:
-                    # Check if there's a wall in this direction
-                    has_wall = False
-                    for tile in nearby_tiles:
-                        if tile.get("type") == "wall" and tile["x"] == x and tile["y"] == y:
-                            has_wall = True
-                            break
-                    
-                    if not has_wall:
-                        possible_directions.append(dir_action)
-                
-                # If we have valid directions, choose one randomly
-                if possible_directions:
-                    action = random.choice(possible_directions)
-        
-        # Validate speech content
-        water_keywords = ["water", "drink", "thirst", "hydrate", "quench"]
-        food_keywords = ["food", "eat", "hungry", "hunger", "starving"]
-        
-        # Check for inappropriate mentions of water/thirst
-        if not has_critical_thirst and any(keyword in speech.lower() for keyword in water_keywords):
-            speech = random.choice([
-                "What a nice day.",
-                "I wonder what's over there.",
-                "The weather is pleasant today."
-            ])
-        
-        # Check for inappropriate mentions of food/hunger
-        if not has_critical_hunger and any(keyword in speech.lower() for keyword in food_keywords):
-            speech = random.choice([
-                "This area is interesting.",
-                "I should keep exploring.",
-                "I'm curious about what's ahead."
-            ])
-        
-        # Filter out problematic speech
-        if speech:
-            # Check if speech is just a number or very short
-            if speech.strip().isdigit() or len(speech.strip()) < 3:
-                speech = ""
-            
-            # Check if speech contains action commands
-            action_keywords = ["move left", "move right", "move up", "move down", "move_left", "move_right", "move_up", "move_down"]
-            if any(keyword in speech.lower() for keyword in action_keywords):
-                speech = ""
-            
-            # Check if speech contains implementation details
-            implementation_keywords = ["npc", "agent", "tinted", "mojang", "draft", "action", "speech"]
-            if any(keyword in speech.lower() for keyword in implementation_keywords):
-                speech = ""
-            
-            # Check if speech is incomplete (ends with certain characters)
-            if speech.endswith(("I", "and I", "I'm", "she", "he", "they", "we", "the", "a", "an", "this", "that")):
-                speech = ""
-        
-        # If speech was filtered out, provide a generic alternative
-        if not speech:
-            generic_speeches = [
-                "Hello there!",
-                "Nice weather today.",
-                "I'm enjoying my walk.",
-                "This place is interesting.",
-                "I wonder what I'll find today.",
-                "It's good to be out exploring.",
-                "I like this area.",
-                "The scenery here is lovely."
-            ]
-            speech = random.choice(generic_speeches)
-        
-        # Reduce speech frequency to make it more natural
-        # Only 20% chance to actually speak when moving
-        if action != "idle" and action != "drink" and action != "eat" and random.random() > 0.2:
-            speech = ""
-        
-        return {"action": action, "speech": speech}
-
-
-
-
-
-    def _create_adaptive_system_prompt(self, has_critical_thirst, has_critical_hunger):
-        """Create a concise system prompt based on agent's needs"""
-        
-        # Base prompt - keep it minimal
-        base_prompt = "You control an NPC in a game. Respond with JSON: {\"action\": \"[move_left/move_right/move_up/move_down/drink/eat/idle]\", \"speech\": \"[optional speech]\"}"
-        
-        # Add specific guidance based on critical needs
-        if has_critical_thirst and has_critical_hunger:
-            base_prompt += " NPC is critically thirsty AND hungry. Prioritize water/food. Only drink when at water."
-        elif has_critical_thirst:
-            base_prompt += " NPC is critically thirsty. Find water. Only use drink action when at water."
-        elif has_critical_hunger:
-            base_prompt += " NPC is critically hungry. Find food. Only use eat action when at food."
-        else:
-            base_prompt += " NPC is fine. Focus on personality and exploration. Never mention thirst/hunger/water/food."
-        
-        return base_prompt
-
-
-
-
-    
-    def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
-        """Generate decisions for multiple agents (one by one)"""
-        decisions = []
-        for state in agent_states:
-            decision = self.generate_decision(state)
-            decisions.append(decision)
-        return decisions
 
 # ================ Fallback AI ================
 
@@ -632,13 +592,12 @@ class FallbackAI:
 class AIUniverseController:
     """Main controller for the AI universe simulation"""
     
-    def __init__(self, use_llm=True, use_local_model=True, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
+    def __init__(self, use_llm: bool = True, use_local_model: bool = False, model_path: str = None, model_name: str = "llama3"):
         self.agents: Dict[str, AgentState] = {}
         self.running = False
         self.thread = None
         self.use_llm = use_llm
         self.use_local_model = use_local_model
-        self.model_path = model_path
         
         # Queues for communication with the game engine
         self.state_update_queue = queue.Queue()
@@ -648,7 +607,10 @@ class AIUniverseController:
         if self.use_llm:
             try:
                 self.ai_interface = AIInterface(use_local_model=use_local_model, model_path=model_path)
-                logger.info(f"Initialized AI interface with {'local model' if use_local_model else 'Ollama API'}")
+                if use_local_model and model_path:
+                    logger.info(f"Initialized AI interface with local model: {model_path}")
+                else:
+                    logger.info(f"Initialized AI interface with model: {model_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize AI interface: {e}")
                 logger.error("Falling back to rule-based AI")
@@ -663,7 +625,6 @@ class AIUniverseController:
         # Load CNA data cache
         self.cna_cache = {}
 
-        
     def start(self):
         """Start the AI universe controller thread"""
         if self.running:
@@ -796,7 +757,6 @@ class AIUniverseController:
                     agent.last_action = decision.action
                     if decision.speech:
                         agent.last_speech = decision.speech
-                        logger.info(f"Agent {decision.agent_id} speech: '{decision.speech}'")
                     
                     # Update mood
                     agent.mood = max(0.0, min(1.0, agent.mood + decision.mood_change))
@@ -842,6 +802,35 @@ class AIUniverseController:
     def get_all_agent_states(self) -> Dict[str, AgentState]:
         """Get all agent states"""
         return self.agents.copy()
+        
+    def apply_decision_to_npc(self, npc, decision):
+        """Apply an AI decision to an NPC entity"""
+        # Handle fast movement (multiple steps)
+        if decision.is_fast_movement and hasattr(npc, 'grid_x') and hasattr(npc, 'grid_y'):
+            # Determine how many steps to take (2-3 when critically thirsty/hungry)
+            steps = random.randint(2, 3)
+            
+            # Calculate target position based on action and steps
+            if decision.action == "move_left":
+                npc.target_grid_x = max(0, npc.grid_x - steps)
+                npc.target_grid_y = npc.grid_y
+            elif decision.action == "move_right":
+                npc.target_grid_x = npc.grid_x + steps
+                npc.target_grid_y = npc.grid_y
+            elif decision.action == "move_up":
+                npc.target_grid_x = npc.grid_x
+                npc.target_grid_y = max(0, npc.grid_y - steps)
+            elif decision.action == "move_down":
+                npc.target_grid_x = npc.grid_x
+                npc.target_grid_y = npc.grid_y + steps
+            
+            # Set the NPC to moving state
+            npc.is_moving = True
+            
+            return True
+        
+        return False  # Indicate that we didn't handle the decision specially
+
 
 # ================ Integration Helpers ================
 
@@ -897,165 +886,75 @@ class WorldStateCollector:
         return nearby_entities
     
 class LocalModelInterface:
-    """Interface for using a local LLM model directly from the project folder"""
+    """Interface for local LLM inference using llama-cpp-python"""
     
-    def __init__(self, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf", n_ctx=512, n_threads=4):
-        """Initialize the local model interface"""
-        self.model_path = model_path
-        
-        # Load the model
+    def __init__(self, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
         try:
+            from llama_cpp import Llama
+            
+            # Load the model
             self.llm = Llama(
                 model_path=model_path,
-                n_ctx=n_ctx,          # Context window size
-                n_threads=n_threads,  # Number of CPU threads to use
-                n_batch=8,            # Batch size for prompt processing
-                verbose=False         # Disable verbose output
+                n_ctx=512,  # Smaller context window to save memory
+                n_batch=8,  # Smaller batch size
+                n_threads=4  # Adjust based on your CPU
             )
+            
             logger.info(f"Successfully loaded local model from {model_path}")
             self.model_loaded = True
+            
         except Exception as e:
             logger.error(f"Failed to load local model: {e}")
             logger.error(traceback.format_exc())
             self.model_loaded = False
     
-    def generate_response(self, prompt, system_prompt, max_tokens=128):
-        """Generate a response from the local model"""
+    def generate_response(self, prompt, system_prompt="", max_tokens=64):
+        """Generate a response using the local model"""
         if not self.model_loaded:
             return {"action": "idle", "speech": ""}
         
         try:
-            # Format the prompt for the model
-            full_prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{prompt}\n<|assistant|>"
+            # Format the prompt for chat completion
+            messages = []
             
-            # Generate response
-            response = self.llm(
-                full_prompt,
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            
+            messages.append({"role": "user", "content": prompt})
+            
+            # Generate completion
+            output = self.llm.create_chat_completion(
+                messages=messages,
                 max_tokens=max_tokens,
-                stop=["<|user|>", "<|system|>"],
                 temperature=0.7,
+                top_p=0.9,
+                stop=["</s>", "user:", "User:", "system:", "System:"],
                 echo=False
             )
             
-            # Extract the generated text
-            generated_text = response["choices"][0]["text"].strip()
+            # Extract the response text
+            response_text = output["choices"][0]["message"]["content"].strip()
             
             # Try to parse as JSON
             try:
-                import json
-                import re
-                
-                # Look for JSON-like structure
-                json_match = re.search(r'(\{.*\})', generated_text, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(1)
-                    parsed_json = json.loads(json_str)
-                    
-                    # Make sure we have action and speech fields
-                    if "action" not in parsed_json:
-                        parsed_json["action"] = self._extract_action(generated_text)
-                    
-                    # Filter speech
-                    if "speech" in parsed_json:
-                        speech = parsed_json["speech"]
-                        # Filter out speech that contains the word "action" or is just "action"
-                        if speech.lower() == "action" or speech.lower() == "\"action\"":
-                            parsed_json["speech"] = ""
-                        # Filter out speech that looks like a command or JSON
-                        elif (speech.startswith("{") or 
-                              speech.startswith("[") or 
-                              "action:" in speech.lower() or 
-                              "speech:" in speech.lower() or
-                              "move_" in speech.lower() or
-                              "action" in speech.lower()):
-                            parsed_json["speech"] = ""
-                    else:
-                        parsed_json["speech"] = ""
-                        
-                    return parsed_json
-                else:
-                    # If no JSON found, extract action and speech
-                    action = self._extract_action(generated_text)
-                    
-                    # Try to extract speech - look for quotes or speech indicators
-                    speech = ""
-                    speech_match = re.search(r'["\'](.*?)["\']', generated_text)
-                    if speech_match:
-                        speech = speech_match.group(1)
-                    elif "says" in generated_text.lower():
-                        speech_parts = generated_text.lower().split("says")
-                        if len(speech_parts) > 1:
-                            speech = speech_parts[1].strip().strip('"\'')
-                    
-                    # Filter speech
-                    if speech.lower() == "action" or speech.lower() == "\"action\"":
-                        speech = ""
-                    elif (speech.startswith("{") or 
-                          speech.startswith("[") or 
-                          "action:" in speech.lower() or 
-                          "speech:" in speech.lower() or
-                          "move_" in speech.lower() or
-                          "action" in speech.lower()):
-                        speech = ""
-                    
-                    return {
-                        "action": action,
-                        "speech": speech if speech else ""
-                    }
+                return json.loads(response_text)
             except json.JSONDecodeError:
-                # If JSON parsing fails, extract action and speech
-                action = self._extract_action(generated_text)
+                # If not valid JSON, try to extract action and speech
+                action_match = re.search(r'"action"\s*:\s*"([^"]+)"', response_text)
+                speech_match = re.search(r'"speech"\s*:\s*"([^"]*)"', response_text)
                 
-                # Try to extract speech - look for quotes or speech indicators
-                speech = ""
-                speech_match = re.search(r'["\'](.*?)["\']', generated_text)
-                if speech_match:
-                    speech = speech_match.group(1)
-                elif "says" in generated_text.lower():
-                    speech_parts = generated_text.lower().split("says")
-                    if len(speech_parts) > 1:
-                        speech = speech_parts[1].strip().strip('"\'')
+                action = action_match.group(1) if action_match else "idle"
+                speech = speech_match.group(1) if speech_match else ""
                 
-                # Filter speech
-                if speech.lower() == "action" or speech.lower() == "\"action\"":
-                    speech = ""
-                elif (speech.startswith("{") or 
-                      speech.startswith("[") or 
-                      "action:" in speech.lower() or 
-                      "speech:" in speech.lower() or
-                      "move_" in speech.lower() or
-                      "action" in speech.lower()):
-                    speech = ""
-                
-                return {
-                    "action": action,
-                    "speech": speech if speech else ""
-                }
+                return {"action": action, "speech": speech}
                 
         except Exception as e:
-            logger.error(f"Error generating response from local model: {e}")
+            logger.error(f"Error generating response with local model: {e}")
+            logger.error(traceback.format_exc())
             return {"action": "idle", "speech": ""}
 
 
 
-    def _extract_action(self, text):
-        """Extract an action from text if possible"""
-        action_keywords = {
-            "move left": "move_left",
-            "move right": "move_right", 
-            "move up": "move_up",
-            "move down": "move_down",
-            "drink": "drink",
-            "eat": "eat",
-            "idle": "idle"
-        }
-        
-        text_lower = text.lower()
-        for keyword, action in action_keywords.items():
-            if keyword in text_lower:
-                return action
-        
-        return "idle"  # Default action
 
 
 # ================ Example Usage ================
