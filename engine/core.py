@@ -6,6 +6,8 @@ from engine.ai import AIManager
 from engine.data_manager import DataManager
 from engine.ui import UIManager, StatsPanel, ChatInputBox
 from engine.camera import Camera
+from entities.npc import NPC
+from ai_universe_controller import WorldStateCollector
 
 class SimpleGameEngine:
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
@@ -218,7 +220,53 @@ class SimpleGameEngine:
         # Update game time
         self.data.add_to_value("game_time", 1)
         
-        # Update AI for all NPCs
+        # Update AI Universe for NPCs
+        if hasattr(self, 'ai_universe'):
+            for obj in self.objects:
+                if isinstance(obj, NPC) and hasattr(obj, 'grid_x') and hasattr(obj, 'grid_y'):
+                    # Collect world state for this NPC
+                    nearby_tiles = WorldStateCollector.collect_nearby_tiles(
+                        self.world_map, obj.grid_x, obj.grid_y, radius=5)
+                    nearby_entities = WorldStateCollector.collect_nearby_entities(
+                        self.objects, obj.grid_x, obj.grid_y, radius=5)
+                    
+                    # Update agent state in AI universe
+                    self.ai_universe.update_agent_state(
+                        agent_id=str(id(obj)),  # Use object ID as agent ID
+                        grid_x=obj.grid_x,
+                        grid_y=obj.grid_y,
+                        thirst=obj.thirst if hasattr(obj, 'thirst') else 5,
+                        hunger=getattr(obj, 'hunger', 5),
+                        health=getattr(obj, 'health', 5),
+                        nearby_tiles=nearby_tiles,
+                        nearby_entities=nearby_entities,
+                        cna_file=obj.cna_file if hasattr(obj, 'cna_file') else None
+                    )
+            
+            # Process AI decisions
+            decisions = self.ai_universe.get_pending_decisions()
+            
+            if decisions:
+                print(f"Processing {len(decisions)} AI decisions: {[d.action for d in decisions]}")
+                
+            for decision in decisions:
+                # Find the corresponding object
+                for obj in self.objects:
+                    if str(id(obj)) == decision.agent_id:
+                        # Apply the decision to the NPC
+                        if isinstance(obj, NPC):
+                            # Apply the decision and get whether movement was applied
+                            movement_applied = obj.apply_ai_decision(decision)
+                            
+                            # Only show speech bubble if there's actual speech content
+                            if decision.speech and decision.speech.strip() and hasattr(self, 'ui'):
+                                # Limit speech to a reasonable length
+                                speech = decision.speech[:100]  # Limit to 100 chars
+                                self.ui.add_text_bubble(speech, obj, duration=3.0)
+                        
+                        break
+        
+        # Update AI for all NPCs (keep the existing AI system as fallback)
         self.ai_manager.update(self.world_map, self.objects)
         
         # Update physics for all objects
@@ -239,6 +287,7 @@ class SimpleGameEngine:
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
                     print(f"Player thirst decreased to {self.player.thirst}")
+
     
     def render(self):
         """Render all game objects"""
@@ -271,5 +320,8 @@ class SimpleGameEngine:
             self.clock.tick(self.fps)
         
         # Clean up
+        if hasattr(self, 'ai_universe'):
+            self.ai_universe.stop()
+            
         pygame.quit()
         sys.exit()

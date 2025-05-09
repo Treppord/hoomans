@@ -39,3 +39,32 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
+            
+    def apply_ai_decision(self, decision):
+        """Apply a decision from the AI Universe Controller"""
+        # Handle movement
+        if decision.action == "move_left" and not self.is_moving:
+            self.target_grid_x = self.grid_x - 1
+            self.is_moving = True
+        elif decision.action == "move_right" and not self.is_moving:
+            self.target_grid_x = self.grid_x + 1
+            self.is_moving = True
+        elif decision.action == "move_up" and not self.is_moving:
+            self.target_grid_y = self.grid_y - 1
+            self.is_moving = True
+        elif decision.action == "move_down" and not self.is_moving:
+            self.target_grid_y = self.grid_y + 1
+            self.is_moving = True
+        elif decision.action == "drink" and not self.is_moving:
+            # For drinking, we don't need to move, just update the last_drink_time
+            # to trigger the drinking logic in the update method
+            self.last_drink_time = 0  # This will make the NPC drink on next update
+        
+        # If we have specific target coordinates, use those
+        if decision.target_x is not None and decision.target_y is not None:
+            self.target_grid_x = decision.target_x
+            self.target_grid_y = decision.target_y
+            self.is_moving = True
+        
+        # Return True if we applied a movement
+        return self.is_moving
