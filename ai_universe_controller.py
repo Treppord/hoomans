@@ -12,6 +12,7 @@ import requests
 import traceback
 from dataclasses import dataclass, asdict, field
 from llama_cpp import Llama
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -235,17 +236,21 @@ Respond with a JSON object containing:
 - action: move_left, move_right, move_up, move_down, drink, eat, idle
 - speech: What the NPC says (can be empty). IMPORTANT: The speech should be natural dialogue, NOT commands or descriptions of actions.
 
+IMPORTANT RULES:
+1. NPCs should speak in first person (e.g., "I'm thirsty" is correct)
+2. Speech should reflect the NPC's personality traits and current needs
+3. The "drink" action can ONLY be performed when the NPC is adjacent to water
+4. ONLY focus on thirst and drinking when thirst is at 0 (critical)
+5. When thirst is normal (1-5), focus on personality and exploration instead
+
 Example response:
 {"action": "move_left", "speech": "I'm so thirsty!"}
 {"action": "drink", "speech": "Ah, refreshing water!"}
 {"action": "idle", "speech": "What a beautiful day!"}
 
-BAD examples (don't do these):
-{"action": "move_left", "speech": "action"}
-{"action": "drink", "speech": "I will drink now"}
-
 Keep your responses concise and focused on the action and speech.
 """
+
 
 
         
@@ -282,40 +287,225 @@ Keep your responses concise and focused on the action and speech.
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
         try:
-            # Convert agent state to a simplified dictionary for the prompt
-            simplified_state = {
-                "position": {"x": agent_state.grid_x, "y": agent_state.grid_y},
-                "thirst": agent_state.thirst,
-                "hunger": agent_state.hunger,
-                "last_action": agent_state.last_action
-            }
+            # Determine if agent has critical needs
+            has_critical_thirst = agent_state.thirst < 1
+            has_critical_hunger = agent_state.hunger < 1
             
-            # Add personality if available
+            # Create a minimal state representation
+            prompt = f"Position: ({agent_state.grid_x}, {agent_state.grid_y})\n"
+            
+            # Only include critical needs
+            if has_critical_thirst:
+                prompt += "CRITICAL THIRST! "
+                # Add water locations if any
+                water_tiles = [tile for tile in agent_state.nearby_tiles if tile.get("type") == "water"]
+                if water_tiles:
+                    nearest = min(water_tiles, key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
+                    prompt += f"Nearest water: ({nearest['x']}, {nearest['y']}). "
+            
+            if has_critical_hunger:
+                prompt += "CRITICAL HUNGER! "
+            
+            # Add personality info (very brief)
             if agent_state.cna_data:
-                simplified_state["name"] = f"{agent_state.cna_data.first_name} {agent_state.cna_data.last_name}"
-                simplified_state["gender"] = agent_state.cna_data.gender.name
+                prompt += f"Name: {agent_state.cna_data.first_name}, "
+                prompt += f"Culture: {agent_state.cna_data.culture.name}"
             
-            # Add nearby water tiles only (to keep prompt small)
-            water_tiles = [tile for tile in agent_state.nearby_tiles if tile.get("type") == "water"]
-            if water_tiles:
-                simplified_state["water_tiles"] = [{"x": t["x"], "y": t["y"]} for t in water_tiles[:3]]  # Limit to 3
-            
-            # Create a simple prompt
-            prompt = f"Agent state: {json.dumps(simplified_state)}\nChoose an action and optional speech for this agent."
+            # Create a concise system prompt
+            system_prompt = self._create_adaptive_system_prompt(has_critical_thirst, has_critical_hunger)
             
             # Use local model if enabled
             if self.use_local_model and hasattr(self, 'local_model'):
                 response_json = self.local_model.generate_response(
                     prompt=prompt,
-                    system_prompt=self.system_prompt,
+                    system_prompt=system_prompt,
                     max_tokens=64  # Keep responses short
                 )
-                return AgentDecision.from_ai_response(agent_state.agent_id, response_json)
+                
+                # Validate the response
+                validated_response = self._validate_response_for_needs(
+                    response_json, 
+                    has_critical_thirst, 
+                    has_critical_hunger,
+                    agent_state.nearby_tiles,
+                    agent_state.grid_x,
+                    agent_state.grid_y
+                )
+                
+                return AgentDecision.from_ai_response(agent_state.agent_id, validated_response)
                 
         except Exception as e:
             logger.error(f"Error generating decision: {e}")
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
+
+
+
+    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y):
+        """Validate and correct the AI response based on the agent's needs"""
+        
+        # Ensure we're working with a dictionary
+        if isinstance(response_json, str):
+            try:
+                response_json = json.loads(response_json)
+            except:
+                # If parsing fails, create a basic response
+                return {"action": "idle", "speech": ""}
+        
+        action = response_json.get("action", "idle")
+        speech = response_json.get("speech", "")
+        
+        # Validate drink action
+        if action == "drink":
+            # Check if agent has critical thirst
+            if not has_critical_thirst:
+                action = "idle"
+            else:
+                # Check if agent is adjacent to water
+                is_adjacent_to_water = False
+                for tile in nearby_tiles:
+                    if (tile.get("type") == "water" and 
+                        abs(tile["x"] - grid_x) <= 1 and 
+                        abs(tile["y"] - grid_y) <= 1):
+                        is_adjacent_to_water = True
+                        break
+                
+                if not is_adjacent_to_water:
+                    action = "idle"
+        
+        # Validate eat action
+        if action == "eat":
+            # Check if agent has critical hunger
+            if not has_critical_hunger:
+                action = "idle"
+            else:
+                # Check if agent is adjacent to food
+                is_adjacent_to_food = False
+                for tile in nearby_tiles:
+                    if (tile.get("type") == "food" and 
+                        abs(tile["x"] - grid_x) <= 1 and 
+                        abs(tile["y"] - grid_y) <= 1):
+                        is_adjacent_to_food = True
+                        break
+                
+                if not is_adjacent_to_food:
+                    action = "idle"
+        
+        # Encourage more movement when no critical needs
+        if action == "idle" and not has_critical_thirst and not has_critical_hunger:
+            # 70% chance to convert idle to movement when no critical needs
+            if random.random() < 0.7:
+                # Choose a random direction, but avoid walls
+                possible_directions = []
+                
+                # Check each direction for walls
+                directions = [
+                    ("move_left", grid_x - 1, grid_y),
+                    ("move_right", grid_x + 1, grid_y),
+                    ("move_up", grid_x, grid_y - 1),
+                    ("move_down", grid_x, grid_y + 1)
+                ]
+                
+                for dir_action, x, y in directions:
+                    # Check if there's a wall in this direction
+                    has_wall = False
+                    for tile in nearby_tiles:
+                        if tile.get("type") == "wall" and tile["x"] == x and tile["y"] == y:
+                            has_wall = True
+                            break
+                    
+                    if not has_wall:
+                        possible_directions.append(dir_action)
+                
+                # If we have valid directions, choose one randomly
+                if possible_directions:
+                    action = random.choice(possible_directions)
+        
+        # Validate speech content
+        water_keywords = ["water", "drink", "thirst", "hydrate", "quench"]
+        food_keywords = ["food", "eat", "hungry", "hunger", "starving"]
+        
+        # Check for inappropriate mentions of water/thirst
+        if not has_critical_thirst and any(keyword in speech.lower() for keyword in water_keywords):
+            speech = random.choice([
+                "What a nice day.",
+                "I wonder what's over there.",
+                "The weather is pleasant today."
+            ])
+        
+        # Check for inappropriate mentions of food/hunger
+        if not has_critical_hunger and any(keyword in speech.lower() for keyword in food_keywords):
+            speech = random.choice([
+                "This area is interesting.",
+                "I should keep exploring.",
+                "I'm curious about what's ahead."
+            ])
+        
+        # Filter out problematic speech
+        if speech:
+            # Check if speech is just a number or very short
+            if speech.strip().isdigit() or len(speech.strip()) < 3:
+                speech = ""
+            
+            # Check if speech contains action commands
+            action_keywords = ["move left", "move right", "move up", "move down", "move_left", "move_right", "move_up", "move_down"]
+            if any(keyword in speech.lower() for keyword in action_keywords):
+                speech = ""
+            
+            # Check if speech contains implementation details
+            implementation_keywords = ["npc", "agent", "tinted", "mojang", "draft", "action", "speech"]
+            if any(keyword in speech.lower() for keyword in implementation_keywords):
+                speech = ""
+            
+            # Check if speech is incomplete (ends with certain characters)
+            if speech.endswith(("I", "and I", "I'm", "she", "he", "they", "we", "the", "a", "an", "this", "that")):
+                speech = ""
+        
+        # If speech was filtered out, provide a generic alternative
+        if not speech:
+            generic_speeches = [
+                "Hello there!",
+                "Nice weather today.",
+                "I'm enjoying my walk.",
+                "This place is interesting.",
+                "I wonder what I'll find today.",
+                "It's good to be out exploring.",
+                "I like this area.",
+                "The scenery here is lovely."
+            ]
+            speech = random.choice(generic_speeches)
+        
+        # Reduce speech frequency to make it more natural
+        # Only 20% chance to actually speak when moving
+        if action != "idle" and action != "drink" and action != "eat" and random.random() > 0.2:
+            speech = ""
+        
+        return {"action": action, "speech": speech}
+
+
+
+
+
+    def _create_adaptive_system_prompt(self, has_critical_thirst, has_critical_hunger):
+        """Create a concise system prompt based on agent's needs"""
+        
+        # Base prompt - keep it minimal
+        base_prompt = "You control an NPC in a game. Respond with JSON: {\"action\": \"[move_left/move_right/move_up/move_down/drink/eat/idle]\", \"speech\": \"[optional speech]\"}"
+        
+        # Add specific guidance based on critical needs
+        if has_critical_thirst and has_critical_hunger:
+            base_prompt += " NPC is critically thirsty AND hungry. Prioritize water/food. Only drink when at water."
+        elif has_critical_thirst:
+            base_prompt += " NPC is critically thirsty. Find water. Only use drink action when at water."
+        elif has_critical_hunger:
+            base_prompt += " NPC is critically hungry. Find food. Only use eat action when at food."
+        else:
+            base_prompt += " NPC is fine. Focus on personality and exploration. Never mention thirst/hunger/water/food."
+        
+        return base_prompt
+
+
+
 
     
     def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
@@ -341,19 +531,24 @@ class FallbackAI:
         mood_change = 0.0
         memory_update = None
         
-        # Check for basic needs
-        if agent_state.thirst <= 1:
+        # Check for critical thirst (only when thirst is 0)
+        if agent_state.thirst == 0:
             # Look for water in nearby tiles
             water_tiles = [tile for tile in agent_state.nearby_tiles if tile.get("type") == "water"]
             if water_tiles:
-                # If already adjacent to water, drink
+                # Check if already adjacent to water
+                is_adjacent_to_water = False
                 for tile in water_tiles:
                     if abs(tile["x"] - agent_state.grid_x) <= 1 and abs(tile["y"] - agent_state.grid_y) <= 1:
-                        action = "drink"
-                        speech = "I need water..."
-                        mood_change = 0.2
-                        memory_update = "I found water when I was thirsty."
+                        is_adjacent_to_water = True
                         break
+                
+                if is_adjacent_to_water:
+                    # If adjacent to water, drink
+                    action = "drink"
+                    speech = "I need water desperately..."
+                    mood_change = 0.3
+                    memory_update = "I found water when I was extremely thirsty."
                 else:
                     # Move towards the nearest water
                     nearest_water = min(water_tiles, key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
@@ -367,15 +562,14 @@ class FallbackAI:
                     
                     target_x = nearest_water["x"]
                     target_y = nearest_water["y"]
-                    speech = "Need to find water..."
-                    mood_change = -0.1
+                    speech = "I'm dying of thirst... Need water..."
+                    mood_change = -0.2
             else:
                 # Wander randomly looking for water
                 action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                speech = "So thirsty..."
-                mood_change = -0.2
-        
-        # Random movement if no specific need
+                speech = "So thirsty... must find water..."
+                mood_change = -0.3
+        # Random movement if no critical needs
         elif random.random() < 0.3:  # 30% chance to move
             action = random.choice(["move_left", "move_right", "move_up", "move_down"])
             
@@ -398,15 +592,23 @@ class FallbackAI:
                 culture = agent_state.cna_data.culture.name
                 nation = agent_state.cna_data.nation.name
                 
-                speech_options = [
-                    f"I'm from {nation}.",
-                    f"My name is {name}.",
-                    "Nice weather today.",
-                    "I wonder what's over there.",
-                    f"The {culture} culture has such interesting traditions.",
-                    "I should explore more of this area.",
-                    "I hope I find something interesting soon."
-                ]
+                # Add some thirst-related speech if thirst is low but not critical
+                if agent_state.thirst <= 2:
+                    speech_options = [
+                        "I'm getting thirsty.",
+                        "I could use some water soon.",
+                        "My throat feels a bit dry.",
+                        "I should find some water before I get too thirsty."
+                    ]
+                else:
+                    speech_options = [
+                        f"I'm from {nation}.",
+                        "Nice weather today.",
+                        "I wonder what's over there.",
+                        f"The {culture} culture has such interesting traditions.",
+                        "I should explore more of this area.",
+                        "I hope I find something interesting soon."
+                    ]
                 speech = random.choice(speech_options)
         
         return AgentDecision(
