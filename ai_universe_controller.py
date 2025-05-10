@@ -474,6 +474,14 @@ Keep your responses concise and focused on the action and speech.
             logger.error(f"Error generating decision: {e}")
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
+        
+    def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
+        """Generate decisions for multiple agents (one by one)"""
+        decisions = []
+        for state in agent_states:
+            decision = self.generate_decision(state)
+            decisions.append(decision)
+        return decisions
 
 
 # ================ Fallback AI ================
@@ -669,6 +677,13 @@ class AIUniverseController:
                 if isinstance(update, dict) and "agent_id" in update:
                     agent_id = update["agent_id"]
                     
+                    # Check if this is a chat response request
+                    if "player_message" in update and "should_respond" in update and update["should_respond"]:
+                        # Generate a response immediately
+                        self._generate_chat_response(agent_id, update["player_message"])
+                        self.state_update_queue.task_done()
+                        continue
+                    
                     # Create or update agent state
                     if agent_id not in self.agents:
                         # New agent
@@ -719,6 +734,112 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error processing state updates: {e}")
             logger.error(traceback.format_exc())
+    
+    def _generate_chat_response(self, agent_id, player_message):
+        """Generate a response to a player chat message"""
+        try:
+            # Get the agent state
+            agent = self.agents.get(agent_id)
+            if not agent:
+                return
+            
+            # Create a special prompt for chat response
+            prompt = f"Player said: \"{player_message}\"\n"
+            
+            if agent.cna_data:
+                prompt += f"You are {agent.cna_data.first_name} {agent.cna_data.last_name}, "
+                prompt += f"a {agent.cna_data.gender.name.lower()} from {agent.cna_data.nation.name} culture.\n"
+                prompt += f"Your personality: Intelligence={agent.cna_data.intelligence_factor:.1f}, "
+                prompt += f"Adaptability={agent.cna_data.adaptability:.1f}\n"
+            
+            # Add information about needs
+            if agent.thirst <= 1:
+                prompt += "You are very thirsty. "
+            if agent.hunger <= 1:
+                prompt += "You are very hungry. "
+            
+            prompt += "Respond to the player in a way that reflects your character."
+            
+            # Create a system prompt for chat responses
+            system_prompt = "You are an NPC in a game responding to a player's message. Keep your response short, natural, and in-character. Respond with JSON: {\"speech\": \"your response here\"}. Do not include any other text."
+            
+            # Generate response
+            response_json = None
+            if self.use_llm and hasattr(self, 'ai_interface'):
+                try:
+                    if hasattr(self.ai_interface, 'local_model'):
+                        response_json = self.ai_interface.local_model.generate_response(
+                            prompt=prompt,
+                            system_prompt=system_prompt,
+                            max_tokens=64
+                        )
+                except Exception as e:
+                    logger.error(f"Error generating chat response: {e}")
+            
+            # If LLM failed or is not available, use fallback responses
+            if not response_json:
+                # Simple fallback responses
+                fallback_responses = [
+                    f"Hello there!",
+                    f"Nice to meet you.",
+                    f"What an interesting thing to say.",
+                    f"I'm not sure I understand.",
+                    f"That's fascinating.",
+                    f"I was just thinking about that.",
+                    f"I see what you mean.",
+                    f"Is that so?",
+                    f"Tell me more about that."
+                ]
+                
+                # If we have CNA data, add some personalized responses
+                if agent.cna_data:
+                    name = agent.cna_data.first_name
+                    fallback_responses.extend([
+                        f"I'm {name}, nice to meet you!",
+                        f"That's interesting. By the way, I'm {name}.",
+                        f"I'm from {agent.cna_data.nation.name}, we don't talk like that there.",
+                        f"In {agent.cna_data.culture.name} culture, we have a saying about that."
+                    ])
+                
+                # If thirsty, add thirst-related responses
+                if agent.thirst <= 1:
+                    fallback_responses.extend([
+                        "Sorry, I'm too thirsty to chat right now.",
+                        "I need to find water soon...",
+                        "Do you know where I can find some water?"
+                    ])
+                
+                response_json = {"speech": random.choice(fallback_responses)}
+            
+            # Extract speech from response
+            speech = ""
+            if isinstance(response_json, dict) and "speech" in response_json:
+                speech = response_json["speech"]
+            elif isinstance(response_json, str):
+                # Try to parse as JSON
+                try:
+                    parsed = json.loads(response_json)
+                    if "speech" in parsed:
+                        speech = parsed["speech"]
+                except:
+                    # If parsing fails, use the whole string
+                    speech = response_json
+            
+            # Create a decision with just the speech
+            decision = AgentDecision(
+                agent_id=agent_id,
+                action="idle",  # Just stand still while talking
+                speech=speech,
+                mood_change=0.1  # Slight mood boost from social interaction
+            )
+            
+            # Put the decision in the queue for the game engine
+            self.decision_queue.put(decision)
+            
+        except Exception as e:
+            logger.error(f"Error generating chat response: {e}")
+            logger.error(traceback.format_exc())
+
     
     def _process_agents(self):
         """Process agents that need decisions"""
@@ -897,7 +1018,8 @@ class LocalModelInterface:
                 model_path=model_path,
                 n_ctx=512,  # Smaller context window to save memory
                 n_batch=8,  # Smaller batch size
-                n_threads=4  # Adjust based on your CPU
+                n_threads=4,  # Adjust based on your CPU
+                verbose=False
             )
             
             logger.info(f"Successfully loaded local model from {model_path}")
@@ -929,7 +1051,6 @@ class LocalModelInterface:
                 temperature=0.7,
                 top_p=0.9,
                 stop=["</s>", "user:", "User:", "system:", "System:"],
-                echo=False
             )
             
             # Extract the response text

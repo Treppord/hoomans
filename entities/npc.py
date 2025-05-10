@@ -85,3 +85,8 @@ class NPC(Rectangle):
             elif decision.action == "move_down":
                 self.target_grid_y = self.grid_y + steps
                 self.is_moving = True
+                
+    def respond_to_chat(self, player_message):
+        """Generate a response to a player's chat message"""
+        # This is handled by the AI Universe Controller
+        pass

@@ -114,8 +114,46 @@ class SimpleGameEngine:
         if self.player:
             print(f"Chat message: {message}")  # Debug output
             self.ui.add_text_bubble(message, self.player, duration=5.0)
+            
+            # Find NPCs in vicinity and have them respond
+            self.process_npc_responses_to_chat(message)
+            
             # When chat is closed, reset chat mode in input handler
             self.input_handler.set_chat_mode(False)
+    
+    def process_npc_responses_to_chat(self, message):
+        """Process NPC responses to player chat messages"""
+        if not self.player:
+            return
+            
+        # Define vicinity range (in grid cells)
+        vicinity_range = 8
+        
+        # Find NPCs within range
+        nearby_npcs = []
+        for obj in self.objects:
+            if isinstance(obj, NPC) and hasattr(obj, 'grid_x') and hasattr(obj, 'grid_y'):
+                # Calculate Manhattan distance
+                distance = abs(obj.grid_x - self.player.grid_x) + abs(obj.grid_y - self.player.grid_y)
+                if distance <= vicinity_range:
+                    nearby_npcs.append(obj)
+        
+        # If no NPCs in range, return
+        if not nearby_npcs:
+            return
+            
+        # For each nearby NPC, generate a response via AI Universe
+        if hasattr(self, 'ai_universe'):
+            for npc in nearby_npcs:
+                # Create a special state update to trigger a response
+                self.ai_universe.update_agent_state(
+                    agent_id=str(id(npc)),
+                    grid_x=npc.grid_x,
+                    grid_y=npc.grid_y,
+                    player_message=message,
+                    should_respond=True
+                )
+
         
     def set_world_map(self, world_map):
         """Set the world map for the game"""
