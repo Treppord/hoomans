@@ -14,6 +14,10 @@ class NPC(Rectangle):
         self.last_thirst_update = 0  # Track time for thirst decrease
         self.last_drink_time = 0  # Track time for drinking
         
+        # Debug tracking for player detection
+        self.debug_player_detected = False
+        self.debug_last_player_id = None
+        
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
             self.ai_controller.set_entity(self)
@@ -40,6 +44,18 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
+    
+    def debug_player_visibility(self, player_id, can_see_player):
+        """Debug method to track player visibility changes"""
+        if can_see_player and not self.debug_player_detected:
+            # Player just entered detection range
+            self.debug_player_detected = True
+            self.debug_last_player_id = player_id
+            print(f"DEBUG: NPC {id(self)} detected player {player_id} in vicinity")
+        elif not can_see_player and self.debug_player_detected and self.debug_last_player_id == player_id:
+            # Player just left detection range
+            self.debug_player_detected = False
+            print(f"DEBUG: NPC {id(self)} lost sight of player {player_id}")
             
     def apply_ai_decision(self, decision):
         """Apply an AI decision to this NPC"""

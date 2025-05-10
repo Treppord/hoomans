@@ -741,43 +741,68 @@ class AIUniverseController:
             # Get the agent state
             agent = self.agents.get(agent_id)
             if not agent:
+                logger.error(f"DEBUG: Agent {agent_id} not found for chat response")
                 return
             
-            # Create a special prompt for chat response
-            prompt = f"Player said: \"{player_message}\"\n"
+            logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
+            
+            # Create a simpler, more direct prompt for the small model
+            prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
             
             if agent.cna_data:
-                prompt += f"You are {agent.cna_data.first_name} {agent.cna_data.last_name}, "
-                prompt += f"a {agent.cna_data.gender.name.lower()} from {agent.cna_data.nation.name} culture.\n"
-                prompt += f"Your personality: Intelligence={agent.cna_data.intelligence_factor:.1f}, "
-                prompt += f"Adaptability={agent.cna_data.adaptability:.1f}\n"
+                prompt = f"You are {agent.cna_data.first_name}, a character in a game.\n\nPlayer: {player_message}\n\nRespond in a short, natural way."
             
-            # Add information about needs
-            if agent.thirst <= 1:
-                prompt += "You are very thirsty. "
-            if agent.hunger <= 1:
-                prompt += "You are very hungry. "
-            
-            prompt += "Respond to the player in a way that reflects your character."
-            
-            # Create a system prompt for chat responses
-            system_prompt = "You are an NPC in a game responding to a player's message. Keep your response short, natural, and in-character. Respond with JSON: {\"speech\": \"your response here\"}. Do not include any other text."
+            # Simplified system prompt
+            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply."
             
             # Generate response
-            response_json = None
+            response_text = None
             if self.use_llm and hasattr(self, 'ai_interface'):
                 try:
                     if hasattr(self.ai_interface, 'local_model'):
-                        response_json = self.ai_interface.local_model.generate_response(
-                            prompt=prompt,
-                            system_prompt=system_prompt,
-                            max_tokens=64
-                        )
+                        logger.info(f"DEBUG: Using local model for chat response")
+                        
+                        # Try direct text generation instead of JSON format for small models
+                        # This bypasses the JSON parsing which might be challenging for TinyLlama
+                        try:
+                            # Direct text generation approach
+                            messages = [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": prompt}
+                            ]
+                            
+                            output = self.ai_interface.local_model.llm.create_chat_completion(
+                                messages=messages,
+                                max_tokens=128,  # Increase token limit
+                                temperature=0.8,  # Slightly higher temperature for more varied responses
+                                top_p=0.95,
+                                stop=["</s>", "Player:", "player:", "User:", "user:"]
+                            )
+                            
+                            # Extract the raw text response
+                            response_text = output["choices"][0]["message"]["content"].strip()
+                            logger.info(f"DEBUG: Raw model text response: '{response_text}'")
+                            
+                            # Clean up the response
+                            # Remove any JSON-like formatting that might have been generated
+                            response_text = response_text.replace('{"speech": "', '').replace('"}', '')
+                            response_text = response_text.replace('"', '')
+                            
+                            # If response is too long, truncate it
+                            if len(response_text) > 100:
+                                response_text = response_text[:97] + "..."
+                                
+                        except Exception as e:
+                            logger.error(f"Error with direct text generation: {e}")
+                            response_text = None
+                            
                 except Exception as e:
                     logger.error(f"Error generating chat response: {e}")
+                    logger.error(traceback.format_exc())
             
-            # If LLM failed or is not available, use fallback responses
-            if not response_json:
+            # If direct text generation failed or is empty, use fallback responses
+            if not response_text:
+                logger.info(f"DEBUG: Using fallback responses for chat")
                 # Simple fallback responses
                 fallback_responses = [
                     f"Hello there!",
@@ -809,29 +834,21 @@ class AIUniverseController:
                         "Do you know where I can find some water?"
                     ])
                 
-                response_json = {"speech": random.choice(fallback_responses)}
+                # Always use a fallback response for now to ensure we get a response
+                response_text = random.choice(fallback_responses)
+                logger.info(f"DEBUG: Selected fallback response: '{response_text}'")
             
-            # Extract speech from response
-            speech = ""
-            if isinstance(response_json, dict) and "speech" in response_json:
-                speech = response_json["speech"]
-            elif isinstance(response_json, str):
-                # Try to parse as JSON
-                try:
-                    parsed = json.loads(response_json)
-                    if "speech" in parsed:
-                        speech = parsed["speech"]
-                except:
-                    # If parsing fails, use the whole string
-                    speech = response_json
+            logger.info(f"DEBUG: Final NPC response speech: '{response_text}'")
             
             # Create a decision with just the speech
             decision = AgentDecision(
                 agent_id=agent_id,
                 action="idle",  # Just stand still while talking
-                speech=speech,
+                speech=response_text,
                 mood_change=0.1  # Slight mood boost from social interaction
             )
+            
+            logger.info(f"DEBUG: Queuing chat response decision for agent {agent_id}")
             
             # Put the decision in the queue for the game engine
             self.decision_queue.put(decision)
@@ -839,6 +856,8 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
             logger.error(traceback.format_exc())
+
+
 
     
     def _process_agents(self):

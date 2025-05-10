@@ -138,6 +138,9 @@ class SimpleGameEngine:
                 if distance <= vicinity_range:
                     nearby_npcs.append(obj)
         
+        # Debug output
+        print(f"DEBUG: Found {len(nearby_npcs)} NPCs in chat vicinity of player")
+        
         # If no NPCs in range, return
         if not nearby_npcs:
             return
@@ -145,6 +148,9 @@ class SimpleGameEngine:
         # For each nearby NPC, generate a response via AI Universe
         if hasattr(self, 'ai_universe'):
             for npc in nearby_npcs:
+                # Debug output
+                print(f"DEBUG: Requesting chat response from NPC {id(npc)} at position ({npc.grid_x}, {npc.grid_y})")
+                
                 # Create a special state update to trigger a response
                 self.ai_universe.update_agent_state(
                     agent_id=str(id(npc)),
@@ -153,6 +159,8 @@ class SimpleGameEngine:
                     player_message=message,
                     should_respond=True
                 )
+
+                
 
         
     def set_world_map(self, world_map):
@@ -268,6 +276,16 @@ class SimpleGameEngine:
                     nearby_entities = WorldStateCollector.collect_nearby_entities(
                         self.objects, obj.grid_x, obj.grid_y, radius=5)
                     
+                    # Debug player visibility
+                    if self.player:
+                        # Check if player is within 8 tiles (vicinity range)
+                        distance = abs(obj.grid_x - self.player.grid_x) + abs(obj.grid_y - self.player.grid_y)
+                        can_see_player = distance <= 8
+                        
+                        # Update debug state
+                        if hasattr(obj, 'debug_player_visibility'):
+                            obj.debug_player_visibility(id(self.player), can_see_player)
+                    
                     # Update agent state in AI universe
                     self.ai_universe.update_agent_state(
                         agent_id=str(id(obj)),  # Use object ID as agent ID
@@ -284,18 +302,28 @@ class SimpleGameEngine:
             # Process AI decisions
             decisions = self.ai_universe.get_pending_decisions()
             for decision in decisions:
+                print(f"DEBUG: Processing decision for agent {decision.agent_id}, action={decision.action}, speech='{decision.speech}'")
                 # Find the corresponding object
+                found_object = False
                 for obj in self.objects:
                     if str(id(obj)) == decision.agent_id:
+                        found_object = True
                         # Apply the decision to the NPC
                         if isinstance(obj, NPC):
                             obj.apply_ai_decision(decision)
                         
                         # Handle speech with text bubbles
                         if decision.speech and hasattr(self, 'ui'):
+                            print(f"DEBUG: Adding text bubble for speech: '{decision.speech}'")
                             self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
+                        elif not decision.speech:
+                            print(f"DEBUG: No speech to display for agent {decision.agent_id}")
                         
                         break
+                
+                if not found_object:
+                    print(f"DEBUG: Could not find object for agent {decision.agent_id}")
+
         
         # Update AI for all NPCs (keep the existing AI system as fallback)
         self.ai_manager.update(self.world_map, self.objects)
@@ -318,6 +346,7 @@ class SimpleGameEngine:
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
                     print(f"Player thirst decreased to {self.player.thirst}")
+
 
 
     
