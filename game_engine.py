@@ -23,7 +23,7 @@ if __name__ == "__main__":
     
     # Create and set up the world map (50x38 tiles for an 800x600 screen)
     world_map = WorldMap(256, 256)
-    world_map.generate_large_map()
+    world_map.generate_realistic_map()
     engine.set_world_map(world_map)
     
     # Get absolute path to the project root directory

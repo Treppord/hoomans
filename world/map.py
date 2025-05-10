@@ -1,6 +1,8 @@
 import pygame
 from world.tile import Tile
 import random
+import noise
+import math
 
 class WorldMap:
     """Represents the game world as a grid of tiles"""
@@ -113,14 +115,189 @@ class WorldMap:
                     
         return None  # No water found within range
     
-    def generate_large_map(self):
-        """Generate a large map with various features"""
-        # Fill with grass
+    def generate_realistic_map(self, scale=100.0, octaves=6, persistence=0.5, lacunarity=2.0, seed=None):
+        """Generate a realistic world map using Perlin noise"""
+        if seed is None:
+            seed = random.randint(0, 1000)
+        
+        print(f"Generating realistic map with seed: {seed}")
+        
+        # Generate height map using Perlin noise
+        height_map = []
+        for y in range(self.height):
+            row = []
+            for x in range(self.width):
+                # Get noise value at this position
+                nx = x / scale
+                ny = y / scale
+                # Use multiple octaves for more natural terrain
+                value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
+                                     lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=seed)
+                # Normalize to 0-1 range
+                value = (value + 1) / 2
+                row.append(value)
+            height_map.append(row)
+        
+        # Generate moisture map using different seed
+        moisture_map = []
+        moisture_seed = seed + 1000
+        for y in range(self.height):
+            row = []
+            for x in range(self.width):
+                nx = x / scale
+                ny = y / scale
+                value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
+                                     lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=moisture_seed)
+                value = (value + 1) / 2
+                row.append(value)
+            moisture_map.append(row)
+        
+        # Set tiles based on height and moisture
         for y in range(self.height):
             for x in range(self.width):
-                self.set_tile(x, y, "grass")
+                height = height_map[y][x]
+                moisture = moisture_map[y][x]
+                
+                # Deep water
+                if height < 0.3:
+                    self.set_tile(x, y, "deep_water")
+                
+                # Shallow water
+                elif height < 0.4:
+                    self.set_tile(x, y, "shallow_water")
+                
+                # Beach/sand
+                elif height < 0.45:
+                    self.set_tile(x, y, "sand")
+                
+                # Grassland/plains
+                elif height < 0.7:
+                    if moisture > 0.6:
+                        self.set_tile(x, y, "forest")
+                    else:
+                        self.set_tile(x, y, "grass")
+                
+                # Mountains
+                elif height < 0.85:
+                    self.set_tile(x, y, "mountain")
+                
+                # Snow peaks
+                else:
+                    self.set_tile(x, y, "snow")
         
-        # Add walls around the edges
+        # Add some paths connecting areas
+        self._add_paths()
+        
+        # Add border walls
+        self._add_border_walls()
+        
+        # Ensure there's at least one accessible water area
+        self._ensure_accessible_water()
+    
+    def _add_paths(self):
+        """Add some natural-looking paths through the terrain"""
+        # Create a few random paths
+        num_paths = random.randint(3, 6)
+        
+        for _ in range(num_paths):
+            # Pick random start and end points
+            start_x = random.randint(5, self.width - 5)
+            start_y = random.randint(5, self.height - 5)
+            end_x = random.randint(5, self.width - 5)
+            end_y = random.randint(5, self.height - 5)
+            
+            # Ensure we're not starting in water or mountains
+            if (self.get_tile(start_x, start_y).is_water() or 
+                self.get_tile(start_x, start_y).type == "mountain"):
+                continue
+                
+            # Simple A* pathfinding to create natural-looking paths
+            path = self._find_path(start_x, start_y, end_x, end_y)
+            
+            # Create the path
+            for x, y in path:
+                # Don't place paths in water
+                if not self.get_tile(x, y).is_water():
+                    self.set_tile(x, y, "path")
+    
+    def _find_path(self, start_x, start_y, end_x, end_y):
+        """Simple A* pathfinding to create natural-looking paths"""
+        # Initialize open and closed sets
+        open_set = [(start_x, start_y)]
+        closed_set = set()
+        
+        # Track path and costs
+        came_from = {}
+        g_score = {(start_x, start_y): 0}
+        f_score = {(start_x, start_y): self._heuristic(start_x, start_y, end_x, end_y)}
+        
+        while open_set:
+            # Find node with lowest f_score
+            current = min(open_set, key=lambda pos: f_score.get(pos, float('inf')))
+            
+            # If we reached the end
+            if current[0] == end_x and current[1] == end_y:
+                # Reconstruct path
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append((start_x, start_y))
+                path.reverse()
+                return path
+            
+            # Move current from open to closed
+            open_set.remove(current)
+            closed_set.add(current)
+            
+            # Check neighbors
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)]:
+                neighbor = (current[0] + dx, current[1] + dy)
+                
+                # Skip if out of bounds or in closed set
+                if (not (0 <= neighbor[0] < self.width and 0 <= neighbor[1] < self.height) or
+                    neighbor in closed_set):
+                    continue
+                
+                # Get tile type for movement cost
+                tile = self.get_tile(neighbor[0], neighbor[1])
+                if not tile:
+                    continue
+                
+                # Higher cost for water and mountains (avoid them)
+                if tile.type == "mountain":
+                    continue  # Don't path through mountains
+                elif tile.is_water():
+                    movement_cost = 100  # Very high cost for water
+                elif tile.type == "forest":
+                    movement_cost = 5  # Higher cost for forest
+                else:
+                    movement_cost = 1  # Normal cost
+                
+                # Calculate tentative g_score
+                tentative_g = g_score.get(current, float('inf')) + movement_cost
+                
+                # Add to open set if not there
+                if neighbor not in open_set:
+                    open_set.append(neighbor)
+                # Skip if this path is worse
+                elif tentative_g >= g_score.get(neighbor, float('inf')):
+                    continue
+                
+                # This is the best path so far
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g
+                f_score[neighbor] = tentative_g + self._heuristic(neighbor[0], neighbor[1], end_x, end_y)
+        
+        # No path found
+        return []
+    
+    def _heuristic(self, x1, y1, x2, y2):
+        """Calculate Manhattan distance heuristic"""
+        return abs(x1 - x2) + abs(y1 - y2)
+    
+    def _add_border_walls(self):
+        """Add walls around the map border"""
         for x in range(self.width):
             self.set_tile(x, 0, "wall")
             self.set_tile(x, self.height - 1, "wall")
@@ -128,51 +305,44 @@ class WorldMap:
         for y in range(self.height):
             self.set_tile(0, y, "wall")
             self.set_tile(self.width - 1, y, "wall")
+    
+    def _ensure_accessible_water(self):
+        """Ensure there's at least one accessible water area"""
+        # Find center of map
+        center_x = self.width // 2
+        center_y = self.height // 2
         
-        # Add several ponds/lakes
-        num_ponds = self.width // 50  # One pond per 50 tiles of width
-        for _ in range(num_ponds):
-            pond_x = random.randint(10, self.width - 10)
-            pond_y = random.randint(10, self.height - 10)
-            pond_size = random.randint(5, 15)
-            
-            # Create the pond
-            for y in range(pond_y - pond_size // 2, pond_y + pond_size // 2):
-                for x in range(pond_x - pond_size // 2, pond_x + pond_size // 2):
-                    if 0 <= x < self.width and 0 <= y < self.height:
-                        # Make pond shape more natural with some randomness
-                        distance = ((x - pond_x) ** 2 + (y - pond_y) ** 2) ** 0.5
-                        if distance < pond_size // 2 + random.uniform(-1, 1):
-                            self.set_tile(x, y, "water")
-            
-            # Add sand around the pond
-            for y in range(pond_y - pond_size // 2 - 1, pond_y + pond_size // 2 + 1):
-                for x in range(pond_x - pond_size // 2 - 1, pond_x + pond_size // 2 + 1):
-                    if 0 <= x < self.width and 0 <= y < self.height:
-                        if self.get_tile(x, y).type != "water":
-                            # Check if adjacent to water
-                            is_adjacent = False
-                            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                                nx, ny = x + dx, y + dy
-                                if (0 <= nx < self.width and 0 <= ny < self.height and 
-                                    self.get_tile(nx, ny).type == "water"):
-                                    is_adjacent = True
-                                    break
-                            
-                            if is_adjacent:
-                                self.set_tile(x, y, "sand")
+        # Check if there's water within reasonable distance
+        water_found = False
+        for radius in range(1, min(self.width, self.height) // 4):
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    if abs(dx) + abs(dy) == radius:  # Check perimeter
+                        x, y = center_x + dx, center_y + dy
+                        if 0 <= x < self.width and 0 <= y < self.height:
+                            if self.get_tile(x, y).is_water():
+                                water_found = True
+                                break
+                if water_found:
+                    break
+            if water_found:
+                break
         
-        # Add some random walls/obstacles
-        num_obstacles = self.width // 20  # One obstacle group per 20 tiles of width
-        for _ in range(num_obstacles):
-            obstacle_x = random.randint(10, self.width - 10)
-            obstacle_y = random.randint(10, self.height - 10)
-            obstacle_size = random.randint(3, 8)
+        # If no water found within reasonable distance, create a lake
+        if not water_found:
+            lake_x = center_x + random.randint(-10, 10)
+            lake_y = center_y + random.randint(-10, 10)
+            lake_size = random.randint(5, 10)
             
-            # Create the obstacle
-            for y in range(obstacle_y, obstacle_y + obstacle_size):
-                for x in range(obstacle_x, obstacle_x + obstacle_size):
+            for y in range(lake_y - lake_size, lake_y + lake_size):
+                for x in range(lake_x - lake_size, lake_x + lake_size):
                     if 0 <= x < self.width and 0 <= y < self.height:
-                        # Make obstacle shape more interesting
-                        if random.random() < 0.7:  # 70% chance to place a wall
-                            self.set_tile(x, y, "wall")
+                        # Create oval-shaped lake
+                        distance = math.sqrt(((x - lake_x) / lake_size) ** 2 + ((y - lake_y) / lake_size) ** 2)
+                        if distance < 1:
+                            if distance < 0.7:
+                                self.set_tile(x, y, "deep_water")
+                            else:
+                                self.set_tile(x, y, "shallow_water")
+                        elif distance < 1.2:
+                            self.set_tile(x, y, "sand")
