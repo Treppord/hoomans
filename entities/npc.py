@@ -59,6 +59,29 @@ class NPC(Rectangle):
             
     def apply_ai_decision(self, decision):
         """Apply an AI decision to this NPC"""
+        # Check if this is a special action from NPCActionHandler
+        if decision.action in ["follow_player", "stop_following", "give_item", "trade", "show_info"]:
+            from entities.npc_actions import NPCActionExecutor
+            from engine.core import SimpleGameEngine
+            
+            # Get game engine instance
+            game_engine = None
+            if hasattr(SimpleGameEngine, 'instance'):
+                game_engine = SimpleGameEngine.instance
+            
+            # Create an ActionResponse object
+            from entities.npc_actions import ActionResponse
+            action_response = ActionResponse(
+                action=decision.action,
+                speech=decision.speech,
+                target_id=getattr(decision, 'target_id', None),
+                mood_change=decision.mood_change
+            )
+            
+            # Execute the action
+            if NPCActionExecutor.execute_action(self, action_response, game_engine):
+                return
+        
         # Handle basic actions
         if decision.action == "move_left":
             self.target_grid_x = self.grid_x - 1
@@ -101,6 +124,8 @@ class NPC(Rectangle):
             elif decision.action == "move_down":
                 self.target_grid_y = self.grid_y + steps
                 self.is_moving = True
+
+
                 
     def respond_to_chat(self, player_message):
         """Generate a response to a player's chat message"""

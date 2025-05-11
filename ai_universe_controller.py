@@ -746,6 +746,36 @@ class AIUniverseController:
             
             logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
             
+            # First, check if this is a command using NPCActionHandler
+            from entities.npc_actions import NPCActionHandler
+            is_command, action_response = NPCActionHandler.process_player_message(
+                player_message, 
+                agent_id, 
+                player_id="player"  # You might want to pass the actual player ID here
+            )
+            
+            if is_command and action_response:
+                logger.info(f"DEBUG: Detected command in message: {action_response.action}")
+                
+                # Create a decision with the action and speech
+                decision = AgentDecision(
+                    agent_id=agent_id,
+                    action=action_response.action,
+                    speech=action_response.speech,
+                    mood_change=action_response.mood_change
+                )
+                
+                # Add target_id as an attribute after creation if needed
+                if hasattr(action_response, 'target_id') and action_response.target_id:
+                    decision.target_id = action_response.target_id
+                
+                logger.info(f"DEBUG: Queuing command response decision for agent {agent_id}")
+                
+                # Put the decision in the queue for the game engine
+                self.decision_queue.put(decision)
+                return
+
+            
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
             
@@ -856,6 +886,7 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
             logger.error(traceback.format_exc())
+
 
 
 
