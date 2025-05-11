@@ -180,7 +180,7 @@ class AIInterface:
         "search": {"description": "Look around for resources"}
     }
     
-    def __init__(self, use_local_model=True, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
+    def __init__(self, use_local_model=True, model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"):
         self.use_local_model = use_local_model
         self.api_url = "http://localhost:11434/api/generate"  # Fallback to Ollama
         self.model_name = "tinyllama"  # Fallback model name
@@ -1028,16 +1028,16 @@ class WorldStateCollector:
 class LocalModelInterface:
     """Interface for local LLM inference using llama-cpp-python"""
     
-    def __init__(self, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
+    def __init__(self, model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"):
         try:
             from llama_cpp import Llama
             
             # Load the model
             self.llm = Llama(
                 model_path=model_path,
-                n_ctx=512,  # Smaller context window to save memory
-                n_batch=8,  # Smaller batch size
-                n_threads=4,  # Adjust based on your CPU
+                n_ctx=9256,  # Smaller context window to save memory
+                n_batch=64,  # Smaller batch size
+                n_threads=8,  # Adjust based on your CPU
                 verbose=False
             )
             
