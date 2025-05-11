@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     
     # Initialize AI Universe Controller
-    model_path = os.path.join(project_root, "models", "tinyllama-1.1b-chat-v1.0.Q2_K.gguf")
+    model_path = os.path.join(project_root, "models", "mistral-7b-instruct-v0.2.Q4_K_M.gguf")
     ai_universe = AIUniverseController(use_llm=True, use_local_model=True, model_path=model_path)
     ai_universe.start()
     engine.ai_universe = ai_universe

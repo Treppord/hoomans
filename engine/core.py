@@ -8,6 +8,7 @@ from engine.ui import UIManager, StatsPanel, ChatInputBox
 from engine.camera import Camera
 from entities.npc import NPC
 from ai_universe_controller import WorldStateCollector
+import random
 
 class SimpleGameEngine:
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
@@ -276,16 +277,6 @@ class SimpleGameEngine:
                     nearby_entities = WorldStateCollector.collect_nearby_entities(
                         self.objects, obj.grid_x, obj.grid_y, radius=5)
                     
-                    # Debug player visibility
-                    if self.player:
-                        # Check if player is within 8 tiles (vicinity range)
-                        distance = abs(obj.grid_x - self.player.grid_x) + abs(obj.grid_y - self.player.grid_y)
-                        can_see_player = distance <= 8
-                        
-                        # Update debug state
-                        if hasattr(obj, 'debug_player_visibility'):
-                            obj.debug_player_visibility(id(self.player), can_see_player)
-                    
                     # Update agent state in AI universe
                     self.ai_universe.update_agent_state(
                         agent_id=str(id(obj)),  # Use object ID as agent ID
@@ -298,6 +289,32 @@ class SimpleGameEngine:
                         nearby_entities=nearby_entities,
                         cna_file=obj.cna_file if hasattr(obj, 'cna_file') else None
                     )
+            
+            # Check for NPC-to-NPC interactions
+            for obj1 in self.objects:
+                if isinstance(obj1, NPC) and hasattr(obj1, 'grid_x') and hasattr(obj1, 'grid_y'):
+                    # Only check for interaction occasionally (10% chance per frame)
+                    if random.random() < 0.1:
+                        for obj2 in self.objects:
+                            if (obj1 != obj2 and isinstance(obj2, NPC) and 
+                                hasattr(obj2, 'grid_x') and hasattr(obj2, 'grid_y')):
+                                # Calculate distance between NPCs
+                                distance = abs(obj1.grid_x - obj2.grid_x) + abs(obj1.grid_y - obj2.grid_y)
+                                
+                                # If NPCs are close to each other, initiate conversation
+                                if distance <= 8:
+                                    # Only 20% chance to actually start conversation when in range
+                                    if random.random() < 0.2 and hasattr(self, 'ai_universe'):
+                                        # Create a special state update for NPC-to-NPC chat
+                                        self.ai_universe.update_agent_state(
+                                            agent_id=str(id(obj1)),
+                                            grid_x=obj1.grid_x,
+                                            grid_y=obj1.grid_y,
+                                            npc_interaction=True,
+                                            other_npc_id=str(id(obj2))
+                                        )
+                                        # Only one NPC needs to initiate
+                                        break
             
             # Process AI decisions
             decisions = self.ai_universe.get_pending_decisions()
@@ -323,7 +340,6 @@ class SimpleGameEngine:
                 
                 if not found_object:
                     print(f"DEBUG: Could not find object for agent {decision.agent_id}")
-
         
         # Update AI for all NPCs (keep the existing AI system as fallback)
         self.ai_manager.update(self.world_map, self.objects)
@@ -346,6 +362,7 @@ class SimpleGameEngine:
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
                     print(f"Player thirst decreased to {self.player.thirst}")
+
 
 
 
