@@ -105,13 +105,22 @@ class NPCActionHandler:
     def detect_command(message: str) -> Optional[str]:
         """Detect if a player message contains a command"""
         message = message.lower()
-        
+    
+        # First check for stop_following commands as they are more specific
+        for pattern in NPCActionHandler.COMMAND_PATTERNS["stop_following"]:
+            if pattern in message:
+                return "stop_following"
+    
+    # Then check for other commands
         for command, patterns in NPCActionHandler.COMMAND_PATTERNS.items():
+            if command == "stop_following":
+                continue  # Already checked above
             for pattern in patterns:
                 if pattern in message:
                     return command
-        
+    
         return None
+
     
     @staticmethod
     def generate_response(command: str, npc_id: str, player_id: str = None) -> ActionResponse:

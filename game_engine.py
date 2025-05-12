@@ -1,7 +1,7 @@
 from engine.core import SimpleGameEngine
 from entities.rectangle import Rectangle
 from entities.npc import NPC
-from engine.ai import RandomWanderAI, FollowPlayerAI, WaterSeekingAI
+from engine.ai import RandomWanderAI, FollowPlayerAI
 from world.map import WorldMap
 import os
 import pygame
