@@ -8,6 +8,7 @@ from engine.ui import UIManager, StatsPanel, ChatInputBox
 from engine.camera import Camera
 from entities.npc import NPC
 from ai_universe_controller import WorldStateCollector
+import random
 
 class SimpleGameEngine:
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
@@ -114,8 +115,54 @@ class SimpleGameEngine:
         if self.player:
             print(f"Chat message: {message}")  # Debug output
             self.ui.add_text_bubble(message, self.player, duration=5.0)
+            
+            # Find NPCs in vicinity and have them respond
+            self.process_npc_responses_to_chat(message)
+            
             # When chat is closed, reset chat mode in input handler
             self.input_handler.set_chat_mode(False)
+    
+    def process_npc_responses_to_chat(self, message):
+        """Process NPC responses to player chat messages"""
+        if not self.player:
+            return
+            
+        # Define vicinity range (in grid cells)
+        vicinity_range = 8
+        
+        # Find NPCs within range
+        nearby_npcs = []
+        for obj in self.objects:
+            if isinstance(obj, NPC) and hasattr(obj, 'grid_x') and hasattr(obj, 'grid_y'):
+                # Calculate Manhattan distance
+                distance = abs(obj.grid_x - self.player.grid_x) + abs(obj.grid_y - self.player.grid_y)
+                if distance <= vicinity_range:
+                    nearby_npcs.append(obj)
+        
+        # Debug output
+        print(f"DEBUG: Found {len(nearby_npcs)} NPCs in chat vicinity of player")
+        
+        # If no NPCs in range, return
+        if not nearby_npcs:
+            return
+            
+        # For each nearby NPC, generate a response via AI Universe
+        if hasattr(self, 'ai_universe'):
+            for npc in nearby_npcs:
+                # Debug output
+                print(f"DEBUG: Requesting chat response from NPC {id(npc)} at position ({npc.grid_x}, {npc.grid_y})")
+                
+                # Create a special state update to trigger a response
+                self.ai_universe.update_agent_state(
+                    agent_id=str(id(npc)),
+                    grid_x=npc.grid_x,
+                    grid_y=npc.grid_y,
+                    player_message=message,
+                    should_respond=True
+                )
+
+                
+
         
     def set_world_map(self, world_map):
         """Set the world map for the game"""
@@ -243,21 +290,56 @@ class SimpleGameEngine:
                         cna_file=obj.cna_file if hasattr(obj, 'cna_file') else None
                     )
             
+            # Check for NPC-to-NPC interactions
+            for obj1 in self.objects:
+                if isinstance(obj1, NPC) and hasattr(obj1, 'grid_x') and hasattr(obj1, 'grid_y'):
+                    # Only check for interaction occasionally (10% chance per frame)
+                    if random.random() < 0.1:
+                        for obj2 in self.objects:
+                            if (obj1 != obj2 and isinstance(obj2, NPC) and 
+                                hasattr(obj2, 'grid_x') and hasattr(obj2, 'grid_y')):
+                                # Calculate distance between NPCs
+                                distance = abs(obj1.grid_x - obj2.grid_x) + abs(obj1.grid_y - obj2.grid_y)
+                                
+                                # If NPCs are close to each other, initiate conversation
+                                if distance <= 8:
+                                    # Only 20% chance to actually start conversation when in range
+                                    if random.random() < 0.2 and hasattr(self, 'ai_universe'):
+                                        # Create a special state update for NPC-to-NPC chat
+                                        self.ai_universe.update_agent_state(
+                                            agent_id=str(id(obj1)),
+                                            grid_x=obj1.grid_x,
+                                            grid_y=obj1.grid_y,
+                                            npc_interaction=True,
+                                            other_npc_id=str(id(obj2))
+                                        )
+                                        # Only one NPC needs to initiate
+                                        break
+            
             # Process AI decisions
             decisions = self.ai_universe.get_pending_decisions()
             for decision in decisions:
+                print(f"DEBUG: Processing decision for agent {decision.agent_id}, action={decision.action}, speech='{decision.speech}'")
                 # Find the corresponding object
+                found_object = False
                 for obj in self.objects:
                     if str(id(obj)) == decision.agent_id:
+                        found_object = True
                         # Apply the decision to the NPC
                         if isinstance(obj, NPC):
                             obj.apply_ai_decision(decision)
                         
                         # Handle speech with text bubbles
                         if decision.speech and hasattr(self, 'ui'):
+                            print(f"DEBUG: Adding text bubble for speech: '{decision.speech}'")
                             self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
+                        elif not decision.speech:
+                            print(f"DEBUG: No speech to display for agent {decision.agent_id}")
                         
                         break
+                
+                if not found_object:
+                    print(f"DEBUG: Could not find object for agent {decision.agent_id}")
         
         # Update AI for all NPCs (keep the existing AI system as fallback)
         self.ai_manager.update(self.world_map, self.objects)
@@ -280,6 +362,8 @@ class SimpleGameEngine:
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
                     print(f"Player thirst decreased to {self.player.thirst}")
+
+
 
 
     

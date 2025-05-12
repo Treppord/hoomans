@@ -1,7 +1,7 @@
 from engine.core import SimpleGameEngine
 from entities.rectangle import Rectangle
 from entities.npc import NPC
-from engine.ai import RandomWanderAI, FollowPlayerAI, WaterSeekingAI
+from engine.ai import RandomWanderAI, FollowPlayerAI
 from world.map import WorldMap
 import os
 import pygame
@@ -13,10 +13,24 @@ if __name__ == "__main__":
     engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600)
     
     project_root = os.path.dirname(os.path.abspath(__file__))
+    sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
+    if not os.path.exists(sprite_path):
+        print(f"Warning: Sprite sheet not found at {sprite_path}")
+        print("Creating a placeholder sprite sheet...")
+        # Create a placeholder sprite sheet
+        placeholder = pygame.Surface((32, 16))
+        # First frame (left half)
+        placeholder.fill((255, 255, 255), rect=(0, 0, 16, 16))
+        # Second frame (right half)
+        placeholder.fill((255, 255, 255), rect=(16, 0, 16, 16))
+        # Save the placeholder
+        os.makedirs(os.path.dirname(sprite_path), exist_ok=True)
+        pygame.image.save(placeholder, sprite_path)
+        print(f"Created placeholder sprite sheet at {sprite_path}")
 
     
     # Initialize AI Universe Controller
-    model_path = os.path.join(project_root, "models", "tinyllama-1.1b-chat-v1.0.Q2_K.gguf")
+    model_path = os.path.join(project_root, "models", "mistral-7b-instruct-v0.2.Q4_K_M.gguf")
     ai_universe = AIUniverseController(use_llm=True, use_local_model=True, model_path=model_path)
     ai_universe.start()
     engine.ai_universe = ai_universe

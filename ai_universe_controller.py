@@ -180,7 +180,7 @@ class AIInterface:
         "search": {"description": "Look around for resources"}
     }
     
-    def __init__(self, use_local_model=True, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
+    def __init__(self, use_local_model=True, model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"):
         self.use_local_model = use_local_model
         self.api_url = "http://localhost:11434/api/generate"  # Fallback to Ollama
         self.model_name = "tinyllama"  # Fallback model name
@@ -474,6 +474,14 @@ Keep your responses concise and focused on the action and speech.
             logger.error(f"Error generating decision: {e}")
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
+        
+    def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
+        """Generate decisions for multiple agents (one by one)"""
+        decisions = []
+        for state in agent_states:
+            decision = self.generate_decision(state)
+            decisions.append(decision)
+        return decisions
 
 
 # ================ Fallback AI ================
@@ -669,6 +677,13 @@ class AIUniverseController:
                 if isinstance(update, dict) and "agent_id" in update:
                     agent_id = update["agent_id"]
                     
+                    # Check if this is a chat response request
+                    if "player_message" in update and "should_respond" in update and update["should_respond"]:
+                        # Generate a response immediately
+                        self._generate_chat_response(agent_id, update["player_message"])
+                        self.state_update_queue.task_done()
+                        continue
+                    
                     # Create or update agent state
                     if agent_id not in self.agents:
                         # New agent
@@ -719,6 +734,162 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error processing state updates: {e}")
             logger.error(traceback.format_exc())
+    
+    def _generate_chat_response(self, agent_id, player_message):
+        """Generate a response to a player chat message"""
+        try:
+            # Get the agent state
+            agent = self.agents.get(agent_id)
+            if not agent:
+                logger.error(f"DEBUG: Agent {agent_id} not found for chat response")
+                return
+            
+            logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
+            
+            # First, check if this is a command using NPCActionHandler
+            from entities.npc_actions import NPCActionHandler
+            is_command, action_response = NPCActionHandler.process_player_message(
+                player_message, 
+                agent_id, 
+                player_id="player"  # You might want to pass the actual player ID here
+            )
+            
+            if is_command and action_response:
+                logger.info(f"DEBUG: Detected command in message: {action_response.action}")
+                
+                # Create a decision with the action and speech
+                decision = AgentDecision(
+                    agent_id=agent_id,
+                    action=action_response.action,
+                    speech=action_response.speech,
+                    mood_change=action_response.mood_change
+                )
+                
+                # Add target_id as an attribute after creation if needed
+                if hasattr(action_response, 'target_id') and action_response.target_id:
+                    decision.target_id = action_response.target_id
+                
+                logger.info(f"DEBUG: Queuing command response decision for agent {agent_id}")
+                
+                # Put the decision in the queue for the game engine
+                self.decision_queue.put(decision)
+                return
+
+            
+            # Create a simpler, more direct prompt for the small model
+            prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
+            
+            if agent.cna_data:
+                prompt = f"You are {agent.cna_data.first_name}, a character in a game.\n\nPlayer: {player_message}\n\nRespond in a short, natural way."
+            
+            # Simplified system prompt
+            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply."
+            
+            # Generate response
+            response_text = None
+            if self.use_llm and hasattr(self, 'ai_interface'):
+                try:
+                    if hasattr(self.ai_interface, 'local_model'):
+                        logger.info(f"DEBUG: Using local model for chat response")
+                        
+                        # Try direct text generation instead of JSON format for small models
+                        # This bypasses the JSON parsing which might be challenging for TinyLlama
+                        try:
+                            # Direct text generation approach
+                            messages = [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": prompt}
+                            ]
+                            
+                            output = self.ai_interface.local_model.llm.create_chat_completion(
+                                messages=messages,
+                                max_tokens=128,  # Increase token limit
+                                temperature=0.8,  # Slightly higher temperature for more varied responses
+                                top_p=0.95,
+                                stop=["</s>", "Player:", "player:", "User:", "user:"]
+                            )
+                            
+                            # Extract the raw text response
+                            response_text = output["choices"][0]["message"]["content"].strip()
+                            logger.info(f"DEBUG: Raw model text response: '{response_text}'")
+                            
+                            # Clean up the response
+                            # Remove any JSON-like formatting that might have been generated
+                            response_text = response_text.replace('{"speech": "', '').replace('"}', '')
+                            response_text = response_text.replace('"', '')
+                            
+                            # If response is too long, truncate it
+                            if len(response_text) > 100:
+                                response_text = response_text[:97] + "..."
+                                
+                        except Exception as e:
+                            logger.error(f"Error with direct text generation: {e}")
+                            response_text = None
+                            
+                except Exception as e:
+                    logger.error(f"Error generating chat response: {e}")
+                    logger.error(traceback.format_exc())
+            
+            # If direct text generation failed or is empty, use fallback responses
+            if not response_text:
+                logger.info(f"DEBUG: Using fallback responses for chat")
+                # Simple fallback responses
+                fallback_responses = [
+                    f"Hello there!",
+                    f"Nice to meet you.",
+                    f"What an interesting thing to say.",
+                    f"I'm not sure I understand.",
+                    f"That's fascinating.",
+                    f"I was just thinking about that.",
+                    f"I see what you mean.",
+                    f"Is that so?",
+                    f"Tell me more about that."
+                ]
+                
+                # If we have CNA data, add some personalized responses
+                if agent.cna_data:
+                    name = agent.cna_data.first_name
+                    fallback_responses.extend([
+                        f"I'm {name}, nice to meet you!",
+                        f"That's interesting. By the way, I'm {name}.",
+                        f"I'm from {agent.cna_data.nation.name}, we don't talk like that there.",
+                        f"In {agent.cna_data.culture.name} culture, we have a saying about that."
+                    ])
+                
+                # If thirsty, add thirst-related responses
+                if agent.thirst <= 1:
+                    fallback_responses.extend([
+                        "Sorry, I'm too thirsty to chat right now.",
+                        "I need to find water soon...",
+                        "Do you know where I can find some water?"
+                    ])
+                
+                # Always use a fallback response for now to ensure we get a response
+                response_text = random.choice(fallback_responses)
+                logger.info(f"DEBUG: Selected fallback response: '{response_text}'")
+            
+            logger.info(f"DEBUG: Final NPC response speech: '{response_text}'")
+            
+            # Create a decision with just the speech
+            decision = AgentDecision(
+                agent_id=agent_id,
+                action="idle",  # Just stand still while talking
+                speech=response_text,
+                mood_change=0.1  # Slight mood boost from social interaction
+            )
+            
+            logger.info(f"DEBUG: Queuing chat response decision for agent {agent_id}")
+            
+            # Put the decision in the queue for the game engine
+            self.decision_queue.put(decision)
+            
+        except Exception as e:
+            logger.error(f"Error generating chat response: {e}")
+            logger.error(traceback.format_exc())
+
+
+
+
     
     def _process_agents(self):
         """Process agents that need decisions"""
@@ -888,16 +1059,17 @@ class WorldStateCollector:
 class LocalModelInterface:
     """Interface for local LLM inference using llama-cpp-python"""
     
-    def __init__(self, model_path="models/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"):
+    def __init__(self, model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"):
         try:
             from llama_cpp import Llama
             
             # Load the model
             self.llm = Llama(
                 model_path=model_path,
-                n_ctx=512,  # Smaller context window to save memory
-                n_batch=8,  # Smaller batch size
-                n_threads=4  # Adjust based on your CPU
+                n_ctx=9256,  # Smaller context window to save memory
+                n_batch=64,  # Smaller batch size
+                n_threads=8,  # Adjust based on your CPU
+                verbose=False
             )
             
             logger.info(f"Successfully loaded local model from {model_path}")
@@ -929,7 +1101,6 @@ class LocalModelInterface:
                 temperature=0.7,
                 top_p=0.9,
                 stop=["</s>", "user:", "User:", "system:", "System:"],
-                echo=False
             )
             
             # Extract the response text

@@ -1,137 +1,179 @@
 import pygame
-from entities.entity import Entity
+import os
+import math
 
-class Rectangle(Entity):
-    def __init__(self, grid_x, grid_y, color=(255, 0, 0), speed=1, controllable=False):
-        # Convert grid coordinates to pixel coordinates
-        x = grid_x * 16
-        y = grid_y * 16
-        super().__init__(x, y)
-        
-        # Store grid position
+class Rectangle:
+    """Base class for all rectangular entities in the game"""
+    
+    def __init__(self, grid_x, grid_y, color=(255, 255, 255), speed=1, controllable=False):
         self.grid_x = grid_x
         self.grid_y = grid_y
-        
-        # Make entity slightly smaller than the tile
-        self.width = 12
-        self.height = 12
-        
-        # Center the entity within the tile
-        self.x_offset = (16 - self.width) // 2
-        self.y_offset = (16 - self.height) // 2
-        
-        self.original_color = color  # Store original color
         self.color = color
-        self.speed = speed  # Speed in grid cells per update
-        self.controllable = controllable  # Flag to indicate if this entity is player-controlled
-
+        self.speed = speed
+        self.controllable = controllable
         
-        # Target grid position for smooth movement
+        # For smooth movement
         self.target_grid_x = grid_x
         self.target_grid_y = grid_y
-        
-        # Flag to track if we're currently moving
         self.is_moving = False
         
-        # Initialize thirst attributes
-        self.thirst = 5
-        self.last_thirst_update = pygame.time.get_ticks()
-        self.last_drink_time = 0
+        # For visual interpolation (smooth rendering)
+        self.visual_x = float(grid_x)
+        self.visual_y = float(grid_y)
+        self.move_lerp_factor = 0.2  # Adjust for smoother/faster visual transitions
+        
+        # For animation
+        self.sprite_sheet = None
+        self.animation_frames = []
+        self.current_frame = 0
+        self.animation_speed = 0.1  # Adjust as needed
+        self.animation_timer = 0
+        self.load_sprite_sheet()
+        
+        # For CNA data
+        self.cna_data = None
+        self.cna_file = None
+        
+        # Add properties for camera compatibility
+        self.width = 16
+        self.height = 16
+    
+    # Add properties for camera compatibility
+    @property
+    def x(self):
+        return self.visual_x * 16  # Use visual position for rendering
+    
+    @property
+    def y(self):
+        return self.visual_y * 16  # Use visual position for rendering
+    
+    def load_sprite_sheet(self):
+        """Load the sprite sheet and extract frames"""
+        try:
+            # Get the path to the sprite sheet
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
+            
+            # Load the sprite sheet
+            self.sprite_sheet = pygame.image.load(sprite_path).convert_alpha()
+            
+            # Extract the two frames (each 16x16)
+            frame1 = self.sprite_sheet.subsurface((0, 0, 16, 16))
+            frame2 = self.sprite_sheet.subsurface((16, 0, 16, 16))
+            
+            # Store the frames
+            self.animation_frames = [frame1, frame2]
+            
+            print(f"Loaded sprite sheet with {len(self.animation_frames)} frames")
+        except Exception as e:
+            print(f"Error loading sprite sheet: {e}")
+            # Create fallback frames (colored squares)
+            self.animation_frames = [
+                pygame.Surface((16, 16), pygame.SRCALPHA),
+                pygame.Surface((16, 16), pygame.SRCALPHA)
+            ]
+            for frame in self.animation_frames:
+                frame.fill(self.color)
+    
+    def update_animation(self, delta_time=1/60):
+        """Update the animation frame"""
+        self.animation_timer += delta_time
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
+    
+    def apply_color_tint(self, frame):
+        """Apply color tint to the sprite based on entity color"""
+        # Create a copy of the frame to modify
+        tinted_frame = frame.copy()
+        
+        # Get the white color to replace (255, 255, 255)
+        white_color = (255, 255, 255)
+        
+        # Replace white pixels with the entity's color
+        for y in range(tinted_frame.get_height()):
+            for x in range(tinted_frame.get_width()):
+                pixel_color = tinted_frame.get_at((x, y))
+                # If the pixel is white (or close to white), replace it with the entity color
+                if (pixel_color[0] > 240 and pixel_color[1] > 240 and pixel_color[2] > 240):
+                    # Keep the alpha value
+                    alpha = pixel_color[3]
+                    new_color = (self.color[0], self.color[1], self.color[2], alpha)
+                    tinted_frame.set_at((x, y), new_color)
+        
+        return tinted_frame
+    
+    def load_cna_file(self, cna_file_path):
+        """Load CNA data from a file and update entity attributes"""
+        self.cna_file = cna_file_path
+        try:
+            from cna_utils import CNACodec
+            self.cna_data = CNACodec.load_from_file(cna_file_path)
+            
+            # Update entity color based on CNA data
+            if self.cna_data:
+                from cna_utils import calculate_entity_color
+                self.color = calculate_entity_color(self.cna_data)
+                print(f"Updated entity color to {self.color} based on CNA data")
+        except Exception as e:
+            print(f"Error loading CNA file: {e}")
     
     def update(self):
-        """Update object state"""
-        prev_x, prev_y = self.x, self.y
-
-        # If we have a target position, move towards it
+        """Update entity state"""
+        # Handle movement towards target
         if self.is_moving:
-            # Update grid position
-            if self.grid_x < self.target_grid_x:
-                self.grid_x += 1
-            elif self.grid_x > self.target_grid_x:
-                self.grid_x -= 1
-                
-            if self.grid_y < self.target_grid_y:
-                self.grid_y += 1
-            elif self.grid_y > self.target_grid_y:
-                self.grid_y -= 1
-            
             # Check if we've reached the target
             if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                 self.is_moving = False
-        
-        # Update pixel position based on grid position
-        self.x = self.grid_x * 16
-        self.y = self.grid_y * 16
-        
-        # Check for drinking if we have thirst attribute
-        current_time = pygame.time.get_ticks()
-        
-        # Try to drink if we're near water and it's been at least 1 second since last drink
-        if current_time - self.last_drink_time > 1000:  # 1 second
-            # Get the world map from the game engine
-            from engine.core import SimpleGameEngine
-            world_map = None
-            if hasattr(SimpleGameEngine, 'instance'):
-                world_map = SimpleGameEngine.instance.world_map
-            
-            if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
-                if self.thirst < 5:  # Max thirst is 5
-                    self.thirst += 1
-                    print(f"Entity drank water, thirst increased to {self.thirst}")
+            else:
+                # Move towards target
+                if self.grid_x < self.target_grid_x:
+                    self.grid_x += self.speed
+                elif self.grid_x > self.target_grid_x:
+                    self.grid_x -= self.speed
                     
-                    # Add a text bubble for the player
-                    if hasattr(self, 'controllable') and self.controllable and hasattr(SimpleGameEngine, 'instance'):
-                        if hasattr(SimpleGameEngine.instance, 'ui'):
-                            SimpleGameEngine.instance.ui.add_text_bubble("*Slurp*", self, duration=1.0)
-                
-                self.last_drink_time = current_time
-    
-    def perform_action(self):
-        """Perform an action when the action button is pressed"""
-        # Store current color
-        current_color = self.color
+                if self.grid_y < self.target_grid_y:
+                    self.grid_y += self.speed
+                elif self.grid_y > self.target_grid_y:
+                    self.grid_y -= self.speed
         
-        # Change color temporarily as a visual indicator
-        self.color = (255, 255, 0)  # Yellow flash
+        # Update visual position with smooth interpolation
+        self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
+        self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
         
-        # You could add more action logic here
-        
-        # Reset color after a short delay (in a real game, you'd use a timer)
-        # For now, we'll use a simple approach
-        import pygame
-        pygame.time.delay(100)  # 100ms delay
-        
-        # Restore the original color (which might be CNA-based)
-        self.color = current_color
-    
-    def interact(self):
-        """Interact with objects or tiles near the entity"""
-        # This would be implemented based on game mechanics
-        pass
+        # Update animation
+        self.update_animation()
     
     def render(self, screen, camera):
-        """Render the object with camera transformations"""
-        # Apply camera transformation to get screen coordinates
-        rect_x, rect_y, rect_width, rect_height = camera.apply(
-            self.x + self.x_offset, 
-            self.y + self.y_offset, 
-            self.width, 
-            self.height
+        """Render the entity with camera transformations"""
+        # Calculate screen position using camera and visual position
+        screen_x, screen_y, width, height = camera.apply(
+            self.visual_x * 16, self.visual_y * 16, 16, 16
         )
         
-        # Draw the rectangle at the transformed position
-        pygame.draw.rect(screen, self.color, (rect_x, rect_y, rect_width, rect_height))
+        # Skip rendering if off-screen
+        if (screen_x + width < 0 or screen_x > screen.get_width() or
+            screen_y + height < 0 or screen_y > screen.get_height()):
+            return
+        
+        # Get the current animation frame
+        current_frame = self.animation_frames[self.current_frame]
+        
+        # Apply color tint
+        tinted_frame = self.apply_color_tint(current_frame)
+        
+        # Scale the frame if needed
+        if width != 16 or height != 16:
+            tinted_frame = pygame.transform.scale(tinted_frame, (int(width), int(height)))
+        
+        # Draw the sprite
+        screen.blit(tinted_frame, (screen_x, screen_y))
     
     def contains_point(self, screen_x, screen_y, camera):
-        """Check if this entity contains the given screen point (for click detection)"""
-        # Apply camera transformation to get screen coordinates
-        rect_x, rect_y, rect_width, rect_height = camera.apply(
-            self.x + self.x_offset, 
-            self.y + self.y_offset, 
-            self.width, 
-            self.height
+        """Check if a screen point is within this entity"""
+        entity_x, entity_y, width, height = camera.apply(
+            self.visual_x * 16, self.visual_y * 16, 16, 16
         )
         
-        # Check if point is inside rectangle
-        return (rect_x <= screen_x <= rect_x + rect_width and 
-                rect_y <= screen_y <= rect_y + rect_height)
+        return (entity_x <= screen_x <= entity_x + width and
+                entity_y <= screen_y <= entity_y + height)

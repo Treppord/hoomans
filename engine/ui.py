@@ -282,15 +282,29 @@ class CharacterInfoPanel(UIElement):
         self.small_font = pygame.font.SysFont(None, 20)
         self.padding = 15
         self.visible = False
+        self.animation_timer = 0
+        self.current_frame = 0
+        self.animation_speed = 0.5  # Slower animation for the info panel
         
     def set_entity(self, entity):
         """Set the entity to display information for"""
         self.entity = entity
         self.visible = (entity is not None and entity.cna_data is not None)
         
+    def update_animation(self, delta_time=1/60):
+        """Update the animation frame"""
+        self.animation_timer += delta_time
+        if self.animation_timer >= self.animation_speed:
+            self.animation_timer = 0
+            if hasattr(self.entity, 'animation_frames') and self.entity.animation_frames:
+                self.current_frame = (self.current_frame + 1) % len(self.entity.animation_frames)
+        
     def render(self, screen):
         if not self.visible or not self.entity or not self.entity.cna_data:
             return
+            
+        # Update animation
+        self.update_animation()
             
         # Create a surface with alpha for transparency
         panel_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -314,14 +328,51 @@ class CharacterInfoPanel(UIElement):
         panel_surface.blit(title_surface, (self.padding, self.padding))
         
         # Left side - Entity visualization
-        # This would be a placeholder for now - could be enhanced later
-        entity_rect = pygame.Rect(
-            self.padding, 
-            self.padding + 40, 
-            (self.width // 2) - (self.padding * 2), 
-            100
-        )
-        pygame.draw.rect(panel_surface, self.entity.color, entity_rect)
+        # Check if entity has animation frames
+        if hasattr(self.entity, 'animation_frames') and self.entity.animation_frames:
+            # Calculate position and size for the sprite display
+            sprite_rect = pygame.Rect(
+                self.padding, 
+                self.padding + 40, 
+                (self.width // 2) - (self.padding * 2), 
+                100
+            )
+            
+            # Get the current animation frame
+            if 0 <= self.current_frame < len(self.entity.animation_frames):
+                current_frame = self.entity.animation_frames[self.current_frame]
+                
+                # Apply color tint if the entity has this method
+                if hasattr(self.entity, 'apply_color_tint'):
+                    current_frame = self.entity.apply_color_tint(current_frame)
+                
+                # Scale the sprite to fit the display area while maintaining aspect ratio
+                frame_width, frame_height = current_frame.get_size()
+                scale_factor = min(sprite_rect.width / frame_width, sprite_rect.height / frame_height)
+                scaled_width = int(frame_width * scale_factor * 1.5)  # Make it 3x larger
+                scaled_height = int(frame_height * scale_factor * 1.5)
+                
+                # Center the sprite in the display area
+                sprite_x = sprite_rect.x + (sprite_rect.width - scaled_width) // 2
+                sprite_y = sprite_rect.y + (sprite_rect.height - scaled_height) // 2
+                
+                # Scale and draw the sprite
+                scaled_frame = pygame.transform.scale(current_frame, (scaled_width, scaled_height))
+                panel_surface.blit(scaled_frame, (sprite_x, sprite_y))
+                
+                
+            else:
+                # Fallback: draw a colored rectangle
+                pygame.draw.rect(panel_surface, self.entity.color, sprite_rect)
+        else:
+            # Fallback: draw a colored rectangle
+            entity_rect = pygame.Rect(
+                self.padding, 
+                self.padding + 40, 
+                (self.width // 2) - (self.padding * 2), 
+                100
+            )
+            pygame.draw.rect(panel_surface, self.entity.color, entity_rect)
         
         # Add entity stats below the visualization
         stats_y = self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
