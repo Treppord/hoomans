@@ -55,6 +55,9 @@ class AgentState:
     nearby_tiles: List[Dict] = field(default_factory=list)
     cna_data: Optional[CNAAttributes] = None
     memory: List[Dict] = field(default_factory=list)
+    player_advice: Optional[Dict] = None
+    player_advice_time: float = 0
+    advice_followed: bool = False
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for AI prompt"""
@@ -81,7 +84,7 @@ class AgentState:
                 "gender": self.cna_data.gender.name,
                 "culture": self.cna_data.culture.name,
                 "nation": self.cna_data.nation.name,
-                "physical_health": self.cna_data.physical_health,  # These will work with both old and new formats
+                "physical_health": self.cna_data.physical_health,
                 "mental_health": self.cna_data.mental_health,
                 "generational_health": self.cna_data.generational_health,
                 "intelligence": self.cna_data.intelligence_factor,
@@ -95,20 +98,30 @@ class AgentState:
                     if i < len(self.cna_data.personality_traits):
                         result["personality"][trait_name] = self.cna_data.personality_traits[i]
         
+        # Add player advice if available and recent
+        if self.player_advice and (time.time() - self.player_advice_time < 300):  # Advice valid for 5 minutes
+            result["player_advice"] = self.player_advice
+            result["advice_followed"] = self.advice_followed
+        
         return result
+
 
 
 @dataclass
 class AgentDecision:
-    """Represents an AI decision for an agent"""
+    """Represents a decision made by an agent"""
     agent_id: str
-    action: str  # move_left, move_right, move_up, move_down, drink, eat, idle, etc.
-    speech: str = ""  # What the agent might say
+    action: str
+    speech: str = ""
+    reason: str = ""
+    mood_change: float = 0.0
+    target_id: Optional[str] = None
     target_x: Optional[int] = None  # Target x position if moving
     target_y: Optional[int] = None  # Target y position if moving
-    mood_change: float = 0.0  # How this decision affects mood (-1 to 1)
-    memory_update: Optional[str] = None  # New memory to add
-    is_fast_movement: bool = False  # Whether this is a fast movement (multiple steps)
+    is_fast_movement: bool = False
+    following_advice: bool = False
+    advice_direction: Optional[str] = None
+    advice_distance: int = 0
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -116,19 +129,10 @@ class AgentDecision:
         try:
             action = response_json.get("action", "idle")
             speech = response_json.get("speech", "")
-            
-            # Extract target position if provided
-            target_x = None
-            target_y = None
-            if "target" in response_json and isinstance(response_json["target"], dict):
-                target_x = response_json["target"].get("x")
-                target_y = response_json["target"].get("y")
+            reason = response_json.get("reason", "")
             
             # Extract mood change
             mood_change = float(response_json.get("mood_change", 0.0))
-            
-            # Extract memory update
-            memory_update = response_json.get("memory_update")
             
             # Extract fast movement flag
             is_fast_movement = response_json.get("is_fast_movement", False)
@@ -137,10 +141,8 @@ class AgentDecision:
                 agent_id=agent_id,
                 action=action,
                 speech=speech,
-                target_x=target_x,
-                target_y=target_y,
+                reason=reason,
                 mood_change=mood_change,
-                memory_update=memory_update,
                 is_fast_movement=is_fast_movement
             )
         except Exception as e:
@@ -187,11 +189,14 @@ class AIInterface:
         self.model_name = "tinyllama"  # Fallback model name
         self.local_model_loaded = False
         
+        # Updated system prompt with template for player advice
         self.system_prompt = """
 You are the AI controller for a game called Hoomans. Your job is to determine the actions and speech of NPCs.
 Respond with a JSON object containing:
 - action: move_left, move_right, move_up, move_down, drink, eat, idle
 - speech: What the NPC says (can be empty). IMPORTANT: The speech should be natural dialogue, NOT commands or descriptions of actions.
+- reason: Brief explanation of your decision (helps with debugging)
+- mood_change: How this decision affects the NPC's mood (-1.0 to 1.0)
 
 IMPORTANT RULES:
 1. NPCs should speak in first person (e.g., "I'm thirsty" is correct)
@@ -199,26 +204,52 @@ IMPORTANT RULES:
 3. The "drink" action can ONLY be performed when the NPC is adjacent to water
 4. ONLY focus on thirst and drinking when thirst is at 0 (critical)
 5. When thirst is normal (1-5), focus on personality and exploration instead
+6. If the player gives advice, consider following it, especially if it helps with critical needs
 
 Example response:
-{"action": "move_left", "speech": "I'm so thirsty!"}
-{"action": "drink", "speech": "Ah, refreshing water!"}
-{"action": "idle", "speech": "What a beautiful day!"}
+{"action": "move_left", "speech": "I'm so thirsty!", "reason": "Looking for water", "mood_change": -0.1}
+{"action": "drink", "speech": "Ah, refreshing water!", "reason": "Found water when critically thirsty", "mood_change": 0.5}
+{"action": "idle", "speech": "What a beautiful day!", "reason": "No urgent needs, enjoying surroundings", "mood_change": 0.1}
 
 Keep your responses concise and focused on the action and speech.
 """
+
         
         # Initialize local model if enabled
         if use_local_model:
             self.local_model = LocalModelInterface(model_path=model_path)
 
+    def _generate_player_advice_section(self, state):
+        """Generate the player advice section for the prompt"""
+        if "player_advice" not in state:
+            return ""
+            
+        advice = state["player_advice"]
+        advice_type = advice["type"]
+        
+        if advice_type == "direction":
+            return f"""
+PLAYER ADVICE:
+- The player told you there is {advice['what']} about {advice['distance']} tiles to the {advice['direction']} of you.
+- You can choose to follow this advice if you believe it will help you.
+- If you want to follow this advice, you should move in the {advice['direction']} direction.
+- Include in your reason if you're following the player's advice.
+"""
+        elif advice_type == "location":
+            return f"""
+PLAYER ADVICE:
+- The player told you there is {advice['what']} near the {advice['landmark']}.
+- You can choose to follow this advice if you believe it will help you.
+- Include in your reason if you're following the player's advice.
+"""
+        return ""
 
     def _create_adaptive_system_prompt(self, has_critical_thirst, has_critical_hunger):
         """Create a concise system prompt based on agent's needs"""
         
         # Start with available actions
         action_list = ", ".join(self.ACTIONS.keys())
-        base_prompt = f"You control an NPC in a game. Respond with JSON: {{\"action\": \"[action]\", \"speech\": \"[optional speech]\"}}. Available actions: {action_list}."
+        base_prompt = f"You control an NPC in a game. Respond with JSON: {{\"action\": \"[action]\", \"speech\": \"[optional speech]\", \"reason\": \"[brief explanation]\"}}. Available actions: {action_list}."
         
         # Add specific guidance based on critical needs
         if has_critical_thirst and has_critical_hunger:
@@ -229,6 +260,9 @@ Keep your responses concise and focused on the action and speech.
             base_prompt += " NPC is CRITICALLY HUNGRY. Prioritize finding food. Use fast movement actions. Speech should express URGENT need for food."
         else:
             base_prompt += " NPC is fine. Focus on exploration and personality. Use regular movement actions. Never mention thirst/hunger/water/food."
+        
+        # Add guidance for player advice
+        base_prompt += " If player gives advice, consider following it, especially if it helps with critical needs. Include in your reason if you're following advice."
         
         return base_prompt
 
@@ -245,12 +279,51 @@ Keep your responses concise and focused on the action and speech.
         
         action = response_json.get("action", "idle")
         speech = response_json.get("speech", "")
+        reason = response_json.get("reason", "")
         
         # Handle fast movement actions (convert to regular movement but remember it's fast)
         is_fast_movement = False
         if action.endswith("_fast"):
             is_fast_movement = True
             action = action.replace("_fast", "")
+        
+        # Check if the agent is following player advice
+        following_advice = False
+        advice_direction = None
+        advice_distance = 0
+        
+        # Look for advice-related keywords in the reason
+        advice_keywords = ["advice", "player said", "player told", "player mentioned", "player suggested"]
+        if any(keyword in reason.lower() for keyword in advice_keywords):
+            following_advice = True
+            
+            # Try to extract direction from reason or action
+            direction_keywords = {
+                "left": "left",
+                "right": "right", 
+                "up": "up",
+                "north": "up",
+                "down": "down",
+                "south": "down",
+                "east": "right",
+                "west": "left"
+            }
+            
+            for keyword, direction in direction_keywords.items():
+                if keyword in reason.lower() or (action.startswith("move_") and action.endswith(keyword)):
+                    advice_direction = direction
+                    break
+            
+            # Try to extract distance from reason
+            distance_pattern = r"(\d+)\s+(?:blocks?|tiles?|steps?)"
+            distance_match = re.search(distance_pattern, reason.lower())
+            if distance_match:
+                try:
+                    advice_distance = int(distance_match.group(1))
+                except ValueError:
+                    advice_distance = 1
+            else:
+                advice_distance = 1
         
         # Validate drink action
         if action == "drink":
@@ -315,7 +388,7 @@ Keep your responses concise and focused on the action and speech.
                     ])
         
         # Encourage more movement when no critical needs
-        if action == "idle" and not has_critical_thirst and not has_critical_hunger:
+        if action == "idle" and not has_critical_thirst and not has_critical_hunger and not following_advice:
             # 70% chance to convert idle to movement when no critical needs
             if random.random() < 0.7:
                 # Choose a random direction, but avoid walls
@@ -372,6 +445,18 @@ Keep your responses concise and focused on the action and speech.
                 "Need to find food before I collapse!"
             ]
             speech = random.choice(food_speeches)
+        elif following_advice:
+            # If following advice, generate appropriate speech
+            if not speech or random.random() < 0.7:  # 70% chance to override existing speech
+                advice_speeches = [
+                    "Let me check what the player mentioned...",
+                    "I'll follow that advice and see where it leads.",
+                    "That's helpful information, I'll check it out.",
+                    "Thanks for the tip! I'll head that way.",
+                    "I appreciate the advice. Let me go see.",
+                    "That sounds promising, I'll investigate."
+                ]
+                speech = random.choice(advice_speeches)
         else:
             # Filter out problematic speech for non-critical states
             if speech:
@@ -416,7 +501,11 @@ Keep your responses concise and focused on the action and speech.
         return {
             "action": action,
             "speech": speech,
-            "is_fast_movement": is_fast_movement
+            "reason": reason,
+            "is_fast_movement": is_fast_movement,
+            "following_advice": following_advice,
+            "advice_direction": advice_direction,
+            "advice_distance": advice_distance
         }
 
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
@@ -736,6 +825,60 @@ class AIUniverseController:
             logger.error(f"Error processing state updates: {e}")
             logger.error(traceback.format_exc())
     
+    def _parse_agent_decision(self, agent_id: str, response_text: str) -> AgentDecision:
+        """Parse the agent's decision from the response text"""
+        # Default values
+        action = "idle"
+        speech = ""
+        reason = ""
+        
+        # Try to extract action, speech, and reason from the response
+        action_match = re.search(r'ACTION:\s*(\w+)', response_text)
+        speech_match = re.search(r'SPEECH:\s*(.*?)(?:\n|$)', response_text)
+        reason_match = re.search(r'REASON:\s*(.*?)(?:\n|$)', response_text)
+        
+        if action_match:
+            action = action_match.group(1).strip().lower()
+        if speech_match:
+            speech = speech_match.group(1).strip()
+        if reason_match:
+            reason = reason_match.group(1).strip()
+        
+        # Check if the agent is following player advice
+        following_advice = False
+        advice_direction = None
+        advice_distance = 0
+        
+        # Get the agent state
+        agent_state = self.agents.get(agent_id)
+        if agent_state and hasattr(agent_state, 'player_advice') and agent_state.player_advice:
+            advice = agent_state.player_advice
+            
+            # Check if the reason mentions following advice
+            advice_keywords = ["advice", "player said", "player told", "player mentioned"]
+            if any(keyword in reason.lower() for keyword in advice_keywords):
+                following_advice = True
+                
+                # For directional advice
+                if advice["type"] == "direction":
+                    advice_direction = advice["direction"]
+                    advice_distance = advice["distance"]
+                    
+                    # Mark that the advice is being followed
+                    agent_state.advice_followed = True
+        
+        return AgentDecision(
+            agent_id=agent_id,
+            action=action,
+            speech=speech,
+            reason=reason,
+            mood_change=0.0,  # Default mood change
+            following_advice=following_advice,
+            advice_direction=advice_direction,
+            advice_distance=advice_distance
+        )
+
+    
     def _generate_chat_response(self, agent_id, player_message):
         """Generate a response to a player chat message"""
         try:
@@ -775,7 +918,62 @@ class AIUniverseController:
                 # Put the decision in the queue for the game engine
                 self.decision_queue.put(decision)
                 return
-
+            
+            # Check if this is advice about directions or resources
+            advice = self._parse_player_advice(player_message)
+            if advice:
+                logger.info(f"DEBUG: Detected advice in message: {advice}")
+                
+                # Store the advice in the agent state
+                agent.player_advice = advice
+                agent.player_advice_time = time.time()
+                agent.advice_followed = False
+                
+                # For directional advice, create a movement decision immediately
+                if advice["type"] == "direction" and "direction" in advice:
+                    direction = advice["direction"]
+                    distance = advice.get("distance", 1)
+                    
+                    # Map direction to action
+                    action_map = {
+                        "left": "move_left",
+                        "right": "move_right", 
+                        "up": "move_up",
+                        "down": "move_down",
+                        "north": "move_up",
+                        "south": "move_down",
+                        "east": "move_right",
+                        "west": "move_left"
+                    }
+                    
+                    if direction in action_map:
+                        action = action_map[direction]
+                        
+                        # Create a decision to follow the advice
+                        decision = AgentDecision(
+                            agent_id=agent_id,
+                            action=action,
+                            speech=f"I'll check for {advice['what']} {distance} tiles to the {direction}.",
+                            reason=f"Following player's advice about {advice['what']} to the {direction}",
+                            following_advice=True,
+                            advice_direction=direction,
+                            advice_distance=distance
+                        )
+                        
+                        logger.info(f"DEBUG: Created movement decision based on advice: {action}")
+                        
+                        # Queue both a chat response and the movement decision
+                        chat_decision = AgentDecision(
+                            agent_id=agent_id,
+                            action="idle",
+                            speech=f"Thanks for the tip! I'll go check for {advice['what']} to the {direction}.",
+                            mood_change=0.2
+                        )
+                        
+                        # Put the decisions in the queue
+                        self.decision_queue.put(chat_decision)
+                        self.decision_queue.put(decision)
+                        return
             
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
@@ -891,6 +1089,7 @@ class AIUniverseController:
 
 
 
+
     
     def _process_agents(self):
         """Process agents that need decisions"""
@@ -933,11 +1132,11 @@ class AIUniverseController:
                     # Update mood
                     agent.mood = max(0.0, min(1.0, agent.mood + decision.mood_change))
                     
-                    # Update memory
-                    if decision.memory_update:
+                    # Update memory if there's a reason
+                    if hasattr(decision, 'reason') and decision.reason:
                         agent.memory.append({
                             "timestamp": time.time(),
-                            "content": decision.memory_update
+                            "content": decision.reason
                         })
                         # Keep memory limited to last 20 items
                         if len(agent.memory) > 20:
@@ -949,11 +1148,71 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error processing agents: {e}")
             logger.error(traceback.format_exc())
+
     
-    def update_agent_state(self, agent_id: str, **kwargs):
+    def _parse_player_advice(self, message: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse player messages for actionable advice
+        Returns a dictionary with parsed advice or None if no advice detected
+        """
+        advice = None
+        
+        # Pattern for directional advice (e.g., "water 5 blocks to the left")
+        direction_pattern = r"(?:there is|there's|is|are)\s+(\w+)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)"
+        direction_match = re.search(direction_pattern, message.lower())
+        
+        if direction_match:
+            what, distance, direction = direction_match.groups()
+            try:
+                distance = int(distance)
+                advice = {
+                    "type": "direction",
+                    "what": what,
+                    "distance": distance,
+                    "direction": direction,
+                    "confidence": 0.9  # High confidence for explicit directions
+                }
+                logger.info(f"DEBUG: Parsed player advice: {advice}")
+                return advice
+            except ValueError:
+                pass
+        
+        # Pattern for location advice (e.g., "there's water near the mountain")
+        location_pattern = r"(?:there is|there's|is|are)\s+(\w+)\s+(?:near|by|at|close to)\s+(?:the\s+)?(\w+)"
+        location_match = re.search(location_pattern, message.lower())
+        
+        if location_match:
+            what, landmark = location_match.groups()
+            advice = {
+                "type": "location",
+                "what": what,
+                "landmark": landmark,
+                "confidence": 0.7  # Medium confidence for less precise directions
+            }
+            logger.info(f"DEBUG: Parsed player advice: {advice}")
+            return advice
+            
+        return None
+
+    
+    def update_agent_state(self, agent_id, **kwargs):
         """Update an agent's state from the game engine"""
         update = {"agent_id": agent_id, **kwargs}
         self.state_update_queue.put(update)
+        
+        # Check if there's a player message to process
+        if "player_message" in kwargs:
+            # Parse the message for advice
+            advice = self._parse_player_advice(kwargs["player_message"])
+            if advice and agent_id in self.agents:
+                # Get the agent state from the agents dictionary
+                agent_state = self.agents[agent_id]
+                # Store the advice in the agent state
+                agent_state.player_advice = advice
+                agent_state.player_advice_time = time.time()  # Use current time instead of self.current_time
+                agent_state.advice_followed = False  # Reset this flag
+                logger.info(f"DEBUG: Stored player advice for agent {agent_id}: {advice}")
+
     
     def get_pending_decisions(self) -> List[AgentDecision]:
         """Get all pending decisions for the game engine"""
