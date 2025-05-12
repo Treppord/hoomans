@@ -7,11 +7,26 @@ import os
 import pygame
 # Add this import
 from ai_universe_controller import AIUniverseController, WorldStateCollector
+import argparse
 
 if __name__ == "__main__":
     # Create the game engine
-    engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600)
-    
+    map_seed = 39
+    arg_parser = argparse.ArgumentParser(description='Grid-Based Game')
+    arg_parser.add_argument('--seed', type=int, help='Seed for map generation')
+    args = arg_parser.parse_args()
+
+    def debug_cna_data(self, entity, name):
+        """Debug function to print CNA data details"""
+        if hasattr(entity, 'cna_data') and entity.cna_data:
+            print(f"DEBUG: {name} CNA data:")
+            print(f"  - Culture: {entity.cna_data.culture} (value: {entity.cna_data.culture.value})")
+            print(f"  - Current color: {entity.color}")
+        else:
+            print(f"DEBUG: {name} has no CNA data")
+
+    engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600, map_seed=args.seed)
+
     project_root = os.path.dirname(os.path.abspath(__file__))
     sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
     if not os.path.exists(sprite_path):
@@ -37,7 +52,7 @@ if __name__ == "__main__":
     
     # Create and set up the world map (50x38 tiles for an 800x600 screen)
     world_map = WorldMap(256, 256)
-    world_map.generate_realistic_map()
+    world_map.generate_realistic_map(seed=engine.map_seed)
     engine.set_world_map(world_map)
     
     # Get absolute path to the project root directory

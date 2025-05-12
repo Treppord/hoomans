@@ -17,6 +17,16 @@ class Gender(enum.Enum):
 class Culture(enum.Enum):
     RED = 0
     BLUE = 1
+    GREEN = 2
+    YELLOW = 3
+    PURPLE = 4
+    ORANGE = 5
+    PINK = 6
+    BROWN = 7
+    GRAY = 8
+    BLACK = 9
+    WHITE = 10
+
     
 class Nation(enum.Enum):
     NL = 0
@@ -191,31 +201,32 @@ class CNACodec:
         with open(filepath, 'rb') as f:
             return CNACodec.decode(f.read())
         
-    def calculate_entity_color(cna_attributes):
-        """Calculate entity color based on CNA attributes"""
-        # Base colors for different cultures
-        culture_colors = {
-            Culture.RED: (255, 0, 0),    # Red
-            Culture.BLUE: (0, 0, 255),   # Blue
-            Culture.GREEN: (0, 255, 0),  # Green
-            Culture.YELLOW: (255, 255, 0), # Yellow
-            Culture.PURPLE: (128, 0, 128), # Purple
-            Culture.ORANGE: (255, 165, 0), # Orange
-            Culture.PINK: (255, 192, 203), # Pink
-            Culture.BROWN: (165, 42, 42),  # Brown
-            Culture.GRAY: (128, 128, 128), # Gray
-            Culture.BLACK: (0, 0, 0),      # Black
-            Culture.WHITE: (255, 255, 255)  # White
-        }
-        
-        # Get base color for culture
-        base_color = culture_colors.get(cna_attributes.culture, (0, 255, 0))  # Default to green if culture not found
-        
-        # Calculate brightness factor based on age (1.0 for youngest, 0.4 for oldest)
-        # Age range is 0-60 minutes
-        brightness = 1.0 - (cna_attributes.age_minutes / 60.0 * 0.6)
-        
-        # Apply brightness to color
-        color = tuple(int(c * brightness) for c in base_color)
-        
-        return color
+# Move this function outside of the class and fix it
+def calculate_entity_color(cna_attributes):
+    """Calculate entity color based on CNA attributes"""
+    # Base colors for different cultures
+    culture_colors = {
+        Culture.RED: (255, 0, 0),    # Red
+        Culture.BLUE: (0, 0, 255),   # Blue
+        Culture.GREEN: (0, 255, 0),  # Green
+        Culture.YELLOW: (255, 255, 0), # Yellow
+        Culture.PURPLE: (128, 0, 128), # Purple
+        Culture.ORANGE: (255, 165, 0), # Orange
+        Culture.PINK: (255, 192, 203), # Pink
+        Culture.BROWN: (165, 42, 42),  # Brown
+        Culture.GRAY: (128, 128, 128), # Gray
+        Culture.BLACK: (0, 0, 0),      # Black
+        Culture.WHITE: (255, 255, 255)  # White
+    }
+    
+    # Get base color for culture
+    base_color = culture_colors.get(cna_attributes.culture, (0, 255, 0))  # Default to green if culture not found
+    
+    # Calculate brightness factor based on age (1.0 for youngest, 0.4 for oldest)
+    # Age range is 0-60 minutes
+    brightness = 1.0 - (cna_attributes.age_minutes / 60.0 * 0.6)
+    
+    # Apply brightness to color
+    color = tuple(int(c * brightness) for c in base_color)
+    
+    return color

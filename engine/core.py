@@ -11,7 +11,7 @@ from ai_universe_controller import WorldStateCollector
 import random
 
 class SimpleGameEngine:
-    def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
+    def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60, map_seed=None):
         # Initialize pygame
         pygame.init()
         
@@ -27,6 +27,8 @@ class SimpleGameEngine:
         # Set up the clock for controlling frame rate
         self.clock = pygame.time.Clock()
         self.fps = fps
+        self.map_seed = map_seed
+
         
         # Initialize camera
         self.camera = Camera(width, height)
