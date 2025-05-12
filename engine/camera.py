@@ -119,3 +119,11 @@ class Camera:
     def should_draw_grid(self):
         """Determine if grid lines should be drawn based on zoom level"""
         return self.zoom >= 0.5
+
+
+    def world_to_screen(self, world_x, world_y):
+        """Convert world coordinates to screen coordinates"""
+        # Apply zoom and offset
+        screen_x = (world_x - self.offset_x) * self.zoom
+        screen_y = (world_y - self.offset_y) * self.zoom
+        return (screen_x, screen_y)

@@ -4,7 +4,7 @@ from entities.npc import NPC
 from engine.ai import RandomWanderAI, FollowPlayerAI
 from world.map import WorldMap
 from world.world_cache import WorldCache
-
+import random
 import os
 import pygame
 # Add this import
@@ -64,10 +64,6 @@ if __name__ == "__main__":
     engine.world_cache = world_cache
     ai_universe.world_cache = world_cache  # Direct reference to the same object
 
-
-
-
-    
     # Get absolute path to the project root directory
     project_root = os.path.dirname(os.path.abspath(__file__))
     
@@ -112,6 +108,27 @@ if __name__ == "__main__":
         follower.load_cna_file(cna_file_path)
     else:
         print(f"CNA file not found: {cna_file_path}")
+    
+    # Initialize exploration attributes for NPCs
+    for obj in engine.objects:
+        if isinstance(obj, NPC):
+            # Set exploration attributes
+            obj.exploration_mode = "idle"
+            obj.exploration_target_x = None
+            obj.exploration_target_y = None
+            obj.last_exploration_time = pygame.time.get_ticks()
+            obj.explored_tiles = set()  # Set of (x, y) coordinates that have been explored
+            obj.interesting_locations = {}  # Dict of location_type -> list of (x, y) coordinates
+            obj.home_location = (obj.grid_x, obj.grid_y)  # Starting position as home base
+            obj.curiosity = random.uniform(0.5, 1.0)  # How curious/exploratory this NPC is
+            obj.last_memory_record_time = 0  # Time of last memory recording
+            obj.memory_cooldown = 10000  # Milliseconds between memory recordings (10 seconds)
+            
+            # Advice following attributes
+            obj.advice_remaining_distance = 0
+            obj.advice_direction = None
+            
+            print(f"DEBUG: Initialized exploration attributes for NPC at ({obj.grid_x}, {obj.grid_y})")
     
     # Start the game loop
     engine.run()

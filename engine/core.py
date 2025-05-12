@@ -11,6 +11,14 @@ from ai_universe_controller import WorldStateCollector
 import random
 
 class SimpleGameEngine:
+    def setup_world_cache(self):
+        """Set up the world cache for persistent memory"""
+        from world.world_cache import WorldCache
+        self.world_cache = WorldCache()  # Use default cache_dir
+        self.world_cache.set_world_seed(self.map_seed)  # Set the seed separately
+        print(f"DEBUG: World cache initialized with seed {self.map_seed}")
+
+    # Modify the __init__ method to include world_cache initialization
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60, map_seed=None):
         # Initialize pygame
         pygame.init()
@@ -53,17 +61,10 @@ class SimpleGameEngine:
         
         # Initialize UI manager
         self.ui = UIManager(width, height)
-
-        # Initialize world cache
-        from world.world_cache import WorldCache
-        self.world_cache = WorldCache()
-        if self.map_seed:
-            try:
-                print(f"DEBUG: Initializing world cache with seed {self.map_seed}")
-                self.world_cache.set_world_seed(self.map_seed)
-                print(f"DEBUG: World cache initialized successfully")
-            except Exception as e:
-                print(f"ERROR initializing world cache: {e}")
+        
+        # Initialize world cache if seed is provided
+        if self.map_seed is not None:
+            self.setup_world_cache()
         
         # Player reference (will be set when player is added)
         self.player = None
@@ -79,6 +80,7 @@ class SimpleGameEngine:
         
         # Game state
         self.running = False
+
         
     def setup_game_data(self):
         """Set up initial game values"""

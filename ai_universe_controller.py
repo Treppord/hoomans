@@ -201,10 +201,16 @@ class AIInterface:
         "drink": {"description": "Drink water (only when adjacent to water)"},
         "eat": {"description": "Eat food (only when adjacent to food)"},
         
+        # Exploration actions
+        "explore": {"description": "Start exploring in a random direction"},
+        "return_home": {"description": "Return to home base location"},
+        "record_location": {"description": "Record current location in memory"},
+        
         # Other actions
         "idle": {"description": "Stand still and observe surroundings"},
         "search": {"description": "Look around for resources"}
     }
+
     
     def __init__(self, use_local_model=True, model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"):
         self.use_local_model = use_local_model
@@ -352,9 +358,25 @@ PLAYER ADVICE:
         if action == "drink":
             # Check if agent has critical thirst
             if not has_critical_thirst:
-                action = "idle"
+                # If thirst is not critical but still low (1-3), allow drinking
+                if has_critical_thirst == False and 1 <= 3:  # Fixed: removed reference to agent_state
+                    # Check if agent is adjacent to water
+                    is_adjacent_to_water = False
+                    for tile in nearby_tiles:
+                        if (tile.get("type") == "water" and 
+                            abs(tile["x"] - grid_x) <= 1 and 
+                            abs(tile["y"] - grid_y) <= 1):
+                            is_adjacent_to_water = True
+                            break
+                    
+                    if not is_adjacent_to_water:
+                        # If not adjacent to water, look for water
+                        action = "search"
+                else:
+                    # If thirst is good (4-10), don't drink, explore instead
+                    action = "explore"
             else:
-                # Check if agent is adjacent to water
+                # Critical thirst - check if agent is adjacent to water
                 is_adjacent_to_water = False
                 for tile in nearby_tiles:
                     if (tile.get("type") == "water" and 
@@ -384,61 +406,50 @@ PLAYER ADVICE:
                         action = random.choice(["move_left", "move_right", "move_up", "move_down"])
                         is_fast_movement = True
         
-        # Validate eat action (similar to drink)
-        if action == "eat":
-            # Check if agent has critical hunger
-            if not has_critical_hunger:
-                action = "idle"
-            else:
-                # For now, just convert to movement since we don't have food tiles
-                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                is_fast_movement = True
-        
-        # Handle search action
-        if action == "search":
-            if has_critical_thirst or has_critical_hunger:
-                # If searching with critical needs, convert to movement
-                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                is_fast_movement = True
-            else:
-                # Regular search just becomes idle with looking around speech
-                action = "idle"
+        # Handle exploration when thirst is good (5-10)
+        # Fixed: removed reference to agent_state.thirst
+        if action == "idle" and not has_critical_thirst and not has_critical_hunger:
+            # 50% chance to explore instead of idle when needs are satisfied
+            if random.random() < 0.5:
+                action = "explore"
                 if not speech:
-                    speech = random.choice([
-                        "I should look around for interesting things.",
-                        "Let me see what's nearby.",
-                        "I wonder what I can find here."
-                    ])
+                    exploration_speeches = [
+                        "I should explore more of this area.",
+                        "Let me see what's around here.",
+                        "Time to do some exploring.",
+                        "I wonder what I'll find if I look around.",
+                        "I feel like exploring today."
+                    ]
+                    speech = random.choice(exploration_speeches)
         
-        # Encourage more movement when no critical needs
-        if action == "idle" and not has_critical_thirst and not has_critical_hunger and not following_advice:
-            # 70% chance to convert idle to movement when no critical needs
-            if random.random() < 0.7:
-                # Choose a random direction, but avoid walls
-                possible_directions = []
-                
-                # Check each direction for walls
-                directions = [
-                    ("move_left", grid_x - 1, grid_y),
-                    ("move_right", grid_x + 1, grid_y),
-                    ("move_up", grid_x, grid_y - 1),
-                    ("move_down", grid_x, grid_y + 1)
+        # Handle return home action
+        if action == "return_home":
+            # Only allow returning home if not critically thirsty
+            if has_critical_thirst:
+                action = "search"  # Look for water instead
+                speech = "I need to find water before I can go home."
+            else:
+                if not speech:
+                    return_speeches = [
+                        "I should head back home now.",
+                        "Time to return to my base.",
+                        "I've explored enough, let's go home.",
+                        "I'll head back to my starting point."
+                    ]
+                    speech = random.choice(return_speeches)
+        
+        # Handle record location action
+        if action == "record_location":
+            # Convert to idle but add memory update
+            action = "idle"
+            if not speech:
+                record_speeches = [
+                    "I should remember this location.",
+                    "This is an interesting spot to remember.",
+                    "I'll make a note of this place.",
+                    "This location seems important."
                 ]
-                
-                for dir_action, x, y in directions:
-                    # Check if there's a wall in this direction
-                    has_wall = False
-                    for tile in nearby_tiles:
-                        if tile.get("type") == "wall" and tile["x"] == x and tile["y"] == y:
-                            has_wall = True
-                            break
-                    
-                    if not has_wall:
-                        possible_directions.append(dir_action)
-                
-                # If we have valid directions, choose one randomly
-                if possible_directions:
-                    action = random.choice(possible_directions)
+                speech = random.choice(record_speeches)
         
         # Generate appropriate speech based on needs and actions
         if has_critical_thirst:
@@ -530,6 +541,8 @@ PLAYER ADVICE:
             "advice_direction": advice_direction,
             "advice_distance": advice_distance
         }
+
+
 
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
