@@ -189,7 +189,7 @@ class Rectangle:
             return
             
         # Skip if thirst is already full
-        if self.thirst >= 5:
+        if self.thirst >= 10:
             return
             
         # Get the world map

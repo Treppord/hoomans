@@ -80,7 +80,7 @@ class NPC(Rectangle):
                             )
                             
                         # If we're thirsty, drink immediately
-                        if self.thirst < 5:
+                        if self.thirst < 10:
                             self.thirst += 1
                             print(f"NPC drank water, thirst increased to {self.thirst}")
                             
@@ -182,7 +182,7 @@ class NPC(Rectangle):
         elif decision.action == "move_down":
             self.target_grid_y = self.grid_y + 1
             self.is_moving = True
-        elif decision.action == "drink" and self.thirst < 5:
+        elif decision.action == "drink" and self.thirst < 10:
             # Check if we're adjacent to water
             from engine.core import SimpleGameEngine
             world_map = None
