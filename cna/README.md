@@ -1,93 +1,116 @@
-# CNA Editor - Computerized Neural Attributes
+# CNA - Computerized Neural Attributes
 
-CNA Editor is a tool for creating, editing, and generating CNA (Computerized Neural Attributes) files. CNA is a custom binary format designed to efficiently store entity attributes for AI virtual worlds, inspired by human DNA.
+## Overview
 
-## Features
+CNA (Computerized Neural Attributes) is a custom binary format designed to efficiently store entity attributes for AI virtual worlds. Inspired by human DNA, it provides a compact way to represent various characteristics of virtual entities, including basic information, health metrics, and DNA-inspired attributes that influence behavior and capabilities.
 
-- Create and edit CNA entities with a user-friendly GUI
-- Generate random entities with realistic attributes
-- Create child entities by combining attributes from parent entities
-- View the binary representation of CNA files
-- Batch generate and save multiple entities
+## What is CNA?
 
-## CNA Format
+CNA serves as a genetic blueprint for virtual entities in simulation environments. Each CNA file contains:
 
-The CNA format is a binary file format that efficiently stores the following attributes:
+- **Basic Attributes**: Core information like name, age, gender, culture, and nation
+- **Health Metrics**: Physical, mental, and generational health indicators
+- **Extended DNA-inspired Attributes**: Genetic markers, personality traits, intelligence, adaptability, and immunity
 
-### Basic Attributes
+The format is optimized for efficient storage and retrieval, making it suitable for large-scale simulations where many entities need to be processed quickly.
 
-- Name (First and Last name)
-- Age (0-60 minutes in virtual time)
-- Gender (Male or Female)
-- Culture (Red or Blue)
-- Nation (NL or PL)
-- Physical Health (0-5 scale)
-- Generational Health (0-5 scale)
-- Mental Health (0-5 scale)
+## File Format Specification
 
-### Extended Attributes
+CNA files use a binary format with the following structure:
 
-- Genetic Markers (Simulated genetic information)
-- Personality Traits (Behavioral tendencies)
-- Intelligence Factor (Learning capacity)
-- Adaptability (Environmental adaptation capability)
-- Immunity Strength (Resistance to negative influences)
+1. **File Signature**: `CNA1` (4 bytes) - Identifies the file as a CNA format
+2. **Basic Attributes**:
+   - First Name: Length (2 bytes) + UTF-8 encoded string
+   - Last Name: Length (2 bytes) + UTF-8 encoded string
+   - Age: Minutes (1 byte, range 0-60)
+   - Gender: Enum value (1 byte)
+   - Culture: Enum value (1 byte)
+   - Nation: Enum value (1 byte)
+   - Physical Health: Value (1 byte, range 0-5)
+   - Generational Health: Value (1 byte, range 0-5)
+   - Mental Health: Value (1 byte, range 0-5)
+3. **Extended Attributes**:
+   - Intelligence Factor: Float (4 bytes)
+   - Adaptability: Float (4 bytes)
+   - Immunity Strength: Float (4 bytes)
+   - Genetic Markers: Count (1 byte) + Markers (2 bytes each)
+   - Personality Traits: Count (1 byte) + Traits (4 bytes each, float)
 
-## Installation
+## Components
 
-1. Clone this repository:
+### Core Classes
 
-```bash
-git clone https://github.com/yourusername/cna-editor.git
-cd cna-editor
-```
+- **CNAAttributes**: Data class that holds all entity attributes
+- **CNACodec**: Handles encoding/decoding between CNA objects and binary data
+- **CNAGenerator**: Creates random entities and simulates genetic inheritance
 
-2. Run the application:
+### Enumerations
+
+- **Gender**: MALE (0), FEMALE (1)
+- **Culture**: RED (0), BLUE (1), GREEN (2), YELLOW (3), PURPLE (4), ORANGE (5), PINK (6), BROWN (7), GRAY (8), BLACK (9), WHITE (10)
+- **Nation**: NL (0), PL (1), AL (2), FL (3), CL (4), SL (5), DL (6), VL (7), ML (8), GL (9), HL (10)
+
+## Genetic Inheritance
+
+CNA supports simulating genetic inheritance through the `generate_child` function:
+
+- Children inherit attributes from both parents with natural variation
+- Genetic markers have a 50% chance to come from either parent with a 10% mutation chance
+- Personality traits are created through weighted averages of parent traits with random variation
+- Health attributes are influenced by both parents with some randomness
+- Last name is typically inherited from one parent
+
+## CNA Editor Application
+
+The included CNA Editor provides a GUI for working with CNA files:
+
+- **Entity Editor**: Create and modify CNA entities
+- **Generator**: Create random entities or child entities from parents
+- **Binary Viewer**: Examine the raw binary representation of CNA data
+- **Batch Operations**: Generate and save multiple entities at once
+
+## Usage
+
+### Running the Application
 
 ```bash
 python main.py
 ```
+
+### Programmatic Usage
+
+```python
+# Create a new entity
+from cna_format import CNAAttributes, Gender, Culture, Nation
+from cna_generator import CNAGenerator
+from cna_codec import CNACodec
+
+# Generate a random entity
+entity = CNAGenerator.generate_random()
+
+# Save to file
+CNACodec.save_to_file(entity, "entity.cna")
+
+# Load from file
+loaded_entity = CNACodec.load_from_file("entity.cna")
+
+# Create a child from two parents
+parent1 = CNAGenerator.generate_random()
+parent2 = CNAGenerator.generate_random()
+child = CNAGenerator.generate_child(parent1, parent2)
+```
+
+## Applications
+
+CNA can be used in:
+
+- AI-driven virtual worlds and simulations
+- Genetic algorithm research
+- Game development for character attributes
+- Educational tools demonstrating genetic inheritance
+- Procedural generation of diverse populations
 
 ## Requirements
 
 - Python 3.7 or higher
-- Tkinter (usually included with Python)
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-````
-
-## 7. Let's create a requirements.txt file
-
-```text:requirements.txt
-# No external dependencies required beyond standard library
-````
-
-## Summary
-
-I've created a complete application for working with the CNA (Computerized Neural Attributes) file format. Here's what each component does:
-
-1. **cna_format.py**: Defines the data structure for CNA attributes, including basic information like name, age, gender, and health metrics, as well as extended DNA-inspired attributes.
-
-2. **cna_codec.py**: Provides encoding and decoding functionality to convert between CNA objects and binary data, optimizing storage efficiency.
-
-3. **cna_generator.py**: Generates random CNA entities and can create child entities by combining attributes from parent entities.
-
-4. **cna_gui.py**: A full-featured GUI application with:
-
-   - An editor for viewing and modifying CNA attributes
-   - A generator for creating random entities and child entities
-   - A binary viewer for examining the raw CNA data
-   - File operations for saving and loading CNA files
-
-5. **main.py**: The entry point for running the application.
-
-The CNA format efficiently stores entity data in a binary format, making it suitable for use in AI virtual worlds where performance is important. The application provides a user-friendly interface for working with this data.
-
-To run the application, execute:
-
-```bash
-python main.py
-```
+- PyQt5 (for the GUI application)

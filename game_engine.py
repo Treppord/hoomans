@@ -3,15 +3,32 @@ from entities.rectangle import Rectangle
 from entities.npc import NPC
 from engine.ai import RandomWanderAI, FollowPlayerAI
 from world.map import WorldMap
+from world.world_cache import WorldCache
+import random
 import os
 import pygame
 # Add this import
 from ai_universe_controller import AIUniverseController, WorldStateCollector
+import argparse
 
 if __name__ == "__main__":
     # Create the game engine
-    engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600)
-    
+    map_seed = 39
+    arg_parser = argparse.ArgumentParser(description='Grid-Based Game')
+    arg_parser.add_argument('--seed', type=int, help='Seed for map generation')
+    args = arg_parser.parse_args()
+
+    def debug_cna_data(self, entity, name):
+        """Debug function to print CNA data details"""
+        if hasattr(entity, 'cna_data') and entity.cna_data:
+            print(f"DEBUG: {name} CNA data:")
+            print(f"  - Culture: {entity.cna_data.culture} (value: {entity.cna_data.culture.value})")
+            print(f"  - Current color: {entity.color}")
+        else:
+            print(f"DEBUG: {name} has no CNA data")
+
+    engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600, map_seed=args.seed)
+
     project_root = os.path.dirname(os.path.abspath(__file__))
     sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
     if not os.path.exists(sprite_path):
@@ -37,9 +54,16 @@ if __name__ == "__main__":
     
     # Create and set up the world map (50x38 tiles for an 800x600 screen)
     world_map = WorldMap(256, 256)
-    world_map.generate_realistic_map()
+    world_map.generate_realistic_map(seed=engine.map_seed)
     engine.set_world_map(world_map)
     
+    
+    # Initialize world cache with the same seed
+    world_cache = WorldCache()
+    world_cache.set_world_seed(engine.map_seed)
+    engine.world_cache = world_cache
+    ai_universe.world_cache = world_cache  # Direct reference to the same object
+
     # Get absolute path to the project root directory
     project_root = os.path.dirname(os.path.abspath(__file__))
     
@@ -84,6 +108,27 @@ if __name__ == "__main__":
         follower.load_cna_file(cna_file_path)
     else:
         print(f"CNA file not found: {cna_file_path}")
+    
+    # Initialize exploration attributes for NPCs
+    for obj in engine.objects:
+        if isinstance(obj, NPC):
+            # Set exploration attributes
+            obj.exploration_mode = "idle"
+            obj.exploration_target_x = None
+            obj.exploration_target_y = None
+            obj.last_exploration_time = pygame.time.get_ticks()
+            obj.explored_tiles = set()  # Set of (x, y) coordinates that have been explored
+            obj.interesting_locations = {}  # Dict of location_type -> list of (x, y) coordinates
+            obj.home_location = (obj.grid_x, obj.grid_y)  # Starting position as home base
+            obj.curiosity = random.uniform(0.5, 1.0)  # How curious/exploratory this NPC is
+            obj.last_memory_record_time = 0  # Time of last memory recording
+            obj.memory_cooldown = 10000  # Milliseconds between memory recordings (10 seconds)
+            
+            # Advice following attributes
+            obj.advice_remaining_distance = 0
+            obj.advice_direction = None
+            
+            print(f"DEBUG: Initialized exploration attributes for NPC at ({obj.grid_x}, {obj.grid_y})")
     
     # Start the game loop
     engine.run()

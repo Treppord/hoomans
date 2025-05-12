@@ -43,8 +43,8 @@ class AgentState:
     agent_id: str
     grid_x: int
     grid_y: int
-    thirst: int = 5  # 0-5 scale
-    hunger: int = 5  # 0-5 scale
+    thirst: int = 10  # 0-10 scale
+    hunger: int = 10  # 0-10 scale
     health: int = 5  # 0-5 scale
     mood: float = 0.5  # 0-1 scale
     last_action: str = "idle"
@@ -55,6 +55,9 @@ class AgentState:
     nearby_tiles: List[Dict] = field(default_factory=list)
     cna_data: Optional[CNAAttributes] = None
     memory: List[Dict] = field(default_factory=list)
+    player_advice: Optional[Dict] = None
+    player_advice_time: float = 0
+    advice_followed: bool = False
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for AI prompt"""
@@ -95,7 +98,14 @@ class AgentState:
                     if i < len(self.cna_data.personality_traits):
                         result["personality"][trait_name] = self.cna_data.personality_traits[i]
         
+        # Add player advice if available and recent
+        if self.player_advice and (time.time() - self.player_advice_time < 300):  # Advice valid for 5 minutes
+            result["player_advice"] = self.player_advice
+            result["advice_followed"] = self.advice_followed
+        
         return result
+
+
 
 @dataclass
 class AgentDecision:
@@ -103,11 +113,17 @@ class AgentDecision:
     agent_id: str
     action: str  # move_left, move_right, move_up, move_down, drink, eat, idle, etc.
     speech: str = ""  # What the agent might say
+    reason: str = ""  # Reason for the decision (for memory)
     target_x: Optional[int] = None  # Target x position if moving
     target_y: Optional[int] = None  # Target y position if moving
     mood_change: float = 0.0  # How this decision affects mood (-1 to 1)
     memory_update: Optional[str] = None  # New memory to add
     is_fast_movement: bool = False  # Whether this is a fast movement (multiple steps)
+    following_advice: bool = False  # Whether this decision is following player advice
+    advice_direction: Optional[str] = None  # Direction from player advice
+    advice_distance: int = 0  # Distance from player advice
+    advice_remaining_distance: int = 0  # Remaining distance to travel
+
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -115,6 +131,7 @@ class AgentDecision:
         try:
             action = response_json.get("action", "idle")
             speech = response_json.get("speech", "")
+            reason = response_json.get("reason", "")
             
             # Extract target position if provided
             target_x = None
@@ -132,21 +149,31 @@ class AgentDecision:
             # Extract fast movement flag
             is_fast_movement = response_json.get("is_fast_movement", False)
             
+            # Extract advice following flags
+            following_advice = response_json.get("following_advice", False)
+            advice_direction = response_json.get("advice_direction")
+            advice_distance = response_json.get("advice_distance", 0)
+            
             return cls(
                 agent_id=agent_id,
                 action=action,
                 speech=speech,
+                reason=reason,
                 target_x=target_x,
                 target_y=target_y,
                 mood_change=mood_change,
                 memory_update=memory_update,
-                is_fast_movement=is_fast_movement
+                is_fast_movement=is_fast_movement,
+                following_advice=following_advice,
+                advice_direction=advice_direction,
+                advice_distance=advice_distance
             )
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
             logger.error(f"Response JSON: {response_json}")
             # Return a default idle decision
             return cls(agent_id=agent_id, action="idle")
+
 
 
 
@@ -175,10 +202,16 @@ class AIInterface:
         "drink": {"description": "Drink water (only when adjacent to water)"},
         "eat": {"description": "Eat food (only when adjacent to food)"},
         
+        # Exploration actions
+        "explore": {"description": "Start exploring in a random direction"},
+        "return_home": {"description": "Return to home base location"},
+        "record_location": {"description": "Record current location in memory"},
+        
         # Other actions
         "idle": {"description": "Stand still and observe surroundings"},
         "search": {"description": "Look around for resources"}
     }
+
     
     def __init__(self, use_local_model=True, model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"):
         self.use_local_model = use_local_model
@@ -186,11 +219,14 @@ class AIInterface:
         self.model_name = "tinyllama"  # Fallback model name
         self.local_model_loaded = False
         
+        # Updated system prompt with template for player advice
         self.system_prompt = """
 You are the AI controller for a game called Hoomans. Your job is to determine the actions and speech of NPCs.
 Respond with a JSON object containing:
 - action: move_left, move_right, move_up, move_down, drink, eat, idle
 - speech: What the NPC says (can be empty). IMPORTANT: The speech should be natural dialogue, NOT commands or descriptions of actions.
+- reason: Brief explanation of your decision (helps with debugging)
+- mood_change: How this decision affects the NPC's mood (-1.0 to 1.0)
 
 IMPORTANT RULES:
 1. NPCs should speak in first person (e.g., "I'm thirsty" is correct)
@@ -198,26 +234,52 @@ IMPORTANT RULES:
 3. The "drink" action can ONLY be performed when the NPC is adjacent to water
 4. ONLY focus on thirst and drinking when thirst is at 0 (critical)
 5. When thirst is normal (1-5), focus on personality and exploration instead
+6. If the player gives advice, consider following it, especially if it helps with critical needs
 
 Example response:
-{"action": "move_left", "speech": "I'm so thirsty!"}
-{"action": "drink", "speech": "Ah, refreshing water!"}
-{"action": "idle", "speech": "What a beautiful day!"}
+{"action": "move_left", "speech": "I'm so thirsty!", "reason": "Looking for water", "mood_change": -0.1}
+{"action": "drink", "speech": "Ah, refreshing water!", "reason": "Found water when critically thirsty", "mood_change": 0.5}
+{"action": "idle", "speech": "What a beautiful day!", "reason": "No urgent needs, enjoying surroundings", "mood_change": 0.1}
 
 Keep your responses concise and focused on the action and speech.
 """
+
         
         # Initialize local model if enabled
         if use_local_model:
             self.local_model = LocalModelInterface(model_path=model_path)
 
+    def _generate_player_advice_section(self, state):
+        """Generate the player advice section for the prompt"""
+        if "player_advice" not in state:
+            return ""
+            
+        advice = state["player_advice"]
+        advice_type = advice["type"]
+        
+        if advice_type == "direction":
+            return f"""
+PLAYER ADVICE:
+- The player told you there is {advice['what']} about {advice['distance']} tiles to the {advice['direction']} of you.
+- You can choose to follow this advice if you believe it will help you.
+- If you want to follow this advice, you should move in the {advice['direction']} direction.
+- Include in your reason if you're following the player's advice.
+"""
+        elif advice_type == "location":
+            return f"""
+PLAYER ADVICE:
+- The player told you there is {advice['what']} near the {advice['landmark']}.
+- You can choose to follow this advice if you believe it will help you.
+- Include in your reason if you're following the player's advice.
+"""
+        return ""
 
     def _create_adaptive_system_prompt(self, has_critical_thirst, has_critical_hunger):
         """Create a concise system prompt based on agent's needs"""
         
         # Start with available actions
         action_list = ", ".join(self.ACTIONS.keys())
-        base_prompt = f"You control an NPC in a game. Respond with JSON: {{\"action\": \"[action]\", \"speech\": \"[optional speech]\"}}. Available actions: {action_list}."
+        base_prompt = f"You control an NPC in a game. Respond with JSON: {{\"action\": \"[action]\", \"speech\": \"[optional speech]\", \"reason\": \"[brief explanation]\"}}. Available actions: {action_list}."
         
         # Add specific guidance based on critical needs
         if has_critical_thirst and has_critical_hunger:
@@ -229,9 +291,12 @@ Keep your responses concise and focused on the action and speech.
         else:
             base_prompt += " NPC is fine. Focus on exploration and personality. Use regular movement actions. Never mention thirst/hunger/water/food."
         
+        # Add guidance for player advice
+        base_prompt += " If player gives advice, consider following it, especially if it helps with critical needs. Include in your reason if you're following advice."
+        
         return base_prompt
 
-    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y):
+    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y, agent_id=None):
         """Validate and correct the AI response based on the agent's needs"""
         
         # Ensure we're working with a dictionary
@@ -244,6 +309,7 @@ Keep your responses concise and focused on the action and speech.
         
         action = response_json.get("action", "idle")
         speech = response_json.get("speech", "")
+        reason = response_json.get("reason", "")
         
         # Handle fast movement actions (convert to regular movement but remember it's fast)
         is_fast_movement = False
@@ -251,13 +317,82 @@ Keep your responses concise and focused on the action and speech.
             is_fast_movement = True
             action = action.replace("_fast", "")
         
+        # Check if the agent is following player advice
+        following_advice = False
+        advice_direction = None
+        advice_distance = 0
+        
+        # Look for advice-related keywords in the reason
+        advice_keywords = ["advice", "player said", "player told", "player mentioned", "player suggested"]
+        if any(keyword in reason.lower() for keyword in advice_keywords):
+            following_advice = True
+            
+            # Try to extract direction from reason or action
+            direction_keywords = {
+                "left": "left",
+                "right": "right", 
+                "up": "up",
+                "north": "up",
+                "down": "down",
+                "south": "down",
+                "east": "right",
+                "west": "left"
+            }
+            
+            for keyword, direction in direction_keywords.items():
+                if keyword in reason.lower() or (action.startswith("move_") and action.endswith(keyword)):
+                    advice_direction = direction
+                    break
+            
+            # Try to extract distance from reason
+            distance_pattern = r"(\d+)\s+(?:blocks?|tiles?|steps?)"
+            distance_match = re.search(distance_pattern, reason.lower())
+            if distance_match:
+                try:
+                    advice_distance = int(distance_match.group(1))
+                except ValueError:
+                    advice_distance = 1
+            else:
+                advice_distance = 1
+        
+        # Check if the agent knows about water sources (from world cache)
+        knows_water_sources = False
+        water_locations = []
+        
+        if agent_id and hasattr(self, 'world_cache') and self.world_cache:
+            # Get agent memories
+            agent_memories = self.world_cache.get_entity_memories(agent_id)
+            
+            # Look for water discoveries in memories
+            for memory in agent_memories:
+                if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                    knows_water_sources = True
+                    water_data = memory.get('data', {})
+                    water_locations.append((water_data.get('x'), water_data.get('y')))
+        
         # Validate drink action
         if action == "drink":
             # Check if agent has critical thirst
             if not has_critical_thirst:
-                action = "idle"
+                # If thirst is not critical but still low (1-3), allow drinking
+                if has_critical_thirst == False and 1 <= 3:  # Fixed: removed reference to agent_state
+                    # Check if agent is adjacent to water
+                    is_adjacent_to_water = False
+                    for tile in nearby_tiles:
+                        if (tile.get("type") == "water" and 
+                            abs(tile["x"] - grid_x) <= 1 and 
+                            abs(tile["y"] - grid_y) <= 1):
+                            is_adjacent_to_water = True
+                            break
+                    
+                    if not is_adjacent_to_water:
+                        # If not adjacent to water, look for water
+                        action = "search"
+                else:
+                    # If thirst is good (4-10), don't drink, explore instead
+                    action = "explore"
             else:
-                # Check if agent is adjacent to water
+                # Critical thirst - check if agent is adjacent to water
                 is_adjacent_to_water = False
                 for tile in nearby_tiles:
                     if (tile.get("type") == "water" and 
@@ -287,77 +422,78 @@ Keep your responses concise and focused on the action and speech.
                         action = random.choice(["move_left", "move_right", "move_up", "move_down"])
                         is_fast_movement = True
         
-        # Validate eat action (similar to drink)
-        if action == "eat":
-            # Check if agent has critical hunger
-            if not has_critical_hunger:
-                action = "idle"
-            else:
-                # For now, just convert to movement since we don't have food tiles
-                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                is_fast_movement = True
-        
-        # Handle search action
-        if action == "search":
-            if has_critical_thirst or has_critical_hunger:
-                # If searching with critical needs, convert to movement
-                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                is_fast_movement = True
-            else:
-                # Regular search just becomes idle with looking around speech
-                action = "idle"
-                if not speech:
-                    speech = random.choice([
-                        "I should look around for interesting things.",
-                        "Let me see what's nearby.",
-                        "I wonder what I can find here."
-                    ])
-        
-        # Encourage more movement when no critical needs
+        # Handle exploration when thirst is good (5-10)
+        # Fixed: removed reference to agent_state.thirst
         if action == "idle" and not has_critical_thirst and not has_critical_hunger:
-            # 70% chance to convert idle to movement when no critical needs
-            if random.random() < 0.7:
-                # Choose a random direction, but avoid walls
-                possible_directions = []
-                
-                # Check each direction for walls
-                directions = [
-                    ("move_left", grid_x - 1, grid_y),
-                    ("move_right", grid_x + 1, grid_y),
-                    ("move_up", grid_x, grid_y - 1),
-                    ("move_down", grid_x, grid_y + 1)
+            # 50% chance to explore instead of idle when needs are satisfied
+            if random.random() < 0.5:
+                action = "explore"
+                if not speech:
+                    exploration_speeches = [
+                        "I should explore more of this area.",
+                        "Let me see what's around here.",
+                        "Time to do some exploring.",
+                        "I wonder what I'll find if I look around.",
+                        "I feel like exploring today."
+                    ]
+                    speech = random.choice(exploration_speeches)
+        
+        # Handle return home action
+        if action == "return_home":
+            # Only allow returning home if not critically thirsty
+            if has_critical_thirst:
+                action = "search"  # Look for water instead
+                speech = "I need to find water before I can go home."
+            else:
+                if not speech:
+                    return_speeches = [
+                        "I should head back home now.",
+                        "Time to return to my base.",
+                        "I've explored enough, let's go home.",
+                        "I'll head back to my starting point."
+                    ]
+                    speech = random.choice(return_speeches)
+        
+        # Handle record location action
+        if action == "record_location":
+            # Convert to idle but add memory update
+            action = "idle"
+            if not speech:
+                record_speeches = [
+                    "I should remember this location.",
+                    "This is an interesting spot to remember.",
+                    "I'll make a note of this place.",
+                    "This location seems important."
                 ]
-                
-                for dir_action, x, y in directions:
-                    # Check if there's a wall in this direction
-                    has_wall = False
-                    for tile in nearby_tiles:
-                        if tile.get("type") == "wall" and tile["x"] == x and tile["y"] == y:
-                            has_wall = True
-                            break
-                    
-                    if not has_wall:
-                        possible_directions.append(dir_action)
-                
-                # If we have valid directions, choose one randomly
-                if possible_directions:
-                    action = random.choice(possible_directions)
+                speech = random.choice(record_speeches)
         
         # Generate appropriate speech based on needs and actions
         if has_critical_thirst:
-            # If critically thirsty, override speech with water-focused dialogue
-            water_speeches = [
-                "I need water desperately!",
-                "So thirsty... must find water...",
-                "Water... I need water now!",
-                "I'm dying of thirst!",
-                "Need to find water immediately!",
-                "My throat is so dry... need water...",
-                "Water! Where is water?!",
-                "Can't... go on... without... water...",
-                "Must... find... water..."
-            ]
-            speech = random.choice(water_speeches)
+            # If critically thirsty but knows water sources, don't speak about thirst
+            # The NPC will handle moving to water in the apply_ai_decision method
+            if knows_water_sources:
+                water_knowledge_speeches = [
+                    "I know where to find water.",
+                    "I remember seeing water nearby.",
+                    "I should head to that water source I found earlier.",
+                    "Good thing I know where water is.",
+                    "I'll go to the water I discovered before."
+                ]
+                speech = random.choice(water_knowledge_speeches)
+            else:
+                # If critically thirsty and doesn't know water sources, override speech with water-focused dialogue
+                water_speeches = [
+                    "I need water desperately!",
+                    "So thirsty... must find water...",
+                    "Water... I need water now!",
+                    "I'm dying of thirst!",
+                    "Need to find water immediately!",
+                    "My throat is so dry... need water...",
+                    "Water! Where is water?!",
+                    "Can't... go on... without... water...",
+                    "Must... find... water..."
+                ]
+                speech = random.choice(water_speeches)
         elif has_critical_hunger:
             # If critically hungry, override speech with food-focused dialogue
             food_speeches = [
@@ -371,6 +507,18 @@ Keep your responses concise and focused on the action and speech.
                 "Need to find food before I collapse!"
             ]
             speech = random.choice(food_speeches)
+        elif following_advice:
+            # If following advice, generate appropriate speech
+            if not speech or random.random() < 0.7:  # 70% chance to override existing speech
+                advice_speeches = [
+                    "Let me check what the player mentioned...",
+                    "I'll follow that advice and see where it leads.",
+                    "That's helpful information, I'll check it out.",
+                    "Thanks for the tip! I'll head that way.",
+                    "I appreciate the advice. Let me go see.",
+                    "That sounds promising, I'll investigate."
+                ]
+                speech = random.choice(advice_speeches)
         else:
             # Filter out problematic speech for non-critical states
             if speech:
@@ -415,8 +563,15 @@ Keep your responses concise and focused on the action and speech.
         return {
             "action": action,
             "speech": speech,
-            "is_fast_movement": is_fast_movement
+            "reason": reason,
+            "is_fast_movement": is_fast_movement,
+            "following_advice": following_advice,
+            "advice_direction": advice_direction,
+            "advice_distance": advice_distance
         }
+
+
+
 
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
@@ -447,6 +602,14 @@ Keep your responses concise and focused on the action and speech.
                 prompt += f"Name: {agent_state.cna_data.first_name}, "
                 prompt += f"Culture: {agent_state.cna_data.culture.name}"
             
+            # Add player advice if available
+            if hasattr(agent_state, 'player_advice') and agent_state.player_advice:
+                advice = agent_state.player_advice
+                if advice["type"] == "direction":
+                    prompt += f"\nPLAYER ADVICE: {advice['what']} is {advice['distance']} tiles to the {advice['direction']}."
+                elif advice["type"] == "location":
+                    prompt += f"\nPLAYER ADVICE: {advice['what']} is near the {advice['landmark']}."
+            
             # Create a concise system prompt
             system_prompt = self._create_adaptive_system_prompt(has_critical_thirst, has_critical_hunger)
             
@@ -465,8 +628,41 @@ Keep your responses concise and focused on the action and speech.
                     has_critical_hunger,
                     agent_state.nearby_tiles,
                     agent_state.grid_x,
-                    agent_state.grid_y
+                    agent_state.grid_y,
+                    agent_id=agent_state.agent_id  # Pass the agent_id
                 )
+                
+                # Check if we should follow player advice
+                if hasattr(agent_state, 'player_advice') and agent_state.player_advice:
+                    advice = agent_state.player_advice
+                    advice_age = time.time() - getattr(agent_state, 'player_advice_time', 0)
+                    
+                    # Only follow recent advice (within last 30 seconds)
+                    if advice_age < 30:
+                        # If we have critical thirst and advice is about water, follow it
+                        if (has_critical_thirst and advice["type"] == "direction" and 
+                            (advice["what"] == "water" or "water" in advice["what"])):
+                            
+                            direction = advice["direction"]
+                            # Map direction to action
+                            action_map = {
+                                "left": "move_left",
+                                "right": "move_right", 
+                                "up": "move_up",
+                                "down": "move_down",
+                                "north": "move_up",
+                                "south": "move_down",
+                                "east": "move_right",
+                                "west": "move_left"
+                            }
+                            
+                            if direction in action_map:
+                                validated_response["action"] = action_map[direction]
+                                validated_response["speech"] = "I'll check for water where you suggested!"
+                                validated_response["following_advice"] = True
+                                validated_response["advice_direction"] = direction
+                                validated_response["advice_distance"] = advice["distance"]
+                                validated_response["reason"] = "Following player's advice about water location"
                 
                 return AgentDecision.from_ai_response(agent_state.agent_id, validated_response)
                 
@@ -474,6 +670,8 @@ Keep your responses concise and focused on the action and speech.
             logger.error(f"Error generating decision: {e}")
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
+
+
         
     def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
         """Generate decisions for multiple agents (one by one)"""
@@ -735,6 +933,200 @@ class AIUniverseController:
             logger.error(f"Error processing state updates: {e}")
             logger.error(traceback.format_exc())
     
+    def _parse_agent_decision(self, agent_id: str, response_text: str) -> AgentDecision:
+        """Parse the agent's decision from the response text"""
+        # Default values
+        action = "idle"
+        speech = ""
+        reason = ""
+        
+        # Try to extract action, speech, and reason from the response
+        action_match = re.search(r'ACTION:\s*(\w+)', response_text)
+        speech_match = re.search(r'SPEECH:\s*(.*?)(?:\n|$)', response_text)
+        reason_match = re.search(r'REASON:\s*(.*?)(?:\n|$)', response_text)
+        
+        if action_match:
+            action = action_match.group(1).strip().lower()
+        if speech_match:
+            speech = speech_match.group(1).strip()
+        if reason_match:
+            reason = reason_match.group(1).strip()
+        
+        # Check if the agent is following player advice
+        following_advice = False
+        advice_direction = None
+        advice_distance = 0
+        
+        # Get the agent state
+        agent_state = self.agents.get(agent_id)
+        if agent_state and hasattr(agent_state, 'player_advice') and agent_state.player_advice:
+            advice = agent_state.player_advice
+            
+            # Check if the reason mentions following advice
+            advice_keywords = ["advice", "player said", "player told", "player mentioned"]
+            if any(keyword in reason.lower() for keyword in advice_keywords):
+                following_advice = True
+                
+                # For directional advice
+                if advice["type"] == "direction":
+                    advice_direction = advice["direction"]
+                    advice_distance = advice["distance"]
+                    
+                    # Mark that the advice is being followed
+                    agent_state.advice_followed = True
+        
+        return AgentDecision(
+            agent_id=agent_id,
+            action=action,
+            speech=speech,
+            reason=reason,
+            mood_change=0.0,  # Default mood change
+            following_advice=following_advice,
+            advice_direction=advice_direction,
+            advice_distance=advice_distance
+        )
+
+    
+    def _is_memory_query(self, message: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check if a message is asking about remembered locations or past events
+        Returns (is_memory_query, query_type)
+        """
+        message = message.lower()
+        
+        # Check for water-specific queries first
+        if ("water" in message or "drink" in message) and any(word in message for word in ["where", "location", "know", "remember", "nearby"]):
+            logger.info(f"DEBUG: Detected water-specific memory query")
+            return True, "water"
+        
+        # Check for location memory queries
+        location_patterns = [
+            r"(?:where|location of|where is|where can i find|where to find|find)\s+(?:a|the)?\s*(\w+)",
+            r"(?:do you know|remember|recall).+?(?:where|location).+?(\w+)",
+            r"(?:do you know|remember|recall).+?(\w+).+?(?:location|where)"
+        ]
+        
+        for pattern in location_patterns:
+            match = re.search(pattern, message)
+            if match:
+                resource_type = match.group(1)
+                # Clean up resource type (remove trailing "s" if plural)
+                if resource_type.endswith('s'):
+                    resource_type = resource_type[:-1]
+                
+                # Skip common words that aren't resources
+                if resource_type.lower() in ["of", "any", "some", "the", "a", "an", "is", "are", "do", "you", "know"]:
+                    continue
+                
+                # Map common terms to resource types
+                resource_mapping = {
+                    "water": "water",
+                    "drink": "water",
+                    "river": "water",
+                    "lake": "water",
+                    "pond": "water",
+                    "food": "food",
+                    "eat": "food",
+                    "fruit": "food",
+                    "shelter": "shelter",
+                    "house": "shelter",
+                    "building": "shelter"
+                }
+                
+                # Get standardized resource type
+                resource_type = resource_mapping.get(resource_type, resource_type)
+                
+                logger.info(f"DEBUG: Detected memory query for resource: {resource_type}")
+                return True, resource_type
+        
+        # Special case for "water sources" or similar phrases
+        if "water" in message and any(word in message for word in ["source", "sources", "location", "locations", "nearby"]):
+            logger.info(f"DEBUG: Detected special case water source query")
+            return True, "water"
+        
+        # Check for general memory queries
+        if any(phrase in message for phrase in [
+            "what do you remember", 
+            "what have you seen", 
+            "tell me about your memory", 
+            "what do you know about",
+            "according to your memory",
+            "do you know of any"
+        ]):
+            return True, "general"
+            
+        return False, None
+
+
+
+
+    def _get_agent_memory_for_location(self, agent_id: str, resource_type: str) -> Optional[Dict]:
+        """
+        Retrieve an agent's memory about a specific resource location
+        Returns memory data or None if not found
+        """
+        # First check if agent exists
+        if agent_id not in self.agents:
+            print(f"DEBUG: Agent {agent_id} not found in agents dictionary")
+            return None
+            
+        # Check if we have a world cache reference
+        if not hasattr(self, 'world_cache'):
+            # Try to get world cache from game engine
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                self.world_cache = SimpleGameEngine.instance.world_cache
+                print(f"DEBUG: Got world cache reference from game engine")
+            else:
+                print(f"DEBUG: Could not get world cache reference")
+                return None
+        
+        # Get agent memories from cache
+        agent_memories = self.world_cache.get_entity_memories(agent_id) if hasattr(self.world_cache, 'get_entity_memories') else []
+        print(f"DEBUG: Found {len(agent_memories)} memories for agent {agent_id}")
+        
+        # Look for location memories matching the resource type
+        for memory in agent_memories:
+            if memory.get("type") == "location_discovery":
+                memory_data = memory.get("data", {})
+                if memory_data.get("location_type") == resource_type:
+                    print(f"DEBUG: Found memory for {resource_type} at ({memory_data.get('x')}, {memory_data.get('y')})")
+                    return memory_data
+        
+        # If agent doesn't have direct memory, check discovered locations
+        discovered_locations = self.world_cache.get_discovered_locations(resource_type) if hasattr(self.world_cache, 'get_discovered_locations') else []
+        print(f"DEBUG: Found {len(discovered_locations)} discovered {resource_type} locations")
+        
+        # Check if any of these locations were discovered by this agent
+        for location in discovered_locations:
+            if "discovered_by" in location and agent_id in location["discovered_by"]:
+                print(f"DEBUG: Found location discovered by agent at ({location.get('x')}, {location.get('y')})")
+                return location
+                
+        # If still not found, check if the agent is near any discovered location of this type
+        agent_state = self.agents[agent_id]
+        for location in discovered_locations:
+            # Calculate Manhattan distance
+            distance = abs(location["x"] - agent_state.grid_x) + abs(location["y"] - agent_state.grid_y)
+            # If agent is or has been near this location, they might know about it
+            if distance <= 10:  # Within reasonable distance
+                print(f"DEBUG: Found nearby location at ({location.get('x')}, {location.get('y')})")
+                # Important: Don't return the location directly, create a copy with this agent as discoverer
+                # This prevents accidentally attributing the discovery to this agent
+                location_copy = location.copy()
+                return {
+                    "location_type": resource_type,
+                    "x": location["x"],
+                    "y": location["y"],
+                    "name": location.get("name", f"{resource_type} source")
+                }
+                
+        print(f"DEBUG: No memory found for {resource_type}")
+        return None
+
+
+
+    
     def _generate_chat_response(self, agent_id, player_message):
         """Generate a response to a player chat message"""
         try:
@@ -746,12 +1138,253 @@ class AIUniverseController:
             
             logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
             
-            # First, check if this is a command using NPCActionHandler
+            # Check if this is a memory query
+            is_memory_query, resource_type = self._is_memory_query(player_message)
+            
+            # Special handling for water queries
+            if "water" in player_message.lower() and any(word in player_message.lower() for word in ["where", "location", "know", "remember", "nearby"]):
+                is_memory_query = True
+                resource_type = "water"
+                logger.info(f"DEBUG: Detected water query override")
+            
+            if is_memory_query:
+                logger.info(f"DEBUG: Detected memory query for resource type: {resource_type}")
+                
+                # Handle general memory query
+                if resource_type == "general":
+                    # Get all agent memories
+                    if not hasattr(self, 'world_cache'):
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                            self.world_cache = SimpleGameEngine.instance.world_cache
+                    
+                    if hasattr(self, 'world_cache'):
+                        memories = self.world_cache.get_entity_memories(agent_id)
+                        if memories:
+                            # Summarize memories
+                            memory_types = set(memory.get("type") for memory in memories)
+                            
+                            # Create a response based on memory types
+                            if "location_discovery" in memory_types:
+                                location_memories = [m for m in memories if m.get("type") == "location_discovery"]
+                                locations = [m.get("data", {}).get("location_type") for m in location_memories]
+                                locations = [loc for loc in locations if loc]  # Filter out None
+                                
+                                if locations:
+                                    response = f"I remember finding {', '.join(locations)}. "
+                                    
+                                    # Add details about the most recent location
+                                    recent_location = location_memories[-1].get("data", {})
+                                    if "x" in recent_location and "y" in recent_location:
+                                        response += f"The most recent was {recent_location.get('location_type')} at coordinates ({recent_location.get('x')}, {recent_location.get('y')})."
+                                    
+                                    # Create a decision with the response
+                                    decision = AgentDecision(
+                                        agent_id=agent_id,
+                                        action="idle",
+                                        speech=response,
+                                        mood_change=0.1
+                                    )
+                                    self.decision_queue.put(decision)
+                                    return
+                    
+                    # Fallback for general memory query
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech="I don't have any significant memories to share right now.",
+                        mood_change=0
+                    )
+                    self.decision_queue.put(decision)
+                    
+                    return
+                
+                # Direct check for water sources in world cache
+                if resource_type == "water" and hasattr(self, 'world_cache'):
+                    # Try to get world cache from game engine if not already available
+                    if not hasattr(self, 'world_cache'):
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                            self.world_cache = SimpleGameEngine.instance.world_cache
+                    
+                    # Check if we have water locations in the cache
+                    water_locations = self.world_cache.get_discovered_locations("water")
+                    print(f"DEBUG: Found {len(water_locations)} water locations in cache")
+                    
+                    if water_locations:
+                        # Find locations discovered by this agent
+                        agent_water_locations = [loc for loc in water_locations if "discovered_by" in loc and agent_id in loc["discovered_by"]]
+                        
+                        if agent_water_locations:
+                            # Use the most recently discovered water location
+                            location = max(agent_water_locations, key=lambda loc: loc.get("discovery_time", 0))
+                            
+                            x = location.get("x")
+                            y = location.get("y")
+                            name = location.get("name", "Water source")
+                            
+                            # Calculate direction from agent to location
+                            direction = ""
+                            if x is not None and y is not None:
+                                dx = x - agent.grid_x
+                                dy = y - agent.grid_y
+                                
+                                if abs(dx) > abs(dy):
+                                    direction = "east" if dx > 0 else "west"
+                                else:
+                                    direction = "south" if dy > 0 else "north"
+                                    
+                                # Calculate distance
+                                distance = abs(dx) + abs(dy)
+                                
+                                response = f"Yes, I found a {name} at coordinates ({x}, {y}). "
+                                response += f"That's about {distance} tiles to the {direction} from here."
+                            else:
+                                response = f"Yes, I remember finding a {name}, but I'm not sure exactly where it was."
+                            
+                            # Create a decision with the response
+                            decision = AgentDecision(
+                                agent_id=agent_id,
+                                action="idle",
+                                speech=response,
+                                mood_change=0.1
+                            )
+                            self.decision_queue.put(decision)
+                            return
+                        else:
+                            # Check if there are any water locations nearby that the agent might know about
+                            nearby_water = None
+                            for location in water_locations:
+                                # Calculate Manhattan distance
+                                distance = abs(location["x"] - agent.grid_x) + abs(location["y"] - agent.grid_y)
+                                # If agent is or has been near this location, they might know about it
+                                if distance <= 10:  # Within reasonable distance
+                                    nearby_water = location
+                                    break
+                            
+                            if nearby_water:
+                                x = nearby_water.get("x")
+                                y = nearby_water.get("y")
+                                name = nearby_water.get("name", "Water source")
+                                
+                                # Calculate direction from agent to location
+                                direction = ""
+                                if x is not None and y is not None:
+                                    dx = x - agent.grid_x
+                                    dy = y - agent.grid_y
+                                    
+                                    if abs(dx) > abs(dy):
+                                        direction = "east" if dx > 0 else "west"
+                                    else:
+                                        direction = "south" if dy > 0 else "north"
+                                        
+                                    # Calculate distance
+                                    distance = abs(dx) + abs(dy)
+                                    
+                                    response = f"I've seen a {name} at coordinates ({x}, {y}). "
+                                    response += f"That's about {distance} tiles to the {direction} from here."
+                                    
+                                    # Create a decision with the response
+                                    decision = AgentDecision(
+                                        agent_id=agent_id,
+                                        action="idle",
+                                        speech=response,
+                                        mood_change=0.1
+                                    )
+                                    self.decision_queue.put(decision)
+                                    
+                                    # IMPORTANT: Record this as a memory for this agent
+                                    # This ensures the agent "knows" about this location for future queries
+                                    if hasattr(self, 'world_cache'):
+                                        print(f"DEBUG: Recording water location memory for agent {agent_id}")
+                                        self.world_cache.add_location_discovery(
+                                            agent_id,
+                                            "water",
+                                            x,
+                                            y,
+                                            name
+                                        )
+                                    
+                                    return
+                
+                # Handle specific resource type query
+                memory_data = self._get_agent_memory_for_location(agent_id, resource_type)
+                
+                if memory_data:
+                    # Generate response with location information
+                    x = memory_data.get("x")
+                    y = memory_data.get("y")
+                    name = memory_data.get("name", f"{resource_type} source")
+                    
+                    # Calculate direction from agent to location
+                    direction = ""
+                    if x is not None and y is not None:
+                        dx = x - agent.grid_x
+                        dy = y - agent.grid_y
+                        
+                        if abs(dx) > abs(dy):
+                            direction = "east" if dx > 0 else "west"
+                        else:
+                            direction = "south" if dy > 0 else "north"
+                            
+                        # Calculate distance
+                        distance = abs(dx) + abs(dy)
+                        
+                        response = f"I remember finding {name} at coordinates ({x}, {y}). "
+                        response += f"That's about {distance} tiles to the {direction} from here."
+                        
+                        # IMPORTANT: Record this as a memory for this agent if it's not already recorded
+                        # This ensures the agent "knows" about this location for future queries
+                        if hasattr(self, 'world_cache'):
+                            # Check if this agent already has this memory
+                            agent_memories = self.world_cache.get_entity_memories(agent_id)
+                            has_memory = False
+                            for memory in agent_memories:
+                                if (memory.get("type") == "location_discovery" and
+                                    memory.get("data", {}).get("x") == x and
+                                    memory.get("data", {}).get("y") == y):
+                                    has_memory = True
+                                    break
+                            
+                            if not has_memory:
+                                print(f"DEBUG: Recording {resource_type} location memory for agent {agent_id}")
+                                self.world_cache.add_location_discovery(
+                                    agent_id,
+                                    resource_type,
+                                    x,
+                                    y,
+                                    name
+                                )
+                    else:
+                        response = f"I remember finding {name}, but I'm not sure exactly where it was."
+                    
+                    # Create a decision with the response
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech=response,
+                        mood_change=0.1
+                    )
+                    self.decision_queue.put(decision)
+                    return
+                else:
+                    # No memory found
+                    response = f"I don't remember seeing any {resource_type} around here."
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech=response,
+                        mood_change=-0.1
+                    )
+                    self.decision_queue.put(decision)
+                    return
+            
+            # Continue with existing command processing
             from entities.npc_actions import NPCActionHandler
             is_command, action_response = NPCActionHandler.process_player_message(
                 player_message, 
                 agent_id, 
-                player_id="player"  # You might want to pass the actual player ID here
+                player_id="player"
             )
             
             if is_command and action_response:
@@ -769,12 +1402,68 @@ class AIUniverseController:
                 if hasattr(action_response, 'target_id') and action_response.target_id:
                     decision.target_id = action_response.target_id
                 
+                if hasattr(action_response, 'following_advice') and action_response.following_advice:
+                    decision.following_advice = action_response.following_advice
+                
+                if hasattr(action_response, 'advice_direction') and action_response.advice_direction:
+                    decision.advice_direction = action_response.advice_direction
+                
+                if hasattr(action_response, 'advice_distance'):
+                    decision.advice_distance = action_response.advice_distance
+                
+                if hasattr(action_response, 'advice_remaining_distance'):
+                    decision.advice_remaining_distance = action_response.advice_remaining_distance
+                
                 logger.info(f"DEBUG: Queuing command response decision for agent {agent_id}")
                 
                 # Put the decision in the queue for the game engine
                 self.decision_queue.put(decision)
                 return
-
+            
+            # Check if this is advice about directions or resources
+            advice = self._parse_player_advice(player_message)
+            if advice:
+                logger.info(f"DEBUG: Detected advice in message: {advice}")
+                
+                # Create a movement decision based on the advice
+                direction = advice.get('direction', '').lower()
+                distance = advice.get('distance', 1)
+                what = advice.get('what', 'resource')
+                
+                # Map direction to action
+                action = None
+                if direction == 'right':
+                    action = 'move_right'
+                elif direction == 'left':
+                    action = 'move_left'
+                elif direction == 'up':
+                    action = 'move_up'
+                elif direction == 'down':
+                    action = 'move_down'
+                
+                if action:
+                    logger.info(f"DEBUG: Created movement decision based on advice: {action}")
+                    
+                    # First, acknowledge the advice
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech=f"Thanks for the tip! I'll go check for {what} to the {direction}."
+                    )
+                    self.decision_queue.put(decision)
+                    
+                    # Then create a decision to follow the advice
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action=action,
+                        speech=f"I'll check for {what} {distance} tiles to the {direction}.",
+                        following_advice=True,
+                        advice_direction=direction,
+                        advice_distance=distance,
+                        advice_remaining_distance=distance  # Set the remaining distance
+                    )
+                    self.decision_queue.put(decision)
+                    return
             
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
@@ -890,6 +1579,9 @@ class AIUniverseController:
 
 
 
+
+
+
     
     def _process_agents(self):
         """Process agents that need decisions"""
@@ -932,11 +1624,11 @@ class AIUniverseController:
                     # Update mood
                     agent.mood = max(0.0, min(1.0, agent.mood + decision.mood_change))
                     
-                    # Update memory
-                    if decision.memory_update:
+                    # Update memory if there's a reason
+                    if hasattr(decision, 'reason') and decision.reason:
                         agent.memory.append({
                             "timestamp": time.time(),
-                            "content": decision.memory_update
+                            "content": decision.reason
                         })
                         # Keep memory limited to last 20 items
                         if len(agent.memory) > 20:
@@ -948,11 +1640,140 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error processing agents: {e}")
             logger.error(traceback.format_exc())
+
     
-    def update_agent_state(self, agent_id: str, **kwargs):
+    def _parse_player_advice(self, message: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse player messages for actionable advice
+        Returns a dictionary with parsed advice or None if no advice detected
+        """
+        advice = None
+        message = message.lower()
+        
+        # Pattern for directional advice (e.g., "water 5 blocks to the left")
+        direction_patterns = [
+            r"(?:there is|there's|is|are)\s+(\w+)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)",
+            r"(?:move|go|head)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)",
+            r"(?:move|go|head)\s+(?:to\s+)?(?:the\s+)?(\w+)\s+(\d+)\s+(?:blocks?|tiles?)",
+            r"if you are (?:thirsty|hungry) (?:move|go|head)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)"
+        ]
+        
+        # Try each pattern
+        for pattern in direction_patterns:
+            match = re.search(pattern, message)
+            if match:
+                groups = match.groups()
+                
+                # Handle different pattern formats
+                if len(groups) == 3:  # "there is water 5 tiles to the right"
+                    what, distance, direction = groups
+                    try:
+                        distance = int(distance)
+                        advice = {
+                            "type": "direction",
+                            "what": what,
+                            "distance": distance,
+                            "direction": direction,
+                            "confidence": 0.9  # High confidence for explicit directions
+                        }
+                        logger.info(f"DEBUG: Parsed player advice: {advice}")
+                        return advice
+                    except ValueError:
+                        pass
+                elif len(groups) == 2:
+                    # Check if first group is a number ("move 5 tiles right")
+                    try:
+                        distance = int(groups[0])
+                        direction = groups[1]
+                        advice = {
+                            "type": "direction",
+                            "what": "resource",  # Generic resource
+                            "distance": distance,
+                            "direction": direction,
+                            "confidence": 0.8
+                        }
+                        logger.info(f"DEBUG: Parsed player advice: {advice}")
+                        return advice
+                    except ValueError:
+                        # First group might be direction ("move right 5 tiles")
+                        try:
+                            direction = groups[0]
+                            distance = int(groups[1])
+                            advice = {
+                                "type": "direction",
+                                "what": "resource",
+                                "distance": distance,
+                                "direction": direction,
+                                "confidence": 0.8
+                            }
+                            logger.info(f"DEBUG: Parsed player advice: {advice}")
+                            return advice
+                        except ValueError:
+                            pass
+        
+        # Check for water-specific advice
+        if "water" in message and any(word in message for word in ["thirsty", "drink", "find"]):
+            # Look for direction words
+            directions = {
+                "right": ["right", "east"],
+                "left": ["left", "west"],
+                "up": ["up", "north", "above"],
+                "down": ["down", "south", "below"]
+            }
+            
+            for direction_key, direction_words in directions.items():
+                if any(word in message for word in direction_words):
+                    # Try to find a number for distance
+                    distance_match = re.search(r"(\d+)", message)
+                    distance = int(distance_match.group(1)) if distance_match else 5  # Default to 5 if no number
+                    
+                    advice = {
+                        "type": "direction",
+                        "what": "water",
+                        "distance": distance,
+                        "direction": direction_key,
+                        "confidence": 0.7  # Medium confidence for less explicit directions
+                    }
+                    logger.info(f"DEBUG: Parsed water-specific advice: {advice}")
+                    return advice
+        
+        # Pattern for location advice (e.g., "there's water near the mountain")
+        location_pattern = r"(?:there is|there's|is|are)\s+(\w+)\s+(?:near|by|at|close to)\s+(?:the\s+)?(\w+)"
+        location_match = re.search(location_pattern, message)
+        
+        if location_match:
+            what, landmark = location_match.groups()
+            advice = {
+                "type": "location",
+                "what": what,
+                "landmark": landmark,
+                "confidence": 0.7  # Medium confidence for less precise directions
+            }
+            logger.info(f"DEBUG: Parsed location advice: {advice}")
+            return advice
+            
+        return None
+
+
+    
+    def update_agent_state(self, agent_id, **kwargs):
         """Update an agent's state from the game engine"""
         update = {"agent_id": agent_id, **kwargs}
         self.state_update_queue.put(update)
+        
+        # Check if there's a player message to process
+        if "player_message" in kwargs:
+            # Parse the message for advice
+            advice = self._parse_player_advice(kwargs["player_message"])
+            if advice and agent_id in self.agents:
+                # Get the agent state from the agents dictionary
+                agent_state = self.agents[agent_id]
+                # Store the advice in the agent state
+                agent_state.player_advice = advice
+                agent_state.player_advice_time = time.time()  # Use current time instead of self.current_time
+                agent_state.advice_followed = False  # Reset this flag
+                logger.info(f"DEBUG: Stored player advice for agent {agent_id}: {advice}")
+
     
     def get_pending_decisions(self) -> List[AgentDecision]:
         """Get all pending decisions for the game engine"""

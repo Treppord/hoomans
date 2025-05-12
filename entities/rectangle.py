@@ -143,6 +143,10 @@ class Rectangle:
         
         # Update animation
         self.update_animation()
+        
+        # Check if we're near water and replenish thirst if needed
+        self.check_and_replenish_thirst()
+
     
     def render(self, screen, camera):
         """Render the entity with camera transformations"""
@@ -177,3 +181,40 @@ class Rectangle:
         
         return (entity_x <= screen_x <= entity_x + width and
                 entity_y <= screen_y <= entity_y + height)
+
+    def check_and_replenish_thirst(self):
+        """Check if entity is adjacent to water and replenish thirst if needed"""
+        # Skip if entity doesn't have thirst attribute
+        if not hasattr(self, 'thirst'):
+            return
+            
+        # Skip if thirst is already full
+        if self.thirst >= 10:
+            return
+            
+        # Get the world map
+        from engine.core import SimpleGameEngine
+        world_map = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        # Check if we're adjacent to water
+        if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+            # Get current time
+            current_time = pygame.time.get_ticks()
+            
+            # Only drink every 2 seconds to prevent instant refill
+            if not hasattr(self, 'last_drink_time') or current_time - self.last_drink_time > 2000:
+                self.thirst += 1
+                self.last_drink_time = current_time
+                
+                # Print message
+                entity_type = "Player" if hasattr(self, 'controllable') and self.controllable else "NPC"
+                print(f"{entity_type} drank water, thirst increased to {self.thirst}")
+                
+                # Show a speech bubble for NPCs
+                if entity_type == "NPC" and hasattr(SimpleGameEngine.instance, 'ui'):
+                    if self.thirst == 10:
+                        SimpleGameEngine.instance.ui.add_text_bubble("Ahh, my thirst is quenched!", self, duration=2.0)
+                    else:
+                        SimpleGameEngine.instance.ui.add_text_bubble("*drinks water*", self, duration=1.0)

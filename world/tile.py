@@ -96,6 +96,7 @@ class Tile:
     def is_water(self):
         """Check if this tile is a water tile"""
         return self.type in ["water", "deep_water", "shallow_water"]
+
     
     def is_walkable(self):
         """Check if entities can walk on this tile"""

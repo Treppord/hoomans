@@ -385,21 +385,21 @@ class CharacterInfoPanel(UIElement):
             
             # Display thirst if available
             if hasattr(self.entity, 'thirst'):
-                thirst_text = f"Thirst: {self.entity.thirst}/5"
+                thirst_text = f"Thirst: {self.entity.thirst}/10"
                 thirst_surface = self.small_font.render(thirst_text, True, self.text_color)
                 panel_surface.blit(thirst_surface, (self.padding, stats_y))
                 stats_y += 25
             
             # Display hunger if available
             if hasattr(self.entity, 'hunger'):
-                hunger_text = f"Hunger: {self.entity.hunger}/5"
+                hunger_text = f"Hunger: {self.entity.hunger}/10"
                 hunger_surface = self.small_font.render(hunger_text, True, self.text_color)
                 panel_surface.blit(hunger_surface, (self.padding, stats_y))
                 stats_y += 25
             
             # Display health if available
             if hasattr(self.entity, 'health'):
-                health_text = f"Health: {self.entity.health}/5"
+                health_text = f"Health: {self.entity.health}/20"
                 health_surface = self.small_font.render(health_text, True, self.text_color)
                 panel_surface.blit(health_surface, (self.padding, stats_y))
                 stats_y += 25

@@ -11,7 +11,15 @@ from ai_universe_controller import WorldStateCollector
 import random
 
 class SimpleGameEngine:
-    def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60):
+    def setup_world_cache(self):
+        """Set up the world cache for persistent memory"""
+        from world.world_cache import WorldCache
+        self.world_cache = WorldCache()  # Use default cache_dir
+        self.world_cache.set_world_seed(self.map_seed)  # Set the seed separately
+        print(f"DEBUG: World cache initialized with seed {self.map_seed}")
+
+    # Modify the __init__ method to include world_cache initialization
+    def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60, map_seed=None):
         # Initialize pygame
         pygame.init()
         
@@ -27,6 +35,8 @@ class SimpleGameEngine:
         # Set up the clock for controlling frame rate
         self.clock = pygame.time.Clock()
         self.fps = fps
+        self.map_seed = map_seed
+
         
         # Initialize camera
         self.camera = Camera(width, height)
@@ -52,6 +62,10 @@ class SimpleGameEngine:
         # Initialize UI manager
         self.ui = UIManager(width, height)
         
+        # Initialize world cache if seed is provided
+        if self.map_seed is not None:
+            self.setup_world_cache()
+        
         # Player reference (will be set when player is added)
         self.player = None
         
@@ -66,13 +80,14 @@ class SimpleGameEngine:
         
         # Game state
         self.running = False
+
         
     def setup_game_data(self):
         """Set up initial game values"""
         # Create player stats
         self.data.create_player_stat("health", 20, 0, 20)
         self.data.create_player_stat("hunger", 10, 0, 10)
-        self.data.create_player_stat("thirst", 5, 0, 5)
+        self.data.create_player_stat("thirst", 10, 0, 10)
         self.data.create_player_stat("score", 0, 0, None)
         
         # Create game values
@@ -160,6 +175,19 @@ class SimpleGameEngine:
                     player_message=message,
                     should_respond=True
                 )
+                
+                # Check if the message contains advice about water or other resources
+                # This is a simple check that will be enhanced by the AI universe controller
+                if ("water" in message.lower() or "thirsty" in message.lower()) and hasattr(npc, 'thirst') and npc.thirst <= 2:
+                    # If the NPC is thirsty and the player is giving water advice, make them more likely to follow it
+                    self.ai_universe.update_agent_state(
+                        agent_id=str(id(npc)),
+                        needs_advice=True,
+                        advice_topic="water",
+                        advice_urgency=5 - npc.thirst  # Higher urgency for lower thirst
+                    )
+                    print(f"DEBUG: NPC {id(npc)} is thirsty and received potential water advice")
+
 
                 
 
@@ -214,10 +242,8 @@ class SimpleGameEngine:
             if event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     self.camera.zoom_in(0.1)
-                    print(f"Zoomed in: {self.camera.zoom:.2f}")
                 elif event.y < 0:
                     self.camera.zoom_out(0.1)
-                    print(f"Zoomed out: {self.camera.zoom:.2f}")
                 continue
                 
             # Handle mouse buttons for panning
@@ -266,6 +292,15 @@ class SimpleGameEngine:
 
         # Update game time
         self.data.add_to_value("game_time", 1)
+        
+        # Update all game objects
+        for obj in self.objects:
+            if hasattr(obj, 'update'):
+                obj.update()
+        
+        # Update player thirst in data manager if player exists
+        if self.player and hasattr(self.player, 'thirst'):
+            self.data.get_player_stat("thirst").set(self.player.thirst)
         
         # Update AI Universe for NPCs
         if hasattr(self, 'ai_universe'):
@@ -352,7 +387,7 @@ class SimpleGameEngine:
             self.data.get_player_stat("thirst").set(self.player.thirst)
         
         # Example: slowly decrease hunger and thirst over time
-        if self.data.get_value("game_time").value % 600 == 0:  # Every 10 seconds (at 60 FPS)
+        if self.data.get_value("game_time").value % 1200 == 0:  # Every 20 seconds (at 60 FPS)
             if self.data.get_player_stat("hunger").value > 0:
                 self.data.get_player_stat("hunger").subtract(1)
             if self.data.get_player_stat("thirst").value > 0:
@@ -361,7 +396,6 @@ class SimpleGameEngine:
                 # Also update player entity's thirst if it exists
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
-                    print(f"Player thirst decreased to {self.player.thirst}")
 
 
 
