@@ -5,6 +5,14 @@ import math
 class Rectangle:
     """Base class for all rectangular entities in the game"""
     
+import pygame
+import os
+import math
+import hashlib
+
+class Rectangle:
+    """Base class for all rectangular entities in the game"""
+    
     def __init__(self, grid_x, grid_y, color=(255, 255, 255), speed=1, controllable=False):
         self.grid_x = grid_x
         self.grid_y = grid_y
@@ -37,6 +45,28 @@ class Rectangle:
         # Add properties for camera compatibility
         self.width = 16
         self.height = 16
+        
+        # Generate a persistent ID
+        self.entity_id = self.generate_persistent_id()
+    
+    def generate_persistent_id(self):
+        """Generate a persistent ID based on entity characteristics"""
+        # Create a string with entity properties that should remain consistent
+        id_string = f"{self.__class__.__name__}_{self.grid_x}_{self.grid_y}_{self.color}_{self.controllable}"
+        
+        # If CNA file exists, include it in the ID calculation
+        if hasattr(self, 'cna_file') and self.cna_file:
+            id_string += f"_{os.path.basename(self.cna_file)}"
+        
+        # Hash the string to create a consistent ID
+        hash_object = hashlib.md5(id_string.encode())
+        # Return a formatted binary-like string (first 16 chars of hex digest)
+        return f"0b{hash_object.hexdigest()[:16]}"
+    
+    def get_entity_id(self):
+        """Get the persistent entity ID"""
+        return self.entity_id
+
     
     # Add properties for camera compatibility
     @property

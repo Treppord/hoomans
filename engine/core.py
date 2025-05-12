@@ -165,11 +165,11 @@ class SimpleGameEngine:
         if hasattr(self, 'ai_universe'):
             for npc in nearby_npcs:
                 # Debug output
-                print(f"DEBUG: Requesting chat response from NPC {id(npc)} at position ({npc.grid_x}, {npc.grid_y})")
+                print(f"DEBUG: Requesting chat response from NPC {npc.get_entity_id()} at position ({npc.grid_x}, {npc.grid_y})")
                 
                 # Create a special state update to trigger a response
                 self.ai_universe.update_agent_state(
-                    agent_id=str(id(npc)),
+                    agent_id=npc.get_entity_id(),  # Use persistent ID
                     grid_x=npc.grid_x,
                     grid_y=npc.grid_y,
                     player_message=message,
@@ -181,14 +181,12 @@ class SimpleGameEngine:
                 if ("water" in message.lower() or "thirsty" in message.lower()) and hasattr(npc, 'thirst') and npc.thirst <= 2:
                     # If the NPC is thirsty and the player is giving water advice, make them more likely to follow it
                     self.ai_universe.update_agent_state(
-                        agent_id=str(id(npc)),
+                        agent_id=npc.get_entity_id(),  # Use persistent ID
                         needs_advice=True,
                         advice_topic="water",
                         advice_urgency=5 - npc.thirst  # Higher urgency for lower thirst
                     )
-                    print(f"DEBUG: NPC {id(npc)} is thirsty and received potential water advice")
-
-
+                    print(f"DEBUG: NPC {npc.get_entity_id()} is thirsty and received potential water advice")
                 
 
         
@@ -312,9 +310,12 @@ class SimpleGameEngine:
                     nearby_entities = WorldStateCollector.collect_nearby_entities(
                         self.objects, obj.grid_x, obj.grid_y, radius=5)
                     
+                    # Use persistent entity ID instead of object ID
+                    entity_id = obj.get_entity_id()
+                    
                     # Update agent state in AI universe
                     self.ai_universe.update_agent_state(
-                        agent_id=str(id(obj)),  # Use object ID as agent ID
+                        agent_id=entity_id,  # Use persistent ID
                         grid_x=obj.grid_x,
                         grid_y=obj.grid_y,
                         thirst=obj.thirst if hasattr(obj, 'thirst') else 5,
@@ -342,11 +343,11 @@ class SimpleGameEngine:
                                     if random.random() < 0.2 and hasattr(self, 'ai_universe'):
                                         # Create a special state update for NPC-to-NPC chat
                                         self.ai_universe.update_agent_state(
-                                            agent_id=str(id(obj1)),
+                                            agent_id=obj1.get_entity_id(),  # Use persistent ID
                                             grid_x=obj1.grid_x,
                                             grid_y=obj1.grid_y,
                                             npc_interaction=True,
-                                            other_npc_id=str(id(obj2))
+                                            other_npc_id=obj2.get_entity_id()  # Use persistent ID
                                         )
                                         # Only one NPC needs to initiate
                                         break
@@ -358,7 +359,7 @@ class SimpleGameEngine:
                 # Find the corresponding object
                 found_object = False
                 for obj in self.objects:
-                    if str(id(obj)) == decision.agent_id:
+                    if obj.get_entity_id() == decision.agent_id:  # Use persistent ID
                         found_object = True
                         # Apply the decision to the NPC
                         if isinstance(obj, NPC):
@@ -375,6 +376,7 @@ class SimpleGameEngine:
                 
                 if not found_object:
                     print(f"DEBUG: Could not find object for agent {decision.agent_id}")
+
         
         # Update AI for all NPCs (keep the existing AI system as fallback)
         self.ai_manager.update(self.world_map, self.objects)

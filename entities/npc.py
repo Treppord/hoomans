@@ -1,7 +1,8 @@
 from entities.rectangle import Rectangle
 import pygame
 import random
-import time
+import hashlib
+import os
 
 class NPC(Rectangle):
     """An NPC entity controlled by AI"""
@@ -127,6 +128,19 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
+    
+    
+    def get_entity_id(self):
+        """Get the persistent entity ID"""
+        # If we have a CNA file, use it to make the ID more specific
+        if hasattr(self, 'cna_file') and self.cna_file:
+            cna_filename = os.path.basename(self.cna_file)
+            # Create a more specific ID for NPCs with CNA data
+            id_string = f"NPC_{cna_filename}_{self.grid_x}_{self.grid_y}"
+            hash_object = hashlib.md5(id_string.encode())
+            return f"0b{hash_object.hexdigest()[:16]}"
+        # Otherwise use the base class implementation
+        return super().get_entity_id()
     
     def start_exploring(self):
         """Start exploring in a random direction"""
