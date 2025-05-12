@@ -1015,6 +1015,7 @@ class AIUniverseController:
 
 
 
+
     def _get_agent_memory_for_location(self, agent_id: str, resource_type: str) -> Optional[Dict]:
         """
         Retrieve an agent's memory about a specific resource location
@@ -1066,10 +1067,20 @@ class AIUniverseController:
             # If agent is or has been near this location, they might know about it
             if distance <= 10:  # Within reasonable distance
                 print(f"DEBUG: Found nearby location at ({location.get('x')}, {location.get('y')})")
-                return location
+                # Important: Don't return the location directly, create a copy with this agent as discoverer
+                # This prevents accidentally attributing the discovery to this agent
+                location_copy = location.copy()
+                return {
+                    "location_type": resource_type,
+                    "x": location["x"],
+                    "y": location["y"],
+                    "name": location.get("name", f"{resource_type} source")
+                }
                 
         print(f"DEBUG: No memory found for {resource_type}")
         return None
+
+
 
     
     def _generate_chat_response(self, agent_id, player_message):
@@ -1085,6 +1096,13 @@ class AIUniverseController:
             
             # Check if this is a memory query
             is_memory_query, resource_type = self._is_memory_query(player_message)
+            
+            # Special handling for water queries
+            if "water" in player_message.lower() and any(word in player_message.lower() for word in ["where", "location", "know", "remember", "nearby"]):
+                is_memory_query = True
+                resource_type = "water"
+                logger.info(f"DEBUG: Detected water query override")
+            
             if is_memory_query:
                 logger.info(f"DEBUG: Detected memory query for resource type: {resource_type}")
                 
@@ -1137,6 +1155,114 @@ class AIUniverseController:
                     
                     return
                 
+                # Direct check for water sources in world cache
+                if resource_type == "water" and hasattr(self, 'world_cache'):
+                    # Try to get world cache from game engine if not already available
+                    if not hasattr(self, 'world_cache'):
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                            self.world_cache = SimpleGameEngine.instance.world_cache
+                    
+                    # Check if we have water locations in the cache
+                    water_locations = self.world_cache.get_discovered_locations("water")
+                    print(f"DEBUG: Found {len(water_locations)} water locations in cache")
+                    
+                    if water_locations:
+                        # Find locations discovered by this agent
+                        agent_water_locations = [loc for loc in water_locations if "discovered_by" in loc and agent_id in loc["discovered_by"]]
+                        
+                        if agent_water_locations:
+                            # Use the most recently discovered water location
+                            location = max(agent_water_locations, key=lambda loc: loc.get("discovery_time", 0))
+                            
+                            x = location.get("x")
+                            y = location.get("y")
+                            name = location.get("name", "Water source")
+                            
+                            # Calculate direction from agent to location
+                            direction = ""
+                            if x is not None and y is not None:
+                                dx = x - agent.grid_x
+                                dy = y - agent.grid_y
+                                
+                                if abs(dx) > abs(dy):
+                                    direction = "east" if dx > 0 else "west"
+                                else:
+                                    direction = "south" if dy > 0 else "north"
+                                    
+                                # Calculate distance
+                                distance = abs(dx) + abs(dy)
+                                
+                                response = f"Yes, I found a {name} at coordinates ({x}, {y}). "
+                                response += f"That's about {distance} tiles to the {direction} from here."
+                            else:
+                                response = f"Yes, I remember finding a {name}, but I'm not sure exactly where it was."
+                            
+                            # Create a decision with the response
+                            decision = AgentDecision(
+                                agent_id=agent_id,
+                                action="idle",
+                                speech=response,
+                                mood_change=0.1
+                            )
+                            self.decision_queue.put(decision)
+                            return
+                        else:
+                            # Check if there are any water locations nearby that the agent might know about
+                            nearby_water = None
+                            for location in water_locations:
+                                # Calculate Manhattan distance
+                                distance = abs(location["x"] - agent.grid_x) + abs(location["y"] - agent.grid_y)
+                                # If agent is or has been near this location, they might know about it
+                                if distance <= 10:  # Within reasonable distance
+                                    nearby_water = location
+                                    break
+                            
+                            if nearby_water:
+                                x = nearby_water.get("x")
+                                y = nearby_water.get("y")
+                                name = nearby_water.get("name", "Water source")
+                                
+                                # Calculate direction from agent to location
+                                direction = ""
+                                if x is not None and y is not None:
+                                    dx = x - agent.grid_x
+                                    dy = y - agent.grid_y
+                                    
+                                    if abs(dx) > abs(dy):
+                                        direction = "east" if dx > 0 else "west"
+                                    else:
+                                        direction = "south" if dy > 0 else "north"
+                                        
+                                    # Calculate distance
+                                    distance = abs(dx) + abs(dy)
+                                    
+                                    response = f"I've seen a {name} at coordinates ({x}, {y}). "
+                                    response += f"That's about {distance} tiles to the {direction} from here."
+                                    
+                                    # Create a decision with the response
+                                    decision = AgentDecision(
+                                        agent_id=agent_id,
+                                        action="idle",
+                                        speech=response,
+                                        mood_change=0.1
+                                    )
+                                    self.decision_queue.put(decision)
+                                    
+                                    # IMPORTANT: Record this as a memory for this agent
+                                    # This ensures the agent "knows" about this location for future queries
+                                    if hasattr(self, 'world_cache'):
+                                        print(f"DEBUG: Recording water location memory for agent {agent_id}")
+                                        self.world_cache.add_location_discovery(
+                                            agent_id,
+                                            "water",
+                                            x,
+                                            y,
+                                            name
+                                        )
+                                    
+                                    return
+                
                 # Handle specific resource type query
                 memory_data = self._get_agent_memory_for_location(agent_id, resource_type)
                 
@@ -1162,6 +1288,29 @@ class AIUniverseController:
                         
                         response = f"I remember finding {name} at coordinates ({x}, {y}). "
                         response += f"That's about {distance} tiles to the {direction} from here."
+                        
+                        # IMPORTANT: Record this as a memory for this agent if it's not already recorded
+                        # This ensures the agent "knows" about this location for future queries
+                        if hasattr(self, 'world_cache'):
+                            # Check if this agent already has this memory
+                            agent_memories = self.world_cache.get_entity_memories(agent_id)
+                            has_memory = False
+                            for memory in agent_memories:
+                                if (memory.get("type") == "location_discovery" and
+                                    memory.get("data", {}).get("x") == x and
+                                    memory.get("data", {}).get("y") == y):
+                                    has_memory = True
+                                    break
+                            
+                            if not has_memory:
+                                print(f"DEBUG: Recording {resource_type} location memory for agent {agent_id}")
+                                self.world_cache.add_location_discovery(
+                                    agent_id,
+                                    resource_type,
+                                    x,
+                                    y,
+                                    name
+                                )
                     else:
                         response = f"I remember finding {name}, but I'm not sure exactly where it was."
                     
@@ -1370,6 +1519,7 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
             logger.error(traceback.format_exc())
+
 
 
 

@@ -161,67 +161,62 @@ class WorldCache:
             y: Y coordinate
             name: Optional name for the location
         """
-        if not self.current_seed:
-            logger.warning("Cannot add location discovery: No current seed set")
-            return False
-            
-        # Create default name if none provided
-        if not name:
-            name = f"{location_type.capitalize()} source"
-            
-        # Add to entity memories
+        # Convert entity_id to string if it's not already
+        entity_id = str(entity_id)
+        
+        # Ensure entity_id is in the memories dictionary
         if entity_id not in self.entity_memories:
             self.entity_memories[entity_id] = []
-            
-        # Check if this entity already has this location in memory
-        for memory in self.entity_memories[entity_id]:
-            if (memory.get("type") == "location_discovery" and
-                memory.get("data", {}).get("location_type") == location_type and
-                memory.get("data", {}).get("x") == x and
-                memory.get("data", {}).get("y") == y):
-                # Already discovered, no need to add again
-                return True
-                
-        # Add new memory
+        
+        # Create the memory entry
         memory = {
             "type": "location_discovery",
             "data": {
                 "location_type": location_type,
                 "x": x,
                 "y": y,
-                "name": name
+                "name": name or f"{location_type.capitalize()} source"
             },
             "timestamp": time.time()
         }
+        
+        # Add to entity memories
         self.entity_memories[entity_id].append(memory)
         
-        # Add to discovered locations
+        # Also record in discovered locations
         if location_type not in self.discovered_locations:
             self.discovered_locations[location_type] = []
-            
-        # Check if this location is already in the list
-        for location in self.discovered_locations[location_type]:
-            if location.get("x") == x and location.get("y") == y:
-                # Location already discovered, just add this entity to discoverers
-                if "discovered_by" not in location:
-                    location["discovered_by"] = []
-                if entity_id not in location["discovered_by"]:
-                    location["discovered_by"].append(entity_id)
-                return True
-                
-        # Add new location
-        location = {
-            "x": x,
-            "y": y,
-            "name": name,
-            "discovered_by": [entity_id],
-            "discovery_time": time.time()
-        }
-        self.discovered_locations[location_type].append(location)
         
-        # Save cache after adding new data
-        self._save_cache()
-        return True
+        # Check if this location already exists
+        location_exists = False
+        for loc in self.discovered_locations[location_type]:
+            if loc["x"] == x and loc["y"] == y:
+                # Location exists, add this entity to discoverers if not already there
+                if "discovered_by" not in loc:
+                    loc["discovered_by"] = []
+                if entity_id not in loc["discovered_by"]:
+                    loc["discovered_by"].append(entity_id)
+                location_exists = True
+                break
+        
+        # If location doesn't exist, add it
+        if not location_exists:
+            self.discovered_locations[location_type].append({
+                "x": x,
+                "y": y,
+                "name": name or f"{location_type.capitalize()} source",
+                "discovered_by": [entity_id],
+                "discovery_time": time.time()
+            })
+        
+        # Save the cache
+        self._save_cache()  # Changed from self.save_cache() to self._save_cache()
+        
+        # Get the cache file path for the current seed
+        cache_file = os.path.join(self.cache_dir, f"world_{self.current_seed}.json") if self.current_seed else "No cache file (no seed set)"
+        
+        print(f"DEBUG: Saved world cache to {cache_file}")
+        print(f"DEBUG: Cache contains {len(self.entity_memories)} entity memories and {len(self.discovered_locations)} location types")
         
     def get_entity_memories(self, entity_id):
         """Get all memories for a specific entity"""

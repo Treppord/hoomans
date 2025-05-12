@@ -43,71 +43,82 @@ class NPC(Rectangle):
         
         # If we've finished moving and have remaining advice distance, continue moving
         if hasattr(self, 'advice_remaining_distance') and self.advice_remaining_distance > 0 and not self.is_moving:
-            if self.advice_direction == "left":
-                self.target_grid_x = self.grid_x - 1
-                self.is_moving = True
-            elif self.advice_direction == "right":
-                self.target_grid_x = self.grid_x + 1
-                self.is_moving = True
-            elif self.advice_direction == "up":
-                self.target_grid_y = self.grid_y - 1
-                self.is_moving = True
-            elif self.advice_direction == "down":
-                self.target_grid_y = self.grid_y + 1
-                self.is_moving = True
-            
-            self.advice_remaining_distance -= 1
-            
-            # If we've reached the destination, check for what we were looking for
-            if self.advice_remaining_distance == 0:
-                from engine.core import SimpleGameEngine
-                if hasattr(SimpleGameEngine, 'instance'):
-                    game_engine = SimpleGameEngine.instance
-                    # Check if we found what we were looking for (e.g., water)
-                    if game_engine.world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
-                        print(f"DEBUG: NPC {id(self)} found water as advised by player!")
-                        
-                        # Record the water source discovery in world cache
-                        if hasattr(game_engine, 'world_cache'):
-                            game_engine.world_cache.add_location_discovery(
-                                str(id(self)),
-                                "water",
-                                self.grid_x,
-                                self.grid_y,
-                                "Water source found via player advice"
-                            )
-                        
-                        # Update AI universe state to reflect this
-                        if hasattr(game_engine, 'ai_universe'):
-                            game_engine.ai_universe.update_agent_state(
-                                agent_id=str(id(self)),
-                                advice_followed=True,
-                                advice_success=True,
-                                memory_event="Found water where the player said it would be."
-                            )
+            if hasattr(self, 'advice_direction'):
+                if self.advice_direction == "left":
+                    self.target_grid_x = self.grid_x - 1
+                    self.is_moving = True
+                elif self.advice_direction == "right":
+                    self.target_grid_x = self.grid_x + 1
+                    self.is_moving = True
+                elif self.advice_direction == "up":
+                    self.target_grid_y = self.grid_y - 1
+                    self.is_moving = True
+                elif self.advice_direction == "down":
+                    self.target_grid_y = self.grid_y + 1
+                    self.is_moving = True
+                
+                self.advice_remaining_distance -= 1
+                
+                # If we've reached the destination, check for what we were looking for
+                if self.advice_remaining_distance == 0:
+                    from engine.core import SimpleGameEngine
+                    if hasattr(SimpleGameEngine, 'instance'):
+                        game_engine = SimpleGameEngine.instance
+                        # Check if we found what we were looking for (e.g., water)
+                        if game_engine.world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+                            print(f"DEBUG: NPC {id(self)} found water as advised by player!")
                             
-                        # If we're thirsty, drink immediately
-                        if self.thirst < 10:
-                            self.thirst += 1
-                            print(f"NPC drank water, thirst increased to {self.thirst}")
+                            # Record the water source discovery in world cache
+                            if hasattr(game_engine, 'world_cache'):
+                                # Find the actual water tile
+                                water_x, water_y = None, None
+                                for dx, dy in [(0, 0), (0, 1), (1, 0), (0, -1), (-1, 0)]:
+                                    nx, ny = self.grid_x + dx, self.grid_y + dy
+                                    if game_engine.world_map.get_tile(nx, ny) and game_engine.world_map.get_tile(nx, ny).is_water():
+                                        water_x, water_y = nx, ny
+                                        break
+                                
+                                if water_x is not None and water_y is not None:
+                                    # Record the discovery in world cache
+                                    game_engine.world_cache.add_location_discovery(
+                                        str(id(self)),  # Use string representation of NPC's ID
+                                        "water",        # Location type
+                                        water_x,        # X coordinate
+                                        water_y,        # Y coordinate
+                                        "Water source found via player advice"  # Name
+                                    )
+                            
+                            # Update AI universe state to reflect this
+                            if hasattr(game_engine, 'ai_universe'):
+                                game_engine.ai_universe.update_agent_state(
+                                    agent_id=str(id(self)),
+                                    advice_followed=True,
+                                    advice_success=True,
+                                    memory_event="Found water where the player said it would be."
+                                )
+                                
+                            # If we're thirsty, drink immediately
+                            if self.thirst < 5:
+                                self.thirst += 1
+                                print(f"NPC drank water, thirst increased to {self.thirst}")
+                                
+                                # Show a speech bubble
+                                if hasattr(game_engine, 'ui'):
+                                    game_engine.ui.add_text_bubble("Ah, refreshing water! Thank you for the advice.", self, duration=3.0)
+                        else:
+                            print(f"DEBUG: NPC {id(self)} did not find what they were looking for at the advised location.")
+                            # Update AI universe state
+                            if hasattr(game_engine, 'ai_universe'):
+                                game_engine.ai_universe.update_agent_state(
+                                    agent_id=str(id(self)),
+                                    advice_followed=True,
+                                    advice_success=False,
+                                    memory_event="Did not find what the player said would be here."
+                                )
                             
                             # Show a speech bubble
                             if hasattr(game_engine, 'ui'):
-                                game_engine.ui.add_text_bubble("Ah, refreshing water! Thank you for the advice.", self, duration=3.0)
-                    else:
-                        print(f"DEBUG: NPC {id(self)} did not find what they were looking for at the advised location.")
-                        # Update AI universe state
-                        if hasattr(game_engine, 'ai_universe'):
-                            game_engine.ai_universe.update_agent_state(
-                                agent_id=str(id(self)),
-                                advice_followed=True,
-                                advice_success=False,
-                                memory_event="Did not find what the player said would be here."
-                            )
-                        
-                        # Show a speech bubble
-                        if hasattr(game_engine, 'ui'):
-                            game_engine.ui.add_text_bubble("Hmm, I don't see what you mentioned here.", self, duration=3.0)
+                                game_engine.ui.add_text_bubble("Hmm, I don't see what you mentioned here.", self, duration=3.0)
 
     
     def apply_ai_decision(self, decision):
@@ -165,7 +176,7 @@ class NPC(Rectangle):
             game_engine = None
             if hasattr(SimpleGameEngine, 'instance'):
                 game_engine = SimpleGameEngine.instance
-                world_map = game_engine.instance.world_map
+                world_map = game_engine.world_map
             
             if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
                 self.thirst += 1
@@ -184,7 +195,7 @@ class NPC(Rectangle):
                     if water_x is not None and water_y is not None:
                         # Record the discovery in world cache
                         game_engine.world_cache.add_location_discovery(
-                            str(id(self)),  # Agent ID
+                            str(id(self)),  # Use string representation of NPC's ID
                             "water",        # Location type
                             water_x,        # X coordinate
                             water_y,        # Y coordinate
