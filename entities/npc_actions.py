@@ -331,10 +331,10 @@ class NPCActionHandler:
         
         # Check for direction advice
         direction_patterns = {
-            'right': ['right', 'east'],
-            'left': ['left', 'west'],
-            'up': ['up', 'north'],
-            'down': ['down', 'south']
+            'right': ['right', 'east', 'rifht', 'rigth'],  
+            'left': ['left', 'west', 'lft', 'letf'],
+            'up': ['up', 'north', 'nrth'],
+            'down': ['down', 'south', 'dwn', 'souht']
         }
         
         # Check for resource types
@@ -414,14 +414,19 @@ class NPCActionHandler:
         
         # Map direction to action
         action = None
-        if direction == 'right':
+        # Normalize direction to handle typos
+        if direction in ['right', 'rifht', 'rigth', 'east']:
             action = 'move_right'
-        elif direction == 'left':
+            direction = 'right'
+        elif direction in ['left', 'lft', 'letf', 'west']:
             action = 'move_left'
-        elif direction == 'up':
+            direction = 'left'
+        elif direction in ['up', 'nrth', 'north']:
             action = 'move_up'
-        elif direction == 'down':
+            direction = 'up'
+        elif direction in ['down', 'dwn', 'souht', 'south']:
             action = 'move_down'
+            direction = 'down'
         
         if not action:
             return None
@@ -436,6 +441,7 @@ class NPCActionHandler:
             advice_distance=distance,
             advice_remaining_distance=distance
         )
+
 
     
     @staticmethod

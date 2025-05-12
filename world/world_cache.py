@@ -110,6 +110,7 @@ class WorldCache:
         self._auto_save()
         
         return True
+
     
     def update_entity_relationship(self, entity_id, other_entity_id, relationship_type, data=None):
         """Update relationship between entities"""

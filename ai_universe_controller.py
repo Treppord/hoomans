@@ -1760,6 +1760,10 @@ class AIUniverseController:
         """Update an agent's state from the game engine"""
         update = {"agent_id": agent_id, **kwargs}
         self.state_update_queue.put(update)
+        if 'cna_id' in kwargs and kwargs['cna_id']:
+            # Use the CNA ID instead of the provided agent_id
+            agent_id = kwargs['cna_id']
+        
         
         # Check if there's a player message to process
         if "player_message" in kwargs:

@@ -93,6 +93,8 @@ if __name__ == "__main__":
     if os.path.exists(cna_file_path):
         print(f"Loading CNA file: {cna_file_path}")
         wanderer.load_cna_file(cna_file_path)
+    if hasattr(wanderer, 'cna_id') and wanderer.cna_id:
+        print(f"Using CNA ID for wanderer: {wanderer.cna_id}")
     else:
         print(f"CNA file not found: {cna_file_path}")
     

@@ -361,3 +361,16 @@ def calculate_entity_color(cna_attributes):
     color = tuple(int(c * brightness) for c in base_color)
     
     return color
+
+def generate_cna_id(cna_attributes):
+    """Generate a consistent ID from CNA attributes"""
+    import hashlib
+        
+    # Create a string representation of key attributes
+    id_string = f"{cna_attributes.first_name}_{cna_attributes.last_name}_{cna_attributes.gender.name}_{cna_attributes.culture.name}"
+        
+        # Generate a hash
+    hash_obj = hashlib.md5(id_string.encode())
+        
+        # Return a hex digest (first 8 characters should be sufficient)
+    return hash_obj.hexdigest()[:8]

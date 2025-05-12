@@ -69,6 +69,8 @@ class SimpleGameEngine:
         # Player reference (will be set when player is added)
         self.player = None
         
+        self.npc_id_map = {}
+        
         # Paused state
         self.paused = False
         
@@ -164,29 +166,33 @@ class SimpleGameEngine:
         # For each nearby NPC, generate a response via AI Universe
         if hasattr(self, 'ai_universe'):
             for npc in nearby_npcs:
+                # Get the agent ID - use CNA ID if available
+                agent_id = npc.cna_id if hasattr(npc, 'cna_id') and npc.cna_id else str(id(npc))
+                
                 # Debug output
-                print(f"DEBUG: Requesting chat response from NPC {id(npc)} at position ({npc.grid_x}, {npc.grid_y})")
+                print(f"DEBUG: Requesting chat response from NPC {agent_id} at position ({npc.grid_x}, {npc.grid_y})")
                 
                 # Create a special state update to trigger a response
                 self.ai_universe.update_agent_state(
-                    agent_id=str(id(npc)),
+                    agent_id=agent_id,
                     grid_x=npc.grid_x,
                     grid_y=npc.grid_y,
                     player_message=message,
-                    should_respond=True
+                    should_respond=True,
+                    cna_id=npc.cna_id if hasattr(npc, 'cna_id') else None  # Pass CNA ID explicitly
                 )
                 
                 # Check if the message contains advice about water or other resources
-                # This is a simple check that will be enhanced by the AI universe controller
                 if ("water" in message.lower() or "thirsty" in message.lower()) and hasattr(npc, 'thirst') and npc.thirst <= 2:
                     # If the NPC is thirsty and the player is giving water advice, make them more likely to follow it
                     self.ai_universe.update_agent_state(
-                        agent_id=str(id(npc)),
+                        agent_id=agent_id,
                         needs_advice=True,
                         advice_topic="water",
-                        advice_urgency=5 - npc.thirst  # Higher urgency for lower thirst
+                        advice_urgency=5 - npc.thirst,  # Higher urgency for lower thirst
+                        cna_id=npc.cna_id if hasattr(npc, 'cna_id') else None  # Pass CNA ID explicitly
                     )
-                    print(f"DEBUG: NPC {id(npc)} is thirsty and received potential water advice")
+                    print(f"DEBUG: NPC {agent_id} is thirsty and received potential water advice")
 
 
                 
@@ -304,8 +310,15 @@ class SimpleGameEngine:
         
         # Update AI Universe for NPCs
         if hasattr(self, 'ai_universe'):
+            self.npc_id_map = {}
             for obj in self.objects:
                 if isinstance(obj, NPC) and hasattr(obj, 'grid_x') and hasattr(obj, 'grid_y'):
+                    # Get the agent ID - use CNA ID if available
+                    agent_id = obj.cna_id if hasattr(obj, 'cna_id') and obj.cna_id else str(id(obj))
+                    
+                    # Add to the ID map
+                    self.npc_id_map[agent_id] = obj
+                    
                     # Collect world state for this NPC
                     nearby_tiles = WorldStateCollector.collect_nearby_tiles(
                         self.world_map, obj.grid_x, obj.grid_y, radius=5)
@@ -314,7 +327,7 @@ class SimpleGameEngine:
                     
                     # Update agent state in AI universe
                     self.ai_universe.update_agent_state(
-                        agent_id=str(id(obj)),  # Use object ID as agent ID
+                        agent_id=agent_id,  # Use CNA ID if available
                         grid_x=obj.grid_x,
                         grid_y=obj.grid_y,
                         thirst=obj.thirst if hasattr(obj, 'thirst') else 5,
@@ -322,8 +335,10 @@ class SimpleGameEngine:
                         health=getattr(obj, 'health', 5),
                         nearby_tiles=nearby_tiles,
                         nearby_entities=nearby_entities,
-                        cna_file=obj.cna_file if hasattr(obj, 'cna_file') else None
+                        cna_file=obj.cna_file if hasattr(obj, 'cna_file') else None,
+                        cna_id=obj.cna_id if hasattr(obj, 'cna_id') else None  # Pass CNA ID explicitly
                     )
+            
             
             # Check for NPC-to-NPC interactions
             for obj1 in self.objects:
@@ -355,25 +370,22 @@ class SimpleGameEngine:
             decisions = self.ai_universe.get_pending_decisions()
             for decision in decisions:
                 print(f"DEBUG: Processing decision for agent {decision.agent_id}, action={decision.action}, speech='{decision.speech}'")
-                # Find the corresponding object
-                found_object = False
-                for obj in self.objects:
-                    if str(id(obj)) == decision.agent_id:
-                        found_object = True
-                        # Apply the decision to the NPC
-                        if isinstance(obj, NPC):
-                            obj.apply_ai_decision(decision)
-                        
-                        # Handle speech with text bubbles
-                        if decision.speech and hasattr(self, 'ui'):
-                            print(f"DEBUG: Adding text bubble for speech: '{decision.speech}'")
-                            self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
-                        elif not decision.speech:
-                            print(f"DEBUG: No speech to display for agent {decision.agent_id}")
-                        
-                        break
                 
-                if not found_object:
+                # Find the corresponding object using the ID map
+                obj = self.npc_id_map.get(decision.agent_id)
+                
+                if obj:
+                    # Apply the decision to the NPC
+                    if isinstance(obj, NPC):
+                        obj.apply_ai_decision(decision)
+                    
+                    # Handle speech with text bubbles
+                    if decision.speech and hasattr(self, 'ui'):
+                        print(f"DEBUG: Adding text bubble for speech: '{decision.speech}'")
+                        self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
+                    elif not decision.speech:
+                        print(f"DEBUG: No speech to display for agent {decision.agent_id}")
+                else:
                     print(f"DEBUG: Could not find object for agent {decision.agent_id}")
         
         # Update AI for all NPCs (keep the existing AI system as fallback)

@@ -35,9 +35,37 @@ class NPC(Rectangle):
         self.last_memory_record_time = 0  # Time of last memory recording
         self.memory_cooldown = 10000  # Milliseconds between memory recordings (10 seconds)
         
+        # CNA data and ID
+        self.cna_data = None
+        self.cna_id = None  # Will be set when CNA file is loaded
+        
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
             self.ai_controller.set_entity(self)
+
+    def load_cna_file(self, filepath):
+        """Load CNA data from a file"""
+        try:
+            from cna_utils import CNACodec, calculate_entity_color, generate_cna_id
+            
+            # Load CNA data
+            self.cna_data = CNACodec.load_from_file(filepath)
+            
+            # Set color based on CNA data
+            self.color = calculate_entity_color(self.cna_data)
+            
+            # Generate and store a consistent ID
+            self.cna_id = generate_cna_id(self.cna_data)
+            
+            # Store the filepath for reference
+            self.cna_file = filepath
+            
+            print(f"DEBUG: Loaded CNA file for NPC: {self.cna_data.first_name} {self.cna_data.last_name}, ID: {self.cna_id}")
+            return True
+        except Exception as e:
+            print(f"ERROR: Failed to load CNA file {filepath}: {e}")
+            return False
+
     
     def update(self):
         """Update entity state"""
