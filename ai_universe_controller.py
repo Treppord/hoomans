@@ -123,7 +123,7 @@ class AgentDecision:
     advice_direction: Optional[str] = None  # Direction from player advice
     advice_distance: int = 0  # Distance from player advice
     advice_remaining_distance: int = 0  # Remaining distance to travel
-
+    is_heading_to_known_water: bool = False  # Whether heading to a known water source
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -298,6 +298,46 @@ PLAYER ADVICE:
 
     def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y, agent_id=None):
         """Validate and correct the AI response based on the agent's needs"""
+        
+        knows_water_sources = False
+        water_locations = []
+        
+        if agent_id and hasattr(self, 'world_cache') and self.world_cache:
+            # Get agent memories
+            agent_memories = self.world_cache.get_entity_memories(agent_id)
+            
+            # Look for water discoveries in memories
+            for memory in agent_memories:
+                if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                    knows_water_sources = True
+                    water_data = memory.get('data', {})
+                    water_locations.append((water_data.get('x'), water_data.get('y')))
+        
+        # If agent knows water sources and is critically thirsty, override to move to water
+        if knows_water_sources and has_critical_thirst and water_locations:
+            # Find the closest water source
+            closest_water = min(water_locations, key=lambda loc: abs(loc[0] - grid_x) + abs(loc[1] - grid_y))
+            water_x, water_y = closest_water
+            
+            # Calculate direction to water
+            dx = water_x - grid_x
+            dy = water_y - grid_y
+            
+            # Determine which direction to move
+            if abs(dx) > abs(dy):
+                action = "move_right" if dx > 0 else "move_left"
+            else:
+                action = "move_down" if dy > 0 else "move_up"
+            
+            # Override the action and speech
+            response_json["action"] = action
+            response_json["speech"] = ""  # No speech about thirst when we know where water is
+            response_json["reason"] = f"Moving to known water source at ({water_x}, {water_y})"
+            response_json["is_heading_to_known_water"] = True
+            
+            print(f"DEBUG: Agent {agent_id} knows about water at {closest_water} and is moving there")
+            
+            return response_json
         
         # Ensure we're working with a dictionary
         if isinstance(response_json, str):
@@ -583,6 +623,63 @@ PLAYER ADVICE:
             # Create a minimal state representation
             prompt = f"Position: ({agent_state.grid_x}, {agent_state.grid_y})\n"
             
+            
+            # Check if agent knows about water sources
+            knows_water_sources = False
+            water_locations = []
+            
+            if hasattr(self, 'world_cache') and self.world_cache:
+                # Get agent memories from cache
+                agent_memories = self.world_cache.get_entity_memories(agent_state.agent_id)
+                
+                # Look for water discoveries in memories
+                for memory in agent_memories:
+                    if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                        knows_water_sources = True
+                        water_data = memory.get('data', {})
+                        if 'x' in water_data and 'y' in water_data:
+                            water_locations.append((water_data.get('x'), water_data.get('y')))
+            
+            # If agent is thirsty and knows water locations, prioritize going there
+            if agent_state.thirst <= 3 and knows_water_sources and water_locations:
+                # Find the closest water source
+                closest_water = min(water_locations, key=lambda loc: abs(loc[0] - agent_state.grid_x) + abs(loc[1] - agent_state.grid_y))
+                water_x, water_y = closest_water
+                
+                # Calculate direction to water
+                dx = water_x - agent_state.grid_x
+                dy = water_y - agent_state.grid_y
+                
+                # If we're at the water source, drink
+                if abs(dx) <= 1 and abs(dy) <= 1:
+                    return AgentDecision(
+                        agent_id=agent_state.agent_id,
+                        action="drink",
+                        speech="",  # No speech needed
+                        reason=f"Drinking from known water source at ({water_x}, {water_y})",
+                        mood_change=0.3
+                    )
+                
+                # Determine which direction to move
+                if abs(dx) > abs(dy):
+                    action = "move_right" if dx > 0 else "move_left"
+                else:
+                    action = "move_down" if dy > 0 else "move_up"
+                
+                print(f"DEBUG: Agent {agent_state.agent_id} is thirsty and moving to known water at ({water_x}, {water_y})")
+                
+                return AgentDecision(
+                    agent_id=agent_state.agent_id,
+                    action=action,
+                    speech="",  # No speech about thirst when we know where water is
+                    reason=f"Moving to known water source at ({water_x}, {water_y})",
+                    target_x=water_x,
+                    target_y=water_y,
+                    mood_change=0.1,
+                    is_heading_to_known_water=True
+                )
+            
+            
             # Add information about water if critically thirsty
             if has_critical_thirst:
                 prompt += "CRITICAL THIRST! "
@@ -671,7 +768,6 @@ PLAYER ADVICE:
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
 
-
         
     def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
         """Generate decisions for multiple agents (one by one)"""
@@ -687,6 +783,8 @@ PLAYER ADVICE:
 class FallbackAI:
     """Simple rule-based AI that can be used when the LLM is not available"""
     
+# In the FallbackAI.generate_decision method, add logic to check for remembered water locations:
+
     @staticmethod
     def generate_decision(agent_state: AgentState) -> AgentDecision:
         """Generate a decision based on simple rules"""
@@ -697,44 +795,85 @@ class FallbackAI:
         mood_change = 0.0
         memory_update = None
         
-        # Check for critical thirst (only when thirst is 0)
-        if agent_state.thirst == 0:
-            # Look for water in nearby tiles
-            water_tiles = [tile for tile in agent_state.nearby_tiles if tile.get("type") == "water"]
-            if water_tiles:
-                # Check if already adjacent to water
-                is_adjacent_to_water = False
-                for tile in water_tiles:
-                    if abs(tile["x"] - agent_state.grid_x) <= 1 and abs(tile["y"] - agent_state.grid_y) <= 1:
-                        is_adjacent_to_water = True
+        # Check for critical thirst (when thirst is 0 or 1)
+        if agent_state.thirst <= 1:
+            # First check if the agent knows about any water sources
+            known_water_location = None
+            
+            # Check agent's memory for water locations
+            if hasattr(agent_state, 'memory'):
+                for memory in agent_state.memory:
+                    if isinstance(memory, dict) and 'content' in memory:
+                        content = memory['content']
+                        # Look for water location memories
+                        if 'water' in content.lower() and 'coordinates' in content.lower():
+                            # Try to extract coordinates
+                            coords_match = re.search(r'coordinates\s*\((\d+),\s*(\d+)\)', content)
+                            if coords_match:
+                                try:
+                                    water_x = int(coords_match.group(1))
+                                    water_y = int(coords_match.group(2))
+                                    known_water_location = (water_x, water_y)
+                                    break
+                                except ValueError:
+                                    pass
+            
+            # If no water in memory, check if we have access to world cache
+            if not known_water_location and hasattr(agent_state, 'agent_id'):
+                # Try to access world cache through AIUniverseController
+                from ai_universe_controller import AIUniverseController
+                controller = None
+                
+                # Try to get controller instance
+                for obj in globals().values():
+                    if isinstance(obj, AIUniverseController) and hasattr(obj, 'world_cache'):
+                        controller = obj
                         break
                 
-                if is_adjacent_to_water:
-                    # If adjacent to water, drink
-                    action = "drink"
-                    speech = "I need water desperately..."
-                    mood_change = 0.3
-                    memory_update = "I found water when I was extremely thirsty."
+                if controller and controller.world_cache:
+                    # Get agent memories from cache
+                    agent_memories = controller.world_cache.get_entity_memories(agent_state.agent_id)
+                    
+                    # Look for water discoveries in memories
+                    for memory in agent_memories:
+                        if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                            water_data = memory.get('data', {})
+                            if 'x' in water_data and 'y' in water_data:
+                                known_water_location = (water_data.get('x'), water_data.get('y'))
+                                break
+            
+            # If we know a water location, move towards it
+            if known_water_location:
+                water_x, water_y = known_water_location
+                dx = water_x - agent_state.grid_x
+                dy = water_y - agent_state.grid_y
+                
+                # Determine which direction to move
+                if abs(dx) > abs(dy):
+                    action = "move_right" if dx > 0 else "move_left"
                 else:
-                    # Move towards the nearest water
-                    nearest_water = min(water_tiles, key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
-                    dx = nearest_water["x"] - agent_state.grid_x
-                    dy = nearest_water["y"] - agent_state.grid_y
-                    
-                    if abs(dx) > abs(dy):
-                        action = "move_right" if dx > 0 else "move_left"
-                    else:
-                        action = "move_down" if dy > 0 else "move_up"
-                    
-                    target_x = nearest_water["x"]
-                    target_y = nearest_water["y"]
-                    speech = "I'm dying of thirst... Need water..."
-                    mood_change = -0.2
-            else:
-                # Wander randomly looking for water
-                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                speech = "So thirsty... must find water..."
-                mood_change = -0.3
+                    action = "move_down" if dy > 0 else "move_up"
+                
+                # Set target coordinates
+                target_x = water_x
+                target_y = water_y
+                
+                # No speech about thirst when we know where water is
+                speech = ""
+                mood_change = 0.1  # Slight mood boost for knowing where to find water
+                memory_update = f"I'm heading to the water source I remember at coordinates ({water_x}, {water_y})."
+                
+                return AgentDecision(
+                    agent_id=agent_state.agent_id,
+                    action=action,
+                    speech=speech,
+                    target_x=target_x,
+                    target_y=target_y,
+                    mood_change=mood_change,
+                    memory_update=memory_update,
+                    is_heading_to_known_water=True  # Add a flag to indicate we're heading to known water
+                )
+
         # Random movement if no critical needs
         elif random.random() < 0.3:  # 30% chance to move
             action = random.choice(["move_left", "move_right", "move_up", "move_down"])

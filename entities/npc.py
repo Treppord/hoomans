@@ -50,6 +50,49 @@ class NPC(Rectangle):
             dx = self.target_grid_x - self.grid_x
             dy = self.target_grid_y - self.grid_y
             
+            # Check if we've reached the target
+            if dx == 0 and dy == 0:
+                self.is_moving = False
+                
+                # Check if we were heading to known water
+                if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+                    # Check if we're adjacent to water
+                    from engine.core import SimpleGameEngine
+                    world_map = None
+                    if hasattr(SimpleGameEngine, 'instance'):
+                        world_map = SimpleGameEngine.instance.world_map
+                    
+                    if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+                        # We've reached water, drink it
+                        self.thirst = min(10, self.thirst + 2)
+                        print(f"NPC {self.get_entity_id()} reached known water source, thirst increased to {self.thirst}")
+                        
+                        # Show a speech bubble about finding water
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            water_speeches = [
+                                "Ah, refreshing water!",
+                                "Finally, water!",
+                                "This water is just what I needed.",
+                                "So good to drink water when you're thirsty!"
+                            ]
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
+                    else:
+                        # We reached the location but there's no water
+                        print(f"NPC {self.get_entity_id()} reached supposed water location but found no water")
+                        
+                        # Show a speech bubble about not finding water
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            no_water_speeches = [
+                                "Strange, I thought there was water here...",
+                                "The water source is gone!",
+                                "Where's the water? I was sure it was here.",
+                                "My memory must be playing tricks on me."
+                            ]
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(no_water_speeches), self, duration=2.0)
+                    
+                    # Reset heading to water flag
+                    self.heading_to_known_water = False
+            
             # Determine movement direction
             if dx != 0:
                 move_x = 1 if dx > 0 else -1
@@ -212,6 +255,20 @@ class NPC(Rectangle):
             
     def apply_ai_decision(self, decision):
         """Apply an AI decision to this NPC"""
+        if hasattr(decision, 'is_heading_to_known_water') and decision.is_heading_to_known_water:
+            # If we have target coordinates, set them as our destination
+            if decision.target_x is not None and decision.target_y is not None:
+                self.target_grid_x = decision.target_x
+                self.target_grid_y = decision.target_y
+                self.is_moving = True
+                
+                # Store that we're heading to water
+                self.heading_to_known_water = True
+                self.known_water_x = decision.target_x
+                self.known_water_y = decision.target_y
+                
+                print(f"DEBUG: NPC {self.get_entity_id()} is heading to known water at ({decision.target_x}, {decision.target_y})")
+                return
         # Check if this is advice to move multiple tiles
         if hasattr(decision, 'following_advice') and decision.following_advice:
             if hasattr(decision, 'advice_direction') and hasattr(decision, 'advice_distance'):
