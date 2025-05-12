@@ -42,7 +42,69 @@ class NPC(Rectangle):
     
     def update(self):
         """Update entity state"""
-        super().update()
+        
+        # Call the parent class update first, but we'll handle movement ourselves
+        # Get the current time for timing controls
+        current_time = pygame.time.get_ticks()
+        
+        # Update visual position with smooth interpolation (from Rectangle class)
+        self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
+        self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+        
+        # Update animation (from Rectangle class)
+        self.update_animation()
+        
+        
+        # Check if we're critically thirsty and should seek water from world cache
+        if hasattr(self, 'thirst') and self.thirst <= 2 and not self.is_moving:
+            # Try to find water from world cache
+            from engine.core import SimpleGameEngine
+            if (hasattr(SimpleGameEngine, 'instance') and 
+                hasattr(SimpleGameEngine.instance, 'world_cache')):
+                
+                world_cache = SimpleGameEngine.instance.world_cache
+                water_locations = world_cache.get_discovered_locations('water')
+                
+                if water_locations:
+                    # Find the nearest water location
+                    nearest_water = min(water_locations, 
+                                      key=lambda loc: abs(loc["x"] - self.grid_x) + abs(loc["y"] - self.grid_y))
+                    
+                    print(f"DEBUG: Thirsty NPC {self.get_entity_id()} found water in world cache at ({nearest_water['x']}, {nearest_water['y']})")
+                    
+                    # Instead of teleporting, move one step toward the water
+                    dx = nearest_water["x"] - self.grid_x
+                    dy = nearest_water["y"] - self.grid_y
+                    
+                    # Decide whether to move horizontally or vertically first
+                    if abs(dx) > abs(dy):
+                        # Move horizontally
+                        self.target_grid_x = self.grid_x + (1 if dx > 0 else -1 if dx < 0 else 0)
+                        self.target_grid_y = self.grid_y
+                    else:
+                        # Move vertically
+                        self.target_grid_x = self.grid_x
+                        self.target_grid_y = self.grid_y + (1 if dy > 0 else -1 if dy < 0 else 0)
+                    
+                    # Store the final destination for future steps
+                    self.final_destination_x = nearest_water["x"]
+                    self.final_destination_y = nearest_water["y"]
+                    self.is_moving = True
+                    self.heading_to_known_water = True
+                    
+                    # Initialize movement timer
+                    self.last_move_time = current_time
+                    
+                    # Show a speech bubble about going to water
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        water_seeking_speeches = [
+                            "I know there's water nearby.",
+                            "I need to find that water source.",
+                            "I remember seeing water in this area.",
+                            "I'm so thirsty, I need to find that water."
+                        ]
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_seeking_speeches), self, duration=2.0)
+        
         
         # Check if we're standing on water (emergency situation)
         from engine.core import SimpleGameEngine
@@ -101,126 +163,118 @@ class NPC(Rectangle):
                             ]
                             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_escape_speeches), self, duration=1.5)
         
-        # Handle movement
+        # Handle movement with timing control (1 tile per second)
         if self.is_moving:
-            # Calculate direction to target
-            dx = self.target_grid_x - self.grid_x
-            dy = self.target_grid_y - self.grid_y
-            
-            # Check if we've reached the target
-            if dx == 0 and dy == 0:
-                self.is_moving = False
+            # Only move if enough time has passed (1000ms = 1 second)
+            if not hasattr(self, 'last_move_time'):
+                self.last_move_time = current_time
                 
-                # Check if we were heading to known water
-                if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
-                    # Check if we're adjacent to water
+            if current_time - self.last_move_time >= 1000:  # 1 second delay
+                # Calculate direction to target
+                dx = self.target_grid_x - self.grid_x
+                dy = self.target_grid_y - self.grid_y
+                
+                # Check if we've reached the current target
+                if dx == 0 and dy == 0:
+                    # If we have a final destination and haven't reached it yet
+                    if (hasattr(self, 'final_destination_x') and hasattr(self, 'final_destination_y') and
+                        (self.grid_x != self.final_destination_x or self.grid_y != self.final_destination_y)):
+                        
+                        # Calculate next step toward final destination
+                        dx = self.final_destination_x - self.grid_x
+                        dy = self.final_destination_y - self.grid_y
+                        
+                        if abs(dx) > abs(dy):
+                            # Move horizontally
+                            self.target_grid_x = self.grid_x + (1 if dx > 0 else -1 if dx < 0 else 0)
+                            self.target_grid_y = self.grid_y
+                        else:
+                            # Move vertically
+                            self.target_grid_x = self.grid_x
+                            self.target_grid_y = self.grid_y + (1 if dy > 0 else -1 if dy < 0 else 0)
+                        
+                        # Continue moving
+                        self.is_moving = True
+                    else:
+                        # We've reached our final destination
+                        self.is_moving = False
+                        
+                        # Check if we were heading to known water
+                        if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+                            # Check if we're adjacent to water
+                            from engine.core import SimpleGameEngine
+                            world_map = None
+                            if hasattr(SimpleGameEngine, 'instance'):
+                                world_map = SimpleGameEngine.instance.world_map
+                            
+                            if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+                                # We've reached water, drink it until thirst is 10
+                                while self.thirst < 10:
+                                    self.thirst = min(10, self.thirst + 2)
+                                    print(f"NPC {self.get_entity_id()} drinking from water source, thirst increased to {self.thirst}")
+                                
+                                # Set the last drink time
+                                self.last_drink_time = pygame.time.get_ticks()
+                                
+                                # Show a speech bubble about finding water
+                                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                                    water_speeches = [
+                                        "Ah, refreshing water!",
+                                        "Finally, water!",
+                                        "This water is just what I needed.",
+                                        "So good to drink water when you're thirsty!"
+                                    ]
+                                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
+                                
+                                # After drinking, start exploring for forest
+                                self.start_exploring_for_forest()
+                            
+                            # Reset heading to water flag
+                            self.heading_to_known_water = False
+                else:
+                    # Determine movement direction
+                    if dx != 0:
+                        move_x = 1 if dx > 0 else -1
+                        next_x = self.grid_x + move_x
+                        next_y = self.grid_y
+                    elif dy != 0:
+                        move_y = 1 if dy > 0 else -1
+                        next_x = self.grid_x
+                        next_y = self.grid_y + move_y
+                    else:
+                        # Already at target
+                        self.is_moving = False
+                        return
+                    
+                    # Check if the next position is valid
                     from engine.core import SimpleGameEngine
                     world_map = None
                     if hasattr(SimpleGameEngine, 'instance'):
                         world_map = SimpleGameEngine.instance.world_map
                     
-                    if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
-                        # We've reached water, drink it
-                        self.thirst = min(10, self.thirst + 2)
-                        print(f"NPC {self.get_entity_id()} reached known water source, thirst increased to {self.thirst}")
+                    # Check if the tile is walkable
+                    can_walk = True
+                    if world_map and hasattr(world_map, 'get_tile'):
+                        tile = world_map.get_tile(next_x, next_y)
+                        if tile and hasattr(tile, 'is_walkable'):
+                            can_walk = tile.is_walkable()
+                    
+                    if can_walk:
+                        # Move to the next position
+                        self.grid_x = next_x
+                        self.grid_y = next_y
                         
-                        # Show a speech bubble about finding water
-                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            water_speeches = [
-                                "Ah, refreshing water!",
-                                "Finally, water!",
-                                "This water is just what I needed.",
-                                "So good to drink water when you're thirsty!"
-                            ]
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
+                        # Update visual position directly
+                        self.visual_x = float(self.grid_x)
+                        self.visual_y = float(self.grid_y)
+                        
+                        # Reset the movement timer
+                        self.last_move_time = current_time
                     else:
-                        # We reached the location but there's no water
-                        print(f"NPC {self.get_entity_id()} reached supposed water location but found no water")
-                        
-                        # Show a speech bubble about not finding water
-                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            no_water_speeches = [
-                                "Strange, I thought there was water here...",
-                                "The water source is gone!",
-                                "Where's the water? I was sure it was here.",
-                                "My memory must be playing tricks on me."
-                            ]
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(no_water_speeches), self, duration=2.0)
-                    
-                    # Reset heading to water flag
-                    self.heading_to_known_water = False
-            
-            # Determine movement direction
-            if dx != 0:
-                move_x = 1 if dx > 0 else -1
-                next_x = self.grid_x + move_x
-                next_y = self.grid_y
-            elif dy != 0:
-                move_y = 1 if dy > 0 else -1
-                next_x = self.grid_x
-                next_y = self.grid_y + move_y
-            else:
-                # Already at target
-                self.is_moving = False
-                return
-            
-            # Check if the next position is valid
-            from engine.core import SimpleGameEngine
-            world_map = None
-            if hasattr(SimpleGameEngine, 'instance'):
-                world_map = SimpleGameEngine.instance.world_map
-            
-            # Check if the tile is walkable
-            can_walk = True
-            if world_map and hasattr(world_map, 'get_tile'):
-                tile = world_map.get_tile(next_x, next_y)
-                if tile and hasattr(tile, 'is_walkable'):
-                    can_walk = tile.is_walkable()
-            
-            if can_walk:
-                # Move to the next position
-                self.grid_x = next_x
-                self.grid_y = next_y
-                
-                # Update visual position directly
-                self.visual_x = float(self.grid_x)
-                self.visual_y = float(self.grid_y)
-                
-                # Check if we've reached the target
-                if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
-                    self.is_moving = False
-                    
-                    # If we were following advice, check if we've found what we were looking for
-                    if hasattr(self, 'following_advice') and self.following_advice:
-                        # Check if we've found water (if we're thirsty)
-                        if hasattr(self, 'thirst') and self.thirst <= 3:
-                            if world_map and hasattr(world_map, 'is_adjacent_to_water') and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
-                                # Drink water
-                                self.thirst += 2
-                                print(f"NPC found water via advice, thirst increased to {self.thirst}")
-                                
-                                # Show a speech bubble about finding water
-                                from engine.core import SimpleGameEngine
-                                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                                    water_speeches = [
-                                        "Ah, water! Just what I needed!",
-                                        "Found water! Thank you for the advice!",
-                                        "Water! Your directions were spot on!",
-                                        "I'm so glad I followed your advice. Water!"
-                                    ]
-                                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
-                                
-                                # After drinking, start exploring
-                                self.start_exploring()
-                        
-                        # Reset advice following
-                        self.following_advice = False
-            else:
-                # Can't move to the next position, stop moving
-                self.is_moving = False
+                        # Can't move to the next position, stop moving
+                        self.is_moving = False
         
-        # Update thirst over time
-        current_time = pygame.time.get_ticks()
+        
         
         # Decrease thirst every 10 seconds
         if current_time - self.last_thirst_update > 10000:  # 10 seconds
@@ -228,6 +282,112 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
+            
+
+
+
+
+
+    def start_exploring_for_forest(self):
+        """Start exploring to find forest tiles"""
+        from engine.core import SimpleGameEngine
+        world_map = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        # Check if we already know about forest locations
+        if hasattr(self, 'interesting_locations') and 'forest' in self.interesting_locations and self.interesting_locations['forest']:
+            # We already know about forest locations, head to the nearest one
+            nearest_forest = min(self.interesting_locations['forest'], 
+                               key=lambda loc: abs(loc[0] - self.grid_x) + abs(loc[1] - self.grid_y))
+            forest_x, forest_y = nearest_forest
+            
+            print(f"DEBUG: NPC {self.get_entity_id()} heading to known forest at ({forest_x}, {forest_y})")
+            
+            # Set target to the forest location
+            self.target_grid_x = forest_x
+            self.target_grid_y = forest_y
+            self.is_moving = True
+            
+            # Show a speech bubble about heading to forest
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                forest_speeches = [
+                    "I know where to find a forest.",
+                    "I'll head to that forest I found earlier.",
+                    "Time to explore the forest.",
+                    "The forest should be this way."
+                ]
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(forest_speeches), self, duration=2.0)
+            
+            return
+        
+        # If we don't know any forest locations, search in a wider area
+        if world_map:
+            # Look for forest tiles in a larger radius (up to 20 tiles away)
+            forest_tiles = []
+            search_radius = 20
+            
+            for y in range(max(0, self.grid_y - search_radius), min(world_map.height, self.grid_y + search_radius + 1)):
+                for x in range(max(0, self.grid_x - search_radius), min(world_map.width, self.grid_x + search_radius + 1)):
+                    tile = world_map.get_tile(x, y)
+                    if tile and hasattr(tile, 'type') and tile.type == 'forest':
+                        # Found a forest tile
+                        forest_tiles.append((x, y))
+            
+            if forest_tiles:
+                # Found forest tiles, head to the nearest one
+                nearest_forest = min(forest_tiles, key=lambda loc: abs(loc[0] - self.grid_x) + abs(loc[1] - self.grid_y))
+                forest_x, forest_y = nearest_forest
+                
+                print(f"DEBUG: NPC {self.get_entity_id()} discovered forest at ({forest_x}, {forest_y})")
+                
+                # Add to interesting locations
+                if not hasattr(self, 'interesting_locations'):
+                    self.interesting_locations = {}
+                if 'forest' not in self.interesting_locations:
+                    self.interesting_locations['forest'] = []
+                
+                # Check if we already have this location
+                location_exists = False
+                for loc in self.interesting_locations.get('forest', []):
+                    if loc[0] == forest_x and loc[1] == forest_y:
+                        location_exists = True
+                        break
+                
+                if not location_exists:
+                    self.interesting_locations['forest'].append((forest_x, forest_y))
+                    
+                    # Record in world cache if available
+                    from engine.core import SimpleGameEngine
+                    if (hasattr(SimpleGameEngine, 'instance') and 
+                        hasattr(SimpleGameEngine.instance, 'world_cache')):
+                        SimpleGameEngine.instance.world_cache.add_location_discovery(
+                            str(id(self)),
+                            'forest',
+                            forest_x,
+                            forest_y,
+                            "Forest area"
+                        )
+                
+                # Set target to the forest location
+                self.target_grid_x = forest_x
+                self.target_grid_y = forest_y
+                self.is_moving = True
+                
+                # Show a speech bubble about finding forest
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                    forest_speeches = [
+                        "I see a forest in the distance!",
+                        "There's a forest over there.",
+                        "I should check out that forest.",
+                        "A forest! Let's explore it."
+                    ]
+                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(forest_speeches), self, duration=2.0)
+                
+                return
+        
+        # If no forest found, just explore randomly
+        self.start_exploring()
 
     
     
@@ -272,19 +432,20 @@ class NPC(Rectangle):
         
         # Set the NPC to moving state
         self.is_moving = True
-        print(f"DEBUG: NPC {id(self)} exploring {distance} tiles {direction}")
+        print(f"DEBUG: NPC {self.get_entity_id()} exploring {distance} tiles {direction}")
         
         # Show a speech bubble about exploring
         from engine.core import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
             exploring_speeches = [
-                "Now that I've had some water, time to explore!",
-                "Feeling refreshed! Let's see what's out there.",
-                "That was refreshing. Now to continue my journey.",
-                "Water break done, back to exploring!",
-                "I wonder what I'll find over there..."
+                "Time to explore!",
+                "Let's see what's out there.",
+                "I wonder what I'll find over there...",
+                "Exploring is fun!",
+                "I'm going on an adventure!"
             ]
             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+
 
     def render(self, screen, camera):
         """Render the NPC with camera transformations"""
@@ -389,7 +550,7 @@ class NPC(Rectangle):
                 
                 return
         
-               # Handle exploration command
+        # Handle exploration command
         if decision.action == "explore":
             # If specific coordinates were provided, use them
             if hasattr(decision, 'target_x') and hasattr(decision, 'target_y') and decision.target_x is not None and decision.target_y is not None:
@@ -454,10 +615,14 @@ class NPC(Rectangle):
                         world_map = SimpleGameEngine.instance.world_map
                     
                     if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
-                        self.thirst += 2  # Increase thirst more when drinking from remembered source
-                        print(f"NPC drank water from remembered source, thirst increased to {self.thirst}")
-                        if self.thirst >= 5:
-                            self.start_exploring()
+                        # Drink until thirst is 10
+                        while self.thirst < 10:
+                            self.thirst = min(10, self.thirst + 2)
+                            print(f"NPC drank water from remembered source, thirst increased to {self.thirst}")
+                        
+                        # Set the last drink time
+                        self.last_drink_time = pygame.time.get_ticks()
+                        
                         # Show a speech bubble about drinking
                         from engine.core import SimpleGameEngine
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
@@ -470,41 +635,8 @@ class NPC(Rectangle):
                             ]
                             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(drinking_speeches), self, duration=2.0)
                         
-                        # After drinking, start exploring
-                        import random
-                        directions = ["right", "left", "up", "down"]
-                        direction = random.choice(directions)
-                        distance = random.randint(5, 15)  # Explore 5-15 tiles in a random direction
-                        
-                        # Set target position based on direction
-                        if direction == "right":
-                            self.target_grid_x = min(self.grid_x + distance, world_map.width - 1 if world_map else 100)
-                            self.target_grid_y = self.grid_y
-                        elif direction == "left":
-                            self.target_grid_x = max(self.grid_x - distance, 0)
-                            self.target_grid_y = self.grid_y
-                        elif direction == "up":
-                            self.target_grid_x = self.grid_x
-                            self.target_grid_y = max(self.grid_y - distance, 0)
-                        elif direction == "down":
-                            self.target_grid_x = self.grid_x
-                            self.target_grid_y = min(self.grid_y + distance, world_map.height - 1 if world_map else 100)
-                        
-                        # Set the NPC to moving state
-                        self.is_moving = True
-                        print(f"DEBUG: NPC {id(self)} exploring {distance} tiles {direction} after drinking")
-                        
-                        # Show a speech bubble about exploring
-                        from engine.core import SimpleGameEngine
-                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            exploring_speeches = [
-                                "Now that I've had some water, time to explore!",
-                                "Feeling refreshed! Let's see what's out there.",
-                                "That was refreshing. Now to continue my journey.",
-                                "Water break done, back to exploring!",
-                                "I wonder what I'll find over there..."
-                            ]
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+                        # After drinking, start exploring for forest
+                        self.start_exploring_for_forest()
                         
                         # Override the AI decision
                         return
@@ -554,34 +686,18 @@ class NPC(Rectangle):
                 world_map = SimpleGameEngine.instance.world_map
             
             if world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
-                self.thirst += 1
-                print(f"NPC drank water, thirst increased to {self.thirst}")
+                # Drink until thirst is 10
+                while self.thirst < 10:
+                    self.thirst = min(10, self.thirst + 2)
+                    print(f"NPC drank water, thirst increased to {self.thirst}")
                 
-                # If thirst is now satisfied, start exploring
+                # Set the last drink time
+                self.last_drink_time = pygame.time.get_ticks()
+                
+                # If thirst is now satisfied, start exploring for forest
                 if self.thirst >= 5:
-                    # After drinking, start exploring
-                    import random
-                    directions = ["right", "left", "up", "down"]
-                    direction = random.choice(directions)
-                    distance = random.randint(5, 15)  # Explore 5-15 tiles in a random direction
-                    
-                    # Set target position based on direction
-                    if direction == "right":
-                        self.target_grid_x = min(self.grid_x + distance, world_map.width - 1 if world_map else 100)
-                        self.target_grid_y = self.grid_y
-                    elif direction == "left":
-                        self.target_grid_x = max(self.grid_x - distance, 0)
-                        self.target_grid_y = self.grid_y
-                    elif direction == "up":
-                        self.target_grid_x = self.grid_x
-                        self.target_grid_y = max(self.grid_y - distance, 0)
-                    elif direction == "down":
-                        self.target_grid_x = self.grid_x
-                        self.target_grid_y = min(self.grid_y + distance, world_map.height - 1 if world_map else 100)
-                    
-                    # Set the NPC to moving state
-                    self.is_moving = True
-                    print(f"DEBUG: NPC {id(self)} exploring {distance} tiles {direction} after drinking")
+                    # After drinking, start exploring for forest
+                    self.start_exploring_for_forest()
                     
                     # Show a speech bubble about exploring
                     from engine.core import SimpleGameEngine
@@ -613,6 +729,7 @@ class NPC(Rectangle):
             elif decision.action == "move_down":
                 self.target_grid_y = self.grid_y + steps
                 self.is_moving = True
+
 
                 
     def respond_to_chat(self, player_message):

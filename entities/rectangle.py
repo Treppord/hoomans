@@ -150,6 +150,18 @@ class Rectangle:
     
     def update(self):
         """Update entity state"""
+        # Update visual position with smooth interpolation
+        self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
+        self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+        
+        # Update animation
+        self.update_animation()
+
+
+        # Check if we're near water and replenish thirst if needed
+        if hasattr(self, 'check_and_replenish_thirst'):
+            self.check_and_replenish_thirst()
+            
         # Handle movement towards target
         if self.is_moving:
             # Check if we've reached the target
@@ -171,11 +183,7 @@ class Rectangle:
         self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
         self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
         
-        # Update animation
-        self.update_animation()
         
-        # Check if we're near water and replenish thirst if needed
-        self.check_and_replenish_thirst()
 
     
     def render(self, screen, camera):
