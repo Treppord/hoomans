@@ -17,6 +17,11 @@ class Rectangle:
         self.target_grid_y = grid_y
         self.is_moving = False
         
+        # For visual interpolation (smooth rendering)
+        self.visual_x = float(grid_x)
+        self.visual_y = float(grid_y)
+        self.move_lerp_factor = 0.2  # Adjust for smoother/faster visual transitions
+        
         # For animation
         self.sprite_sheet = None
         self.animation_frames = []
@@ -36,11 +41,11 @@ class Rectangle:
     # Add properties for camera compatibility
     @property
     def x(self):
-        return self.grid_x * 16
+        return self.visual_x * 16  # Use visual position for rendering
     
     @property
     def y(self):
-        return self.grid_y * 16
+        return self.visual_y * 16  # Use visual position for rendering
     
     def load_sprite_sheet(self):
         """Load the sprite sheet and extract frames"""
@@ -132,14 +137,18 @@ class Rectangle:
                 elif self.grid_y > self.target_grid_y:
                     self.grid_y -= self.speed
         
+        # Update visual position with smooth interpolation
+        self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
+        self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+        
         # Update animation
         self.update_animation()
     
     def render(self, screen, camera):
         """Render the entity with camera transformations"""
-        # Calculate screen position using camera
+        # Calculate screen position using camera and visual position
         screen_x, screen_y, width, height = camera.apply(
-            self.grid_x * 16, self.grid_y * 16, 16, 16
+            self.visual_x * 16, self.visual_y * 16, 16, 16
         )
         
         # Skip rendering if off-screen
@@ -163,7 +172,7 @@ class Rectangle:
     def contains_point(self, screen_x, screen_y, camera):
         """Check if a screen point is within this entity"""
         entity_x, entity_y, width, height = camera.apply(
-            self.grid_x * 16, self.grid_y * 16, 16, 16
+            self.visual_x * 16, self.visual_y * 16, 16, 16
         )
         
         return (entity_x <= screen_x <= entity_x + width and
