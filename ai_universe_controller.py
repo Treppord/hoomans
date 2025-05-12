@@ -81,7 +81,7 @@ class AgentState:
                 "gender": self.cna_data.gender.name,
                 "culture": self.cna_data.culture.name,
                 "nation": self.cna_data.nation.name,
-                "physical_health": self.cna_data.physical_health,
+                "physical_health": self.cna_data.physical_health,  # These will work with both old and new formats
                 "mental_health": self.cna_data.mental_health,
                 "generational_health": self.cna_data.generational_health,
                 "intelligence": self.cna_data.intelligence_factor,
@@ -96,6 +96,7 @@ class AgentState:
                         result["personality"][trait_name] = self.cna_data.personality_traits[i]
         
         return result
+
 
 @dataclass
 class AgentDecision:

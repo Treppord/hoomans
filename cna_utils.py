@@ -32,6 +32,11 @@ class Nation(enum.Enum):
     NL = 0
     PL = 1
 
+# Constants for bitfield operations
+HEALTH_MASK_PHYSICAL = 0b00000111  # 3 bits for 0-5 range (with room for 0-7)
+HEALTH_MASK_MENTAL = 0b00111000    # 3 bits, shifted left by 3
+HEALTH_MASK_GENERATIONAL = 0b11000000  # 2 bits, shifted left by 6 (0-3 range)
+
 @dataclass
 class CNAAttributes:
     # Basic attributes
@@ -41,6 +46,8 @@ class CNAAttributes:
     gender: Gender
     culture: Culture
     nation: Nation
+    
+    # Health attributes
     physical_health: int  # 0-5
     generational_health: int  # 0-5
     mental_health: int  # 0-5
@@ -52,6 +59,9 @@ class CNAAttributes:
     adaptability: float = 1.0  # Adaptability to environment
     immunity_strength: float = 1.0  # Immune system strength
     
+    # Internal storage for packed health values
+    _packed_health: int = 0
+    
     def __post_init__(self):
         # Initialize default values for optional fields
         if self.genetic_markers is None:
@@ -59,15 +69,36 @@ class CNAAttributes:
         if self.personality_traits is None:
             self.personality_traits = [0.5] * 5  # 5 personality traits
             
+        # Pack health values
+        self.pack_health_values()
+            
+    def pack_health_values(self):
+        """Pack health values into a single byte"""
+        # Ensure values are in range
+        ph = max(0, min(7, self.physical_health))
+        mh = max(0, min(7, self.mental_health))
+        gh = max(0, min(3, self.generational_health))
+        
+        # Pack values
+        self._packed_health = (
+            (ph & HEALTH_MASK_PHYSICAL) |
+            ((mh << 3) & HEALTH_MASK_MENTAL) |
+            ((gh << 6) & HEALTH_MASK_GENERATIONAL)
+        )
+    
+    def unpack_health_values(self):
+        """Unpack health values from the single byte"""
+        self.physical_health = self._packed_health & HEALTH_MASK_PHYSICAL
+        self.mental_health = (self._packed_health & HEALTH_MASK_MENTAL) >> 3
+        self.generational_health = (self._packed_health & HEALTH_MASK_GENERATIONAL) >> 6
+            
     def validate(self):
         """Validate that all attributes are within expected ranges"""
         if not (0 <= self.age_minutes <= 60):
             raise ValueError(f"Age must be between 0-60 minutes, got {self.age_minutes}")
         
-        for health_attr in [self.physical_health, self.generational_health, self.mental_health]:
-            if not (0 <= health_attr <= 5):
-                raise ValueError(f"Health attributes must be between 0-5, got {health_attr}")
-                
+        # Health values are now validated during packing
+        
         if not isinstance(self.gender, Gender):
             raise ValueError(f"Gender must be a Gender enum value")
             
@@ -76,12 +107,25 @@ class CNAAttributes:
             
         if not isinstance(self.nation, Nation):
             raise ValueError(f"Nation must be a Nation enum value")
+    
+    # Property getter for packed health
+    @property
+    def packed_health(self):
+        """Get the packed health byte"""
+        return self._packed_health
+    
+    @packed_health.setter
+    def packed_health(self, value):
+        """Set the packed health byte and unpack values"""
+        self._packed_health = value
+        self.unpack_health_values()
 
 class CNACodec:
     """Encoder/Decoder for CNA file format"""
     
     # File signature to identify CNA files
-    FILE_SIGNATURE = b'CNA1'
+    FILE_SIGNATURE = b'CNA2'  # Updated to version 2 for bitfield format
+    LEGACY_SIGNATURE = b'CNA1'  # Original signature for backward compatibility
     
     @staticmethod
     def encode(attributes: CNAAttributes) -> bytes:
@@ -101,14 +145,20 @@ class CNACodec:
             buffer.write(struct.pack('<H', len(name_bytes)))
             buffer.write(name_bytes)
         
-        # Pack numeric and enum values
+        # Pack age
         buffer.write(struct.pack('<B', attributes.age_minutes))
-        buffer.write(struct.pack('<B', attributes.gender.value))
-        buffer.write(struct.pack('<B', attributes.culture.value))
-        buffer.write(struct.pack('<B', attributes.nation.value))
-        buffer.write(struct.pack('<B', attributes.physical_health))
-        buffer.write(struct.pack('<B', attributes.generational_health))
-        buffer.write(struct.pack('<B', attributes.mental_health))
+        
+        # Pack enums into a single byte (4 bits each)
+        # Gender (1 bit) + Culture (4 bits) + 3 unused bits
+        enum_byte1 = (attributes.gender.value & 0x01) | ((attributes.culture.value & 0x0F) << 1)
+        buffer.write(struct.pack('<B', enum_byte1))
+        
+        # Pack Nation (4 bits) + 4 unused bits
+        enum_byte2 = attributes.nation.value & 0x0F
+        buffer.write(struct.pack('<B', enum_byte2))
+        
+        # Pack health values (already packed in the object)
+        buffer.write(struct.pack('<B', attributes.packed_health))
         
         # Pack extended attributes
         buffer.write(struct.pack('<f', attributes.intelligence_factor))
@@ -134,9 +184,84 @@ class CNACodec:
         
         # Check file signature
         signature = buffer.read(4)
-        if signature != CNACodec.FILE_SIGNATURE:
+        if signature == CNACodec.FILE_SIGNATURE:
+            # New format (version 2)
+            return CNACodec._decode_v2(buffer)
+        elif signature == CNACodec.LEGACY_SIGNATURE:
+            # Old format (version 1)
+            return CNACodec._decode_v1(buffer)
+        else:
             raise ValueError(f"Invalid CNA file signature: {signature}")
+    
+    @staticmethod
+    def _decode_v2(buffer: io.BytesIO) -> CNAAttributes:
+        """Decode version 2 (bitfield) format"""
+        # Read strings
+        first_name_len = struct.unpack('<H', buffer.read(2))[0]
+        first_name = buffer.read(first_name_len).decode('utf-8')
         
+        last_name_len = struct.unpack('<H', buffer.read(2))[0]
+        last_name = buffer.read(last_name_len).decode('utf-8')
+        
+        # Read age
+        age_minutes = struct.unpack('<B', buffer.read(1))[0]
+        
+        # Read packed enums
+        enum_byte1 = struct.unpack('<B', buffer.read(1))[0]
+        gender = Gender(enum_byte1 & 0x01)
+        culture = Culture((enum_byte1 >> 1) & 0x0F)
+        
+        enum_byte2 = struct.unpack('<B', buffer.read(1))[0]
+        nation = Nation(enum_byte2 & 0x0F)
+        
+        # Read packed health
+        packed_health = struct.unpack('<B', buffer.read(1))[0]
+        
+        # Read extended attributes
+        intelligence_factor = struct.unpack('<f', buffer.read(4))[0]
+        adaptability = struct.unpack('<f', buffer.read(4))[0]
+        immunity_strength = struct.unpack('<f', buffer.read(4))[0]
+        
+        # Read genetic markers
+        marker_count = struct.unpack('<B', buffer.read(1))[0]
+        genetic_markers = []
+        for _ in range(marker_count):
+            marker = struct.unpack('<H', buffer.read(2))[0]
+            genetic_markers.append(marker)
+            
+        # Read personality traits
+        trait_count = struct.unpack('<B', buffer.read(1))[0]
+        personality_traits = []
+        for _ in range(trait_count):
+            trait = struct.unpack('<f', buffer.read(4))[0]
+            personality_traits.append(trait)
+        
+        # Create attributes with unpacked health values
+        physical_health = packed_health & HEALTH_MASK_PHYSICAL
+        mental_health = (packed_health & HEALTH_MASK_MENTAL) >> 3
+        generational_health = (packed_health & HEALTH_MASK_GENERATIONAL) >> 6
+        
+        return CNAAttributes(
+            first_name=first_name,
+            last_name=last_name,
+            age_minutes=age_minutes,
+            gender=gender,
+            culture=culture,
+            nation=nation,
+            physical_health=physical_health,
+            mental_health=mental_health,
+            generational_health=generational_health,
+            genetic_markers=genetic_markers,
+            personality_traits=personality_traits,
+            intelligence_factor=intelligence_factor,
+            adaptability=adaptability,
+            immunity_strength=immunity_strength,
+            _packed_health=packed_health
+        )
+    
+    @staticmethod
+    def _decode_v1(buffer: io.BytesIO) -> CNAAttributes:
+        """Decode version 1 (original) format for backward compatibility"""
         # Read strings
         first_name_len = struct.unpack('<H', buffer.read(2))[0]
         first_name = buffer.read(first_name_len).decode('utf-8')
@@ -172,7 +297,8 @@ class CNACodec:
             trait = struct.unpack('<f', buffer.read(4))[0]
             personality_traits.append(trait)
         
-        return CNAAttributes(
+        # Create attributes object with the old format values
+        attributes = CNAAttributes(
             first_name=first_name,
             last_name=last_name,
             age_minutes=age_minutes,
@@ -180,14 +306,19 @@ class CNACodec:
             culture=culture,
             nation=nation,
             physical_health=physical_health,
-            generational_health=generational_health,
             mental_health=mental_health,
+            generational_health=generational_health,
             genetic_markers=genetic_markers,
             personality_traits=personality_traits,
             intelligence_factor=intelligence_factor,
             adaptability=adaptability,
             immunity_strength=immunity_strength
         )
+        
+        # Pack health values for consistency with new format
+        attributes.pack_health_values()
+        
+        return attributes
     
     @staticmethod
     def save_to_file(attributes: CNAAttributes, filepath: str):

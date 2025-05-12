@@ -19,7 +19,13 @@ class Entity:
             if parent_dir not in sys.path:
                 sys.path.append(parent_dir)
             
-            from cna.cna_codec import CNACodec
+            # Try to import from cna package first (preferred)
+            try:
+                from cna.cna_codec import CNACodec
+            except ImportError:
+                # Fall back to cna_utils if cna package is not available
+                from cna_utils import CNACodec
+                
             self.cna_data = CNACodec.load_from_file(filepath)
             self.cna_file = filepath
             
