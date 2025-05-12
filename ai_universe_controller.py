@@ -109,19 +109,19 @@ class AgentState:
 
 @dataclass
 class AgentDecision:
-    """Represents a decision made by an agent"""
+    """Represents an AI decision for an agent"""
     agent_id: str
-    action: str
-    speech: str = ""
-    reason: str = ""
-    mood_change: float = 0.0
-    target_id: Optional[str] = None
+    action: str  # move_left, move_right, move_up, move_down, drink, eat, idle, etc.
+    speech: str = ""  # What the agent might say
+    reason: str = ""  # Reason for the decision (for memory)
     target_x: Optional[int] = None  # Target x position if moving
     target_y: Optional[int] = None  # Target y position if moving
-    is_fast_movement: bool = False
-    following_advice: bool = False
-    advice_direction: Optional[str] = None
-    advice_distance: int = 0
+    mood_change: float = 0.0  # How this decision affects mood (-1 to 1)
+    memory_update: Optional[str] = None  # New memory to add
+    is_fast_movement: bool = False  # Whether this is a fast movement (multiple steps)
+    following_advice: bool = False  # Whether this decision is following player advice
+    advice_direction: Optional[str] = None  # Direction from player advice
+    advice_distance: int = 0  # Distance from player advice
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -131,25 +131,47 @@ class AgentDecision:
             speech = response_json.get("speech", "")
             reason = response_json.get("reason", "")
             
+            # Extract target position if provided
+            target_x = None
+            target_y = None
+            if "target" in response_json and isinstance(response_json["target"], dict):
+                target_x = response_json["target"].get("x")
+                target_y = response_json["target"].get("y")
+            
             # Extract mood change
             mood_change = float(response_json.get("mood_change", 0.0))
             
+            # Extract memory update
+            memory_update = response_json.get("memory_update")
+            
             # Extract fast movement flag
             is_fast_movement = response_json.get("is_fast_movement", False)
+            
+            # Extract advice following flags
+            following_advice = response_json.get("following_advice", False)
+            advice_direction = response_json.get("advice_direction")
+            advice_distance = response_json.get("advice_distance", 0)
             
             return cls(
                 agent_id=agent_id,
                 action=action,
                 speech=speech,
                 reason=reason,
+                target_x=target_x,
+                target_y=target_y,
                 mood_change=mood_change,
-                is_fast_movement=is_fast_movement
+                memory_update=memory_update,
+                is_fast_movement=is_fast_movement,
+                following_advice=following_advice,
+                advice_direction=advice_direction,
+                advice_distance=advice_distance
             )
         except Exception as e:
             logger.error(f"Error parsing AI response: {e}")
             logger.error(f"Response JSON: {response_json}")
             # Return a default idle decision
             return cls(agent_id=agent_id, action="idle")
+
 
 
 
@@ -537,6 +559,14 @@ PLAYER ADVICE:
                 prompt += f"Name: {agent_state.cna_data.first_name}, "
                 prompt += f"Culture: {agent_state.cna_data.culture.name}"
             
+            # Add player advice if available
+            if hasattr(agent_state, 'player_advice') and agent_state.player_advice:
+                advice = agent_state.player_advice
+                if advice["type"] == "direction":
+                    prompt += f"\nPLAYER ADVICE: {advice['what']} is {advice['distance']} tiles to the {advice['direction']}."
+                elif advice["type"] == "location":
+                    prompt += f"\nPLAYER ADVICE: {advice['what']} is near the {advice['landmark']}."
+            
             # Create a concise system prompt
             system_prompt = self._create_adaptive_system_prompt(has_critical_thirst, has_critical_hunger)
             
@@ -558,12 +588,45 @@ PLAYER ADVICE:
                     agent_state.grid_y
                 )
                 
+                # Check if we should follow player advice
+                if hasattr(agent_state, 'player_advice') and agent_state.player_advice:
+                    advice = agent_state.player_advice
+                    advice_age = time.time() - getattr(agent_state, 'player_advice_time', 0)
+                    
+                    # Only follow recent advice (within last 30 seconds)
+                    if advice_age < 30:
+                        # If we have critical thirst and advice is about water, follow it
+                        if (has_critical_thirst and advice["type"] == "direction" and 
+                            (advice["what"] == "water" or "water" in advice["what"])):
+                            
+                            direction = advice["direction"]
+                            # Map direction to action
+                            action_map = {
+                                "left": "move_left",
+                                "right": "move_right", 
+                                "up": "move_up",
+                                "down": "move_down",
+                                "north": "move_up",
+                                "south": "move_down",
+                                "east": "move_right",
+                                "west": "move_left"
+                            }
+                            
+                            if direction in action_map:
+                                validated_response["action"] = action_map[direction]
+                                validated_response["speech"] = "I'll check for water where you suggested!"
+                                validated_response["following_advice"] = True
+                                validated_response["advice_direction"] = direction
+                                validated_response["advice_distance"] = advice["distance"]
+                                validated_response["reason"] = "Following player's advice about water location"
+                
                 return AgentDecision.from_ai_response(agent_state.agent_id, validated_response)
                 
         except Exception as e:
             logger.error(f"Error generating decision: {e}")
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
+
         
     def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
         """Generate decisions for multiple agents (one by one)"""
@@ -1090,6 +1153,7 @@ class AIUniverseController:
 
 
 
+
     
     def _process_agents(self):
         """Process agents that need decisions"""
@@ -1156,30 +1220,98 @@ class AIUniverseController:
         Returns a dictionary with parsed advice or None if no advice detected
         """
         advice = None
+        message = message.lower()
         
         # Pattern for directional advice (e.g., "water 5 blocks to the left")
-        direction_pattern = r"(?:there is|there's|is|are)\s+(\w+)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)"
-        direction_match = re.search(direction_pattern, message.lower())
+        direction_patterns = [
+            r"(?:there is|there's|is|are)\s+(\w+)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)",
+            r"(?:move|go|head)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)",
+            r"(?:move|go|head)\s+(?:to\s+)?(?:the\s+)?(\w+)\s+(\d+)\s+(?:blocks?|tiles?)",
+            r"if you are (?:thirsty|hungry) (?:move|go|head)\s+(\d+)\s+(?:blocks?|tiles?)\s+(?:to\s+)?(?:the\s+)?(\w+)"
+        ]
         
-        if direction_match:
-            what, distance, direction = direction_match.groups()
-            try:
-                distance = int(distance)
-                advice = {
-                    "type": "direction",
-                    "what": what,
-                    "distance": distance,
-                    "direction": direction,
-                    "confidence": 0.9  # High confidence for explicit directions
-                }
-                logger.info(f"DEBUG: Parsed player advice: {advice}")
-                return advice
-            except ValueError:
-                pass
+        # Try each pattern
+        for pattern in direction_patterns:
+            match = re.search(pattern, message)
+            if match:
+                groups = match.groups()
+                
+                # Handle different pattern formats
+                if len(groups) == 3:  # "there is water 5 tiles to the right"
+                    what, distance, direction = groups
+                    try:
+                        distance = int(distance)
+                        advice = {
+                            "type": "direction",
+                            "what": what,
+                            "distance": distance,
+                            "direction": direction,
+                            "confidence": 0.9  # High confidence for explicit directions
+                        }
+                        logger.info(f"DEBUG: Parsed player advice: {advice}")
+                        return advice
+                    except ValueError:
+                        pass
+                elif len(groups) == 2:
+                    # Check if first group is a number ("move 5 tiles right")
+                    try:
+                        distance = int(groups[0])
+                        direction = groups[1]
+                        advice = {
+                            "type": "direction",
+                            "what": "resource",  # Generic resource
+                            "distance": distance,
+                            "direction": direction,
+                            "confidence": 0.8
+                        }
+                        logger.info(f"DEBUG: Parsed player advice: {advice}")
+                        return advice
+                    except ValueError:
+                        # First group might be direction ("move right 5 tiles")
+                        try:
+                            direction = groups[0]
+                            distance = int(groups[1])
+                            advice = {
+                                "type": "direction",
+                                "what": "resource",
+                                "distance": distance,
+                                "direction": direction,
+                                "confidence": 0.8
+                            }
+                            logger.info(f"DEBUG: Parsed player advice: {advice}")
+                            return advice
+                        except ValueError:
+                            pass
+        
+        # Check for water-specific advice
+        if "water" in message and any(word in message for word in ["thirsty", "drink", "find"]):
+            # Look for direction words
+            directions = {
+                "right": ["right", "east"],
+                "left": ["left", "west"],
+                "up": ["up", "north", "above"],
+                "down": ["down", "south", "below"]
+            }
+            
+            for direction_key, direction_words in directions.items():
+                if any(word in message for word in direction_words):
+                    # Try to find a number for distance
+                    distance_match = re.search(r"(\d+)", message)
+                    distance = int(distance_match.group(1)) if distance_match else 5  # Default to 5 if no number
+                    
+                    advice = {
+                        "type": "direction",
+                        "what": "water",
+                        "distance": distance,
+                        "direction": direction_key,
+                        "confidence": 0.7  # Medium confidence for less explicit directions
+                    }
+                    logger.info(f"DEBUG: Parsed water-specific advice: {advice}")
+                    return advice
         
         # Pattern for location advice (e.g., "there's water near the mountain")
         location_pattern = r"(?:there is|there's|is|are)\s+(\w+)\s+(?:near|by|at|close to)\s+(?:the\s+)?(\w+)"
-        location_match = re.search(location_pattern, message.lower())
+        location_match = re.search(location_pattern, message)
         
         if location_match:
             what, landmark = location_match.groups()
@@ -1189,10 +1321,11 @@ class AIUniverseController:
                 "landmark": landmark,
                 "confidence": 0.7  # Medium confidence for less precise directions
             }
-            logger.info(f"DEBUG: Parsed player advice: {advice}")
+            logger.info(f"DEBUG: Parsed location advice: {advice}")
             return advice
             
         return None
+
 
     
     def update_agent_state(self, agent_id, **kwargs):

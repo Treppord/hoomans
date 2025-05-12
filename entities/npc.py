@@ -22,14 +22,13 @@ class NPC(Rectangle):
         self.debug_player_detected = False
         self.debug_last_player_id = None
         
+        # Advice following attributes
+        self.advice_remaining_distance = 0
+        self.advice_direction = None
+        
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
             self.ai_controller.set_entity(self)
-    
-    def set_ai_controller(self, ai_controller):
-        """Set the AI controller for this NPC"""
-        self.ai_controller = ai_controller
-        self.ai_controller.set_entity(self)
     
     def update(self):
         """Update entity state"""
@@ -60,6 +59,17 @@ class NPC(Rectangle):
                     # Check if we found what we were looking for (e.g., water)
                     if game_engine.world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
                         print(f"DEBUG: NPC {id(self)} found water as advised by player!")
+                        
+                        # Record the water source discovery in world cache
+                        if hasattr(game_engine, 'world_cache'):
+                            game_engine.world_cache.add_discovered_location(
+                                str(id(self)),
+                                "water",
+                                self.grid_x,
+                                self.grid_y,
+                                "Water source found via player advice"
+                            )
+                        
                         # Update AI universe state to reflect this
                         if hasattr(game_engine, 'ai_universe'):
                             game_engine.ai_universe.update_agent_state(
@@ -68,6 +78,15 @@ class NPC(Rectangle):
                                 advice_success=True,
                                 memory_event="Found water where the player said it would be."
                             )
+                            
+                        # If we're thirsty, drink immediately
+                        if self.thirst < 5:
+                            self.thirst += 1
+                            print(f"NPC drank water, thirst increased to {self.thirst}")
+                            
+                            # Show a speech bubble
+                            if hasattr(game_engine, 'ui'):
+                                game_engine.ui.add_text_bubble("Ah, refreshing water! Thank you for the advice.", self, duration=3.0)
                     else:
                         print(f"DEBUG: NPC {id(self)} did not find what they were looking for at the advised location.")
                         # Update AI universe state
@@ -78,6 +97,10 @@ class NPC(Rectangle):
                                 advice_success=False,
                                 memory_event="Did not find what the player said would be here."
                             )
+                        
+                        # Show a speech bubble
+                        if hasattr(game_engine, 'ui'):
+                            game_engine.ui.add_text_bubble("Hmm, I don't see what you mentioned here.", self, duration=3.0)
         
         # Update thirst over time
         current_time = pygame.time.get_ticks()
@@ -88,27 +111,7 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
-
     
-            
-
-        
-    def render(self, screen, camera):
-        """Render the NPC with camera transformations"""
-        super().render(screen, camera)
-    
-    def debug_player_visibility(self, player_id, can_see_player):
-        """Debug method to track player visibility changes"""
-        if can_see_player and not self.debug_player_detected:
-            # Player just entered detection range
-            self.debug_player_detected = True
-            self.debug_last_player_id = player_id
-            print(f"DEBUG: NPC {id(self)} detected player {player_id} in vicinity")
-        elif not can_see_player and self.debug_player_detected and self.debug_last_player_id == player_id:
-            # Player just left detection range
-            self.debug_player_detected = False
-            print(f"DEBUG: NPC {id(self)} lost sight of player {player_id}")
-            
     def apply_ai_decision(self, decision):
         """Apply an AI decision to this NPC"""
         # Check if this is a special action from NPCActionHandler
@@ -208,6 +211,32 @@ class NPC(Rectangle):
             elif decision.action == "move_down":
                 self.target_grid_y = self.grid_y + steps
                 self.is_moving = True
+
+    
+    def set_ai_controller(self, ai_controller):
+        """Set the AI controller for this NPC"""
+        self.ai_controller = ai_controller
+        self.ai_controller.set_entity(self)
+    
+
+
+        
+    def render(self, screen, camera):
+        """Render the NPC with camera transformations"""
+        super().render(screen, camera)
+    
+    def debug_player_visibility(self, player_id, can_see_player):
+        """Debug method to track player visibility changes"""
+        if can_see_player and not self.debug_player_detected:
+            # Player just entered detection range
+            self.debug_player_detected = True
+            self.debug_last_player_id = player_id
+            print(f"DEBUG: NPC {id(self)} detected player {player_id} in vicinity")
+        elif not can_see_player and self.debug_player_detected and self.debug_last_player_id == player_id:
+            # Player just left detection range
+            self.debug_player_detected = False
+            print(f"DEBUG: NPC {id(self)} lost sight of player {player_id}")
+            
 
 
 

@@ -162,6 +162,19 @@ class SimpleGameEngine:
                     player_message=message,
                     should_respond=True
                 )
+                
+                # Check if the message contains advice about water or other resources
+                # This is a simple check that will be enhanced by the AI universe controller
+                if ("water" in message.lower() or "thirsty" in message.lower()) and hasattr(npc, 'thirst') and npc.thirst <= 2:
+                    # If the NPC is thirsty and the player is giving water advice, make them more likely to follow it
+                    self.ai_universe.update_agent_state(
+                        agent_id=str(id(npc)),
+                        needs_advice=True,
+                        advice_topic="water",
+                        advice_urgency=5 - npc.thirst  # Higher urgency for lower thirst
+                    )
+                    print(f"DEBUG: NPC {id(npc)} is thirsty and received potential water advice")
+
 
                 
 

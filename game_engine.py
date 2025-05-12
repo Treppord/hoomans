@@ -3,6 +3,8 @@ from entities.rectangle import Rectangle
 from entities.npc import NPC
 from engine.ai import RandomWanderAI, FollowPlayerAI
 from world.map import WorldMap
+from world.world_cache import WorldCache
+
 import os
 import pygame
 # Add this import
@@ -55,6 +57,12 @@ if __name__ == "__main__":
     world_map.generate_realistic_map(seed=engine.map_seed)
     engine.set_world_map(world_map)
     
+    
+    # Initialize world cache with the same seed
+    world_cache = WorldCache()
+    world_cache.set_world_seed(engine.map_seed)
+    engine.world_cache = world_cache
+    
     # Get absolute path to the project root directory
     project_root = os.path.dirname(os.path.abspath(__file__))
     
@@ -62,7 +70,7 @@ if __name__ == "__main__":
     player = engine.add_object(Rectangle(grid_x=25, grid_y=19, color=(255, 0, 0), speed=1, controllable=True))
     
     # Add thirst attribute to player
-    player.thirst = 10
+    player.thirst = 5
     player.last_thirst_update = pygame.time.get_ticks()
     player.last_drink_time = 0
     
