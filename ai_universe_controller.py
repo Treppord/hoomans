@@ -123,6 +123,7 @@ class AgentDecision:
     advice_direction: Optional[str] = None  # Direction from player advice
     advice_distance: int = 0  # Distance from player advice
     advice_remaining_distance: int = 0  # Remaining distance to travel
+
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -295,7 +296,7 @@ PLAYER ADVICE:
         
         return base_prompt
 
-    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y):
+    def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y, agent_id=None):
         """Validate and correct the AI response based on the agent's needs"""
         
         # Ensure we're working with a dictionary
@@ -353,6 +354,21 @@ PLAYER ADVICE:
                     advice_distance = 1
             else:
                 advice_distance = 1
+        
+        # Check if the agent knows about water sources (from world cache)
+        knows_water_sources = False
+        water_locations = []
+        
+        if agent_id and hasattr(self, 'world_cache') and self.world_cache:
+            # Get agent memories
+            agent_memories = self.world_cache.get_entity_memories(agent_id)
+            
+            # Look for water discoveries in memories
+            for memory in agent_memories:
+                if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                    knows_water_sources = True
+                    water_data = memory.get('data', {})
+                    water_locations.append((water_data.get('x'), water_data.get('y')))
         
         # Validate drink action
         if action == "drink":
@@ -453,19 +469,31 @@ PLAYER ADVICE:
         
         # Generate appropriate speech based on needs and actions
         if has_critical_thirst:
-            # If critically thirsty, override speech with water-focused dialogue
-            water_speeches = [
-                "I need water desperately!",
-                "So thirsty... must find water...",
-                "Water... I need water now!",
-                "I'm dying of thirst!",
-                "Need to find water immediately!",
-                "My throat is so dry... need water...",
-                "Water! Where is water?!",
-                "Can't... go on... without... water...",
-                "Must... find... water..."
-            ]
-            speech = random.choice(water_speeches)
+            # If critically thirsty but knows water sources, don't speak about thirst
+            # The NPC will handle moving to water in the apply_ai_decision method
+            if knows_water_sources:
+                water_knowledge_speeches = [
+                    "I know where to find water.",
+                    "I remember seeing water nearby.",
+                    "I should head to that water source I found earlier.",
+                    "Good thing I know where water is.",
+                    "I'll go to the water I discovered before."
+                ]
+                speech = random.choice(water_knowledge_speeches)
+            else:
+                # If critically thirsty and doesn't know water sources, override speech with water-focused dialogue
+                water_speeches = [
+                    "I need water desperately!",
+                    "So thirsty... must find water...",
+                    "Water... I need water now!",
+                    "I'm dying of thirst!",
+                    "Need to find water immediately!",
+                    "My throat is so dry... need water...",
+                    "Water! Where is water?!",
+                    "Can't... go on... without... water...",
+                    "Must... find... water..."
+                ]
+                speech = random.choice(water_speeches)
         elif has_critical_hunger:
             # If critically hungry, override speech with food-focused dialogue
             food_speeches = [
@@ -544,6 +572,7 @@ PLAYER ADVICE:
 
 
 
+
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
         try:
@@ -599,7 +628,8 @@ PLAYER ADVICE:
                     has_critical_hunger,
                     agent_state.nearby_tiles,
                     agent_state.grid_x,
-                    agent_state.grid_y
+                    agent_state.grid_y,
+                    agent_id=agent_state.agent_id  # Pass the agent_id
                 )
                 
                 # Check if we should follow player advice
@@ -640,6 +670,7 @@ PLAYER ADVICE:
             logger.error(f"Error generating decision: {e}")
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
+
 
         
     def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
@@ -1370,6 +1401,18 @@ class AIUniverseController:
                 # Add target_id as an attribute after creation if needed
                 if hasattr(action_response, 'target_id') and action_response.target_id:
                     decision.target_id = action_response.target_id
+                
+                if hasattr(action_response, 'following_advice') and action_response.following_advice:
+                    decision.following_advice = action_response.following_advice
+                
+                if hasattr(action_response, 'advice_direction') and action_response.advice_direction:
+                    decision.advice_direction = action_response.advice_direction
+                
+                if hasattr(action_response, 'advice_distance'):
+                    decision.advice_distance = action_response.advice_distance
+                
+                if hasattr(action_response, 'advice_remaining_distance'):
+                    decision.advice_remaining_distance = action_response.advice_remaining_distance
                 
                 logger.info(f"DEBUG: Queuing command response decision for agent {agent_id}")
                 

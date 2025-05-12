@@ -13,12 +13,17 @@ logger = logging.getLogger("NPCActions")
 
 @dataclass
 class ActionResponse:
-    """Represents an NPC's response to a player command or interaction"""
-    action: str  # The action to perform (e.g., "follow_player", "stop_following", etc.)
-    speech: str  # What the NPC says in response
-    duration: Optional[int] = None  # How long to perform the action (in seconds), None for indefinite
-    target_id: Optional[str] = None  # ID of the target entity (e.g., player ID)
-    mood_change: float = 0.0  # How this affects NPC's mood (-1 to 1)
+    """Response from an NPC action handler"""
+    action: str
+    speech: str = ""
+    target_id: Optional[str] = None
+    mood_change: float = 0.0
+    # Add these new fields to support advice following
+    following_advice: bool = False
+    advice_direction: Optional[str] = None
+    advice_distance: int = 0
+    advice_remaining_distance: int = 0
+
 
 class NPCActionHandler:
     """Handles standard actions an NPC can perform based on AI responses or player commands"""
@@ -302,59 +307,136 @@ class NPCActionHandler:
                 )
         
         return None
-    
+
+    @staticmethod
+    def _parse_advice(message):
+        """Parse advice from a player message
+        
+        Returns a dictionary with:
+        - type: 'direction' or 'location'
+        - what: what the advice is about (water, food, etc.)
+        - direction: for direction advice
+        - distance: for direction advice
+        - landmark: for location advice
+        - confidence: confidence in the parsing
+        """
+        message = message.lower()
+        
+        # Initialize result
+        result = {
+            'type': None,
+            'what': 'resource',  # Default
+            'confidence': 0.0
+        }
+        
+        # Check for direction advice
+        direction_patterns = {
+            'right': ['right', 'east'],
+            'left': ['left', 'west'],
+            'up': ['up', 'north'],
+            'down': ['down', 'south']
+        }
+        
+        # Check for resource types
+        resource_types = {
+            'water': ['water', 'lake', 'river', 'pond', 'stream'],
+            'food': ['food', 'berries', 'fruit', 'meat'],
+            'shelter': ['shelter', 'house', 'building', 'cave'],
+            'resource': ['resource', 'item', 'thing']
+        }
+        
+        # Try to identify direction
+        found_direction = None
+        for direction, keywords in direction_patterns.items():
+            for keyword in keywords:
+                if keyword in message:
+                    found_direction = direction
+                    result['confidence'] += 0.3
+                    break
+            if found_direction:
+                break
+        
+        # Try to identify resource type
+        found_resource = None
+        for resource, keywords in resource_types.items():
+            for keyword in keywords:
+                if keyword in message:
+                    found_resource = resource
+                    result['confidence'] += 0.2
+                    break
+            if found_resource:
+                break
+        
+        # Try to identify distance
+        distance_pattern = r'(\d+)\s+(?:blocks?|tiles?|steps?)'
+        distance_match = re.search(distance_pattern, message)
+        found_distance = None
+        if distance_match:
+            try:
+                found_distance = int(distance_match.group(1))
+                result['confidence'] += 0.3
+            except ValueError:
+                found_distance = 1
+        
+        # If we found a direction, it's direction advice
+        if found_direction:
+            result['type'] = 'direction'
+            result['direction'] = found_direction
+            result['distance'] = found_distance if found_distance is not None else 1
+            
+            # If we also found a resource, add it
+            if found_resource:
+                result['what'] = found_resource
+            
+            # If we have both direction and distance, high confidence
+            if found_distance is not None:
+                result['confidence'] = max(result['confidence'], 0.8)
+        
+        # If confidence is too low, return None
+        if result['confidence'] < 0.5:
+            return None
+        
+        return result
+
     @staticmethod
     def handle_advice_command(message, agent_id, player_id):
-        """Handle player advice about resources"""
-        # Check for advice about resource locations
-        advice_patterns = [
-            r"(?:there is|there's|i found)\s+(?:a|some)?\s*(water|food|shelter)\s+(?:at|near|by)\s+coordinates?\s*\(?(\d+)[,\s]+(\d+)\)?",
-            r"(?:you can find|there is|there's)\s+(?:a|some)?\s*(water|food|shelter)\s+(\d+)\s+(?:tiles?|blocks?|steps?)\s+(?:to the)?\s*(north|south|east|west|left|right|up|down)"
-        ]
+        """Handle player giving advice to an NPC"""
+        # Parse the advice from the message
+        advice = NPCActionHandler._parse_advice(message)
         
-        for pattern in advice_patterns:
-            match = re.search(pattern, message, re.IGNORECASE)
-            if match:
-                groups = match.groups()
-                if len(groups) >= 3:
-                    resource_type = groups[0].lower()
-                    
-                    # Handle coordinate-based advice
-                    if groups[1].isdigit() and groups[2].isdigit():
-                        x, y = int(groups[1]), int(groups[2])
-                        return ActionResponse(
-                            action="follow_advice",
-                            speech=f"Thanks for the advice about {resource_type}. I'll check those coordinates.",
-                            mood_change=0.2,
-                            target_coordinates=(x, y),
-                            resource_type=resource_type
-                        )
-                    
-                    # Handle directional advice
-                    elif groups[1].isdigit() and groups[2] in ["north", "south", "east", "west", "left", "right", "up", "down"]:
-                        distance = int(groups[1])
-                        direction = groups[2].lower()
-                        
-                        # Normalize direction
-                        if direction in ["north", "up"]:
-                            direction = "up"
-                        elif direction in ["south", "down"]:
-                            direction = "down"
-                        elif direction in ["east", "right"]:
-                            direction = "right"
-                        elif direction in ["west", "left"]:
-                            direction = "left"
-                        
-                        return ActionResponse(
-                            action="follow_advice",
-                            speech=f"I'll check for {resource_type} {distance} tiles to the {direction}.",
-                            mood_change=0.2,
-                            advice_direction=direction,
-                            advice_distance=distance,
-                            resource_type=resource_type
-                        )
+        if not advice:
+            return None
         
-        return None
+        # Get the direction and distance
+        direction = advice.get('direction')
+        distance = advice.get('distance', 1)
+        what = advice.get('what', 'resource')
+        
+        # Map direction to action
+        action = None
+        if direction == 'right':
+            action = 'move_right'
+        elif direction == 'left':
+            action = 'move_left'
+        elif direction == 'up':
+            action = 'move_up'
+        elif direction == 'down':
+            action = 'move_down'
+        
+        if not action:
+            return None
+        
+        # Create a response
+        return ActionResponse(
+            action=action,
+            speech=f"I'll check for {what} {distance} tiles to the {direction}.",
+            mood_change=0.1,
+            following_advice=True,
+            advice_direction=direction,
+            advice_distance=distance,
+            advice_remaining_distance=distance
+        )
+
     
     @staticmethod
     def process_player_message(message, agent_id, player_id):
