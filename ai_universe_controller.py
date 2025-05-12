@@ -122,6 +122,7 @@ class AgentDecision:
     following_advice: bool = False  # Whether this decision is following player advice
     advice_direction: Optional[str] = None  # Direction from player advice
     advice_distance: int = 0  # Distance from player advice
+    advice_remaining_distance: int = 0  # Remaining distance to travel
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -942,6 +943,110 @@ class AIUniverseController:
         )
 
     
+    def _is_memory_query(self, message: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check if a message is asking about remembered locations or past events
+        Returns (is_memory_query, query_type)
+        """
+        message = message.lower()
+        
+        # Check for location memory queries
+        location_patterns = [
+            r"(?:where|location of|where is|where can i find|where to find|find)\s+(?:a|the)?\s*(\w+)",
+            r"(?:do you know|remember|recall|according to your memory).+?(?:where|location).+?(\w+)",
+            r"(?:do you know|remember|recall|according to your memory).+?(\w+).+?(?:location|where)"
+        ]
+        
+        for pattern in location_patterns:
+            match = re.search(pattern, message)
+            if match:
+                resource_type = match.group(1)
+                # Clean up resource type (remove trailing "s" if plural)
+                if resource_type.endswith('s'):
+                    resource_type = resource_type[:-1]
+                
+                # Map common terms to resource types
+                resource_mapping = {
+                    "water": "water",
+                    "drink": "water",
+                    "river": "water",
+                    "lake": "water",
+                    "pond": "water",
+                    "food": "food",
+                    "eat": "food",
+                    "fruit": "food",
+                    "shelter": "shelter",
+                    "house": "shelter",
+                    "building": "shelter"
+                }
+                
+                # Get standardized resource type
+                resource_type = resource_mapping.get(resource_type, resource_type)
+                
+                logger.info(f"DEBUG: Detected memory query for resource: {resource_type}")
+                return True, resource_type
+        
+        # Check for general memory queries
+        if any(phrase in message for phrase in [
+            "what do you remember", 
+            "what have you seen", 
+            "tell me about your memory", 
+            "what do you know about",
+            "according to your memory"
+        ]):
+            return True, "general"
+            
+        return False, None
+
+
+    def _get_agent_memory_for_location(self, agent_id: str, resource_type: str) -> Optional[Dict]:
+        """
+        Retrieve an agent's memory about a specific resource location
+        Returns memory data or None if not found
+        """
+        # First check if agent exists
+        if agent_id not in self.agents:
+            return None
+            
+        # Check if we have a world cache reference
+        if not hasattr(self, 'world_cache'):
+            # Try to get world cache from game engine
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                self.world_cache = SimpleGameEngine.instance.world_cache
+            else:
+                return None
+        
+        # Get agent memories from cache
+        agent_memories = self.world_cache.get_entity_memories(agent_id) if hasattr(self.world_cache, 'get_entity_memories') else []
+        
+        # Look for location memories matching the resource type
+        for memory in agent_memories:
+            if memory.get("type") == "location_discovery":
+                memory_data = memory.get("data", {})
+                if memory_data.get("location_type") == resource_type:
+                    return memory_data
+        
+        # If agent doesn't have direct memory, check discovered locations
+        discovered_locations = self.world_cache.get_discovered_locations(resource_type) if hasattr(self.world_cache, 'get_discovered_locations') else []
+        
+        # Check if any of these locations were discovered by this agent
+        for location in discovered_locations:
+            if "discovered_by" in location and agent_id in location["discovered_by"]:
+                return location
+                
+        # If still not found, check if the agent is near any discovered location of this type
+        agent_state = self.agents[agent_id]
+        for location in discovered_locations:
+            # Calculate Manhattan distance
+            distance = abs(location["x"] - agent_state.grid_x) + abs(location["y"] - agent_state.grid_y)
+            # If agent is or has been near this location, they might know about it
+            if distance <= 10:  # Within reasonable distance
+                return location
+                
+        return None
+
+    
     def _generate_chat_response(self, agent_id, player_message):
         """Generate a response to a player chat message"""
         try:
@@ -953,12 +1058,115 @@ class AIUniverseController:
             
             logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
             
-            # First, check if this is a command using NPCActionHandler
+            # Check if this is a memory query
+            is_memory_query, resource_type = self._is_memory_query(player_message)
+            if is_memory_query:
+                logger.info(f"DEBUG: Detected memory query for resource type: {resource_type}")
+                
+                # Handle general memory query
+                if resource_type == "general":
+                    # Get all agent memories
+                    if not hasattr(self, 'world_cache'):
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                            self.world_cache = SimpleGameEngine.instance.world_cache
+                    
+                    if hasattr(self, 'world_cache'):
+                        memories = self.world_cache.get_entity_memories(agent_id)
+                        if memories:
+                            # Summarize memories
+                            memory_types = set(memory.get("type") for memory in memories)
+                            
+                            # Create a response based on memory types
+                            if "location_discovery" in memory_types:
+                                location_memories = [m for m in memories if m.get("type") == "location_discovery"]
+                                locations = [m.get("data", {}).get("location_type") for m in location_memories]
+                                locations = [loc for loc in locations if loc]  # Filter out None
+                                
+                                if locations:
+                                    response = f"I remember finding {', '.join(locations)}. "
+                                    
+                                    # Add details about the most recent location
+                                    recent_location = location_memories[-1].get("data", {})
+                                    if "x" in recent_location and "y" in recent_location:
+                                        response += f"The most recent was {recent_location.get('location_type')} at coordinates ({recent_location.get('x')}, {recent_location.get('y')})."
+                                    
+                                    # Create a decision with the response
+                                    decision = AgentDecision(
+                                        agent_id=agent_id,
+                                        action="idle",
+                                        speech=response,
+                                        mood_change=0.1
+                                    )
+                                    self.decision_queue.put(decision)
+                                    return
+                    
+                    # Fallback for general memory query
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech="I don't have any significant memories to share right now.",
+                        mood_change=0
+                    )
+                    self.decision_queue.put(decision)
+                    
+                    return
+                
+                # Handle specific resource type query
+                memory_data = self._get_agent_memory_for_location(agent_id, resource_type)
+                
+                if memory_data:
+                    # Generate response with location information
+                    x = memory_data.get("x")
+                    y = memory_data.get("y")
+                    name = memory_data.get("name", f"{resource_type} source")
+                    
+                    # Calculate direction from agent to location
+                    direction = ""
+                    if x is not None and y is not None:
+                        dx = x - agent.grid_x
+                        dy = y - agent.grid_y
+                        
+                        if abs(dx) > abs(dy):
+                            direction = "east" if dx > 0 else "west"
+                        else:
+                            direction = "south" if dy > 0 else "north"
+                            
+                        # Calculate distance
+                        distance = abs(dx) + abs(dy)
+                        
+                        response = f"I remember finding {name} at coordinates ({x}, {y}). "
+                        response += f"That's about {distance} tiles to the {direction} from here."
+                    else:
+                        response = f"I remember finding {name}, but I'm not sure exactly where it was."
+                    
+                    # Create a decision with the response
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech=response,
+                        mood_change=0.1
+                    )
+                    self.decision_queue.put(decision)
+                    return
+                else:
+                    # No memory found
+                    response = f"I don't remember seeing any {resource_type} around here."
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech=response,
+                        mood_change=-0.1
+                    )
+                    self.decision_queue.put(decision)
+                    return
+            
+            # Continue with existing command processing
             from entities.npc_actions import NPCActionHandler
             is_command, action_response = NPCActionHandler.process_player_message(
                 player_message, 
                 agent_id, 
-                player_id="player"  # You might want to pass the actual player ID here
+                player_id="player"
             )
             
             if is_command and action_response:
@@ -987,56 +1195,45 @@ class AIUniverseController:
             if advice:
                 logger.info(f"DEBUG: Detected advice in message: {advice}")
                 
-                # Store the advice in the agent state
-                agent.player_advice = advice
-                agent.player_advice_time = time.time()
-                agent.advice_followed = False
+                # Create a movement decision based on the advice
+                direction = advice.get('direction', '').lower()
+                distance = advice.get('distance', 1)
+                what = advice.get('what', 'resource')
                 
-                # For directional advice, create a movement decision immediately
-                if advice["type"] == "direction" and "direction" in advice:
-                    direction = advice["direction"]
-                    distance = advice.get("distance", 1)
+                # Map direction to action
+                action = None
+                if direction == 'right':
+                    action = 'move_right'
+                elif direction == 'left':
+                    action = 'move_left'
+                elif direction == 'up':
+                    action = 'move_up'
+                elif direction == 'down':
+                    action = 'move_down'
+                
+                if action:
+                    logger.info(f"DEBUG: Created movement decision based on advice: {action}")
                     
-                    # Map direction to action
-                    action_map = {
-                        "left": "move_left",
-                        "right": "move_right", 
-                        "up": "move_up",
-                        "down": "move_down",
-                        "north": "move_up",
-                        "south": "move_down",
-                        "east": "move_right",
-                        "west": "move_left"
-                    }
+                    # First, acknowledge the advice
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="idle",
+                        speech=f"Thanks for the tip! I'll go check for {what} to the {direction}."
+                    )
+                    self.decision_queue.put(decision)
                     
-                    if direction in action_map:
-                        action = action_map[direction]
-                        
-                        # Create a decision to follow the advice
-                        decision = AgentDecision(
-                            agent_id=agent_id,
-                            action=action,
-                            speech=f"I'll check for {advice['what']} {distance} tiles to the {direction}.",
-                            reason=f"Following player's advice about {advice['what']} to the {direction}",
-                            following_advice=True,
-                            advice_direction=direction,
-                            advice_distance=distance
-                        )
-                        
-                        logger.info(f"DEBUG: Created movement decision based on advice: {action}")
-                        
-                        # Queue both a chat response and the movement decision
-                        chat_decision = AgentDecision(
-                            agent_id=agent_id,
-                            action="idle",
-                            speech=f"Thanks for the tip! I'll go check for {advice['what']} to the {direction}.",
-                            mood_change=0.2
-                        )
-                        
-                        # Put the decisions in the queue
-                        self.decision_queue.put(chat_decision)
-                        self.decision_queue.put(decision)
-                        return
+                    # Then create a decision to follow the advice
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action=action,
+                        speech=f"I'll check for {what} {distance} tiles to the {direction}.",
+                        following_advice=True,
+                        advice_direction=direction,
+                        advice_distance=distance,
+                        advice_remaining_distance=distance  # Set the remaining distance
+                    )
+                    self.decision_queue.put(decision)
+                    return
             
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."

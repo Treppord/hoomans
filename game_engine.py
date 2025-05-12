@@ -62,6 +62,11 @@ if __name__ == "__main__":
     world_cache = WorldCache()
     world_cache.set_world_seed(engine.map_seed)
     engine.world_cache = world_cache
+    ai_universe.world_cache = world_cache  # Direct reference to the same object
+
+
+
+
     
     # Get absolute path to the project root directory
     project_root = os.path.dirname(os.path.abspath(__file__))

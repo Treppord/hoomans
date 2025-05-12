@@ -53,6 +53,17 @@ class SimpleGameEngine:
         
         # Initialize UI manager
         self.ui = UIManager(width, height)
+
+        # Initialize world cache
+        from world.world_cache import WorldCache
+        self.world_cache = WorldCache()
+        if self.map_seed:
+            try:
+                print(f"DEBUG: Initializing world cache with seed {self.map_seed}")
+                self.world_cache.set_world_seed(self.map_seed)
+                print(f"DEBUG: World cache initialized successfully")
+            except Exception as e:
+                print(f"ERROR initializing world cache: {e}")
         
         # Player reference (will be set when player is added)
         self.player = None
@@ -383,7 +394,6 @@ class SimpleGameEngine:
                 # Also update player entity's thirst if it exists
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
-                    print(f"Player thirst decreased to {self.player.thirst}")
 
 
 
