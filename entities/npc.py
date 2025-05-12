@@ -14,7 +14,7 @@ class NPC(Rectangle):
         self.ai_controller = ai_controller
         
         # Add thirst attribute (0-5 scale)
-        self.thirst = 5  # Start with full thirst
+        self.thirst = 10  # Start with full thirst
         self.last_thirst_update = 0  # Track time for thirst decrease
         self.last_drink_time = 0  # Track time for drinking
         
@@ -106,7 +106,7 @@ class NPC(Rectangle):
         current_time = pygame.time.get_ticks()
         
         # Decrease thirst every 10 seconds
-        if current_time - self.last_thirst_update > 10000:  # 10 seconds
+        if current_time - self.last_thirst_update > 20000:  # 20 seconds
             if self.thirst > 0:
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")

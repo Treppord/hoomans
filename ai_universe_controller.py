@@ -43,8 +43,8 @@ class AgentState:
     agent_id: str
     grid_x: int
     grid_y: int
-    thirst: int = 5  # 0-5 scale
-    hunger: int = 5  # 0-5 scale
+    thirst: int = 10  # 0-10 scale
+    hunger: int = 10  # 0-10 scale
     health: int = 5  # 0-5 scale
     mood: float = 0.5  # 0-1 scale
     last_action: str = "idle"

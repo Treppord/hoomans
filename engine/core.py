@@ -74,7 +74,7 @@ class SimpleGameEngine:
         # Create player stats
         self.data.create_player_stat("health", 20, 0, 20)
         self.data.create_player_stat("hunger", 10, 0, 10)
-        self.data.create_player_stat("thirst", 5, 0, 5)
+        self.data.create_player_stat("thirst", 10, 0, 10)
         self.data.create_player_stat("score", 0, 0, None)
         
         # Create game values
@@ -229,10 +229,8 @@ class SimpleGameEngine:
             if event.type == pygame.MOUSEWHEEL:
                 if event.y > 0:
                     self.camera.zoom_in(0.1)
-                    print(f"Zoomed in: {self.camera.zoom:.2f}")
                 elif event.y < 0:
                     self.camera.zoom_out(0.1)
-                    print(f"Zoomed out: {self.camera.zoom:.2f}")
                 continue
                 
             # Handle mouse buttons for panning
@@ -281,6 +279,15 @@ class SimpleGameEngine:
 
         # Update game time
         self.data.add_to_value("game_time", 1)
+        
+        # Update all game objects
+        for obj in self.objects:
+            if hasattr(obj, 'update'):
+                obj.update()
+        
+        # Update player thirst in data manager if player exists
+        if self.player and hasattr(self.player, 'thirst'):
+            self.data.get_player_stat("thirst").set(self.player.thirst)
         
         # Update AI Universe for NPCs
         if hasattr(self, 'ai_universe'):
@@ -367,7 +374,7 @@ class SimpleGameEngine:
             self.data.get_player_stat("thirst").set(self.player.thirst)
         
         # Example: slowly decrease hunger and thirst over time
-        if self.data.get_value("game_time").value % 600 == 0:  # Every 10 seconds (at 60 FPS)
+        if self.data.get_value("game_time").value % 1200 == 0:  # Every 20 seconds (at 60 FPS)
             if self.data.get_player_stat("hunger").value > 0:
                 self.data.get_player_stat("hunger").subtract(1)
             if self.data.get_player_stat("thirst").value > 0:

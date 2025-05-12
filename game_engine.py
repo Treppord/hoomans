@@ -70,7 +70,7 @@ if __name__ == "__main__":
     player = engine.add_object(Rectangle(grid_x=25, grid_y=19, color=(255, 0, 0), speed=1, controllable=True))
     
     # Add thirst attribute to player
-    player.thirst = 5
+    player.thirst = 10
     player.last_thirst_update = pygame.time.get_ticks()
     player.last_drink_time = 0
     

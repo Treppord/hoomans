@@ -82,6 +82,7 @@ class WorldMap:
                 self.get_tile(nx, ny) and self.get_tile(nx, ny).is_water()):
                 return True
         return False
+
     
     def find_nearest_water(self, start_x, start_y, max_distance=8):
         """Find the nearest water tile within the given distance"""
