@@ -156,7 +156,7 @@ class Rectangle:
             if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                 self.is_moving = False
             else:
-                # Move towards target
+                # Move towards target one tile at a time
                 if self.grid_x < self.target_grid_x:
                     self.grid_x += self.speed
                 elif self.grid_x > self.target_grid_x:

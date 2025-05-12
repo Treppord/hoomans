@@ -44,6 +44,63 @@ class NPC(Rectangle):
         """Update entity state"""
         super().update()
         
+        # Check if we're standing on water (emergency situation)
+        from engine.core import SimpleGameEngine
+        world_map = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        if world_map and hasattr(world_map, 'get_tile'):
+            current_tile = world_map.get_tile(self.grid_x, self.grid_y)
+            if current_tile and hasattr(current_tile, 'is_water') and current_tile.is_water():
+                # We're standing on water! This is bad!
+                print(f"DEBUG: NPC {self.get_entity_id()} is standing on water at ({self.grid_x}, {self.grid_y})!")
+                
+                # Find the nearest land tile
+                nearest_land_x = None
+                nearest_land_y = None
+                min_distance = float('inf')
+                
+                # Search in a 5-tile radius
+                for y in range(self.grid_y - 5, self.grid_y + 6):
+                    for x in range(self.grid_x - 5, self.grid_x + 6):
+                        tile = world_map.get_tile(x, y)
+                        if tile and hasattr(tile, 'is_walkable') and tile.is_walkable() and not tile.is_water():
+                            distance = abs(x - self.grid_x) + abs(y - self.grid_y)
+                            if distance < min_distance:
+                                min_distance = distance
+                                nearest_land_x = x
+                                nearest_land_y = y
+                
+                # If we found land, move towards it
+                if nearest_land_x is not None and nearest_land_y is not None:
+                    # Only start moving if we're not already moving
+                    if not self.is_moving:
+                        # Determine which direction to move (one step at a time)
+                        dx = nearest_land_x - self.grid_x
+                        dy = nearest_land_y - self.grid_y
+                        
+                        if abs(dx) > abs(dy):
+                            # Move horizontally first
+                            self.target_grid_x = self.grid_x + (1 if dx > 0 else -1)
+                            self.target_grid_y = self.grid_y
+                        else:
+                            # Move vertically first
+                            self.target_grid_x = self.grid_x
+                            self.target_grid_y = self.grid_y + (1 if dy > 0 else -1)
+                        
+                        self.is_moving = True
+                        
+                        # Show a speech bubble about escaping water
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            water_escape_speeches = [
+                                "I need to get out of this water!",
+                                "Help! I'm in water!",
+                                "This water is too deep!",
+                                "I can't swim!"
+                            ]
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_escape_speeches), self, duration=1.5)
+        
         # Handle movement
         if self.is_moving:
             # Calculate direction to target
@@ -171,6 +228,7 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
+
     
     
     def get_entity_id(self):
@@ -255,6 +313,36 @@ class NPC(Rectangle):
             
     def apply_ai_decision(self, decision):
         """Apply an AI decision to this NPC"""
+        if hasattr(decision, 'is_escaping_water') and decision.is_escaping_water:
+            # Apply the movement action immediately
+            if decision.action == "move_left":
+                self.target_grid_x = self.grid_x - 1
+                self.target_grid_y = self.grid_y
+            elif decision.action == "move_right":
+                self.target_grid_x = self.grid_x + 1
+                self.target_grid_y = self.grid_y
+            elif decision.action == "move_up":
+                self.target_grid_x = self.grid_x
+                self.target_grid_y = self.grid_y - 1
+            elif decision.action == "move_down":
+                self.target_grid_x = self.grid_x
+                self.target_grid_y = self.grid_y + 1
+            
+            # Set the NPC to moving state
+            self.is_moving = True
+            
+            # Show a speech bubble about escaping water
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                water_escape_speeches = [
+                    "I need to get out of this water!",
+                    "Help! I'm in water!",
+                    "This water is too deep!",
+                    "I can't swim!"
+                ]
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_escape_speeches), self, duration=1.5)
+            
+            return
         if hasattr(decision, 'is_heading_to_known_water') and decision.is_heading_to_known_water:
             # If we have target coordinates, set them as our destination
             if decision.target_x is not None and decision.target_y is not None:

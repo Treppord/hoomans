@@ -107,6 +107,8 @@ class AgentState:
 
 
 
+# Add to the AgentDecision class:
+
 @dataclass
 class AgentDecision:
     """Represents an AI decision for an agent"""
@@ -124,6 +126,8 @@ class AgentDecision:
     advice_distance: int = 0  # Distance from player advice
     advice_remaining_distance: int = 0  # Remaining distance to travel
     is_heading_to_known_water: bool = False  # Whether heading to a known water source
+    is_escaping_water: bool = False  # Whether escaping from standing on water
+
     
     @classmethod
     def from_ai_response(cls, agent_id: str, response_json: Dict) -> 'AgentDecision':
@@ -616,6 +620,59 @@ PLAYER ADVICE:
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
         try:
+            # Check if the agent is standing on water (emergency situation)
+            is_on_water = False
+            for tile in agent_state.nearby_tiles:
+                if (tile.get("type") == "water" and 
+                    tile["x"] == agent_state.grid_x and 
+                    tile["y"] == agent_state.grid_y):
+                    is_on_water = True
+                    break
+            
+            # If standing on water, find the nearest land tile and move there
+            if is_on_water:
+                print(f"DEBUG: Agent {agent_state.agent_id} is standing on water! Finding nearest land...")
+                
+                # Find the nearest land tile
+                land_tiles = [tile for tile in agent_state.nearby_tiles 
+                             if tile.get("type") != "water" and tile.get("walkable", False)]
+                
+                if land_tiles:
+                    # Find the closest land tile
+                    nearest_land = min(land_tiles, 
+                                      key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
+                    
+                    # Calculate direction to land
+                    dx = nearest_land["x"] - agent_state.grid_x
+                    dy = nearest_land["y"] - agent_state.grid_y
+                    
+                    # Determine which direction to move (prioritize the larger distance)
+                    if abs(dx) > abs(dy):
+                        action = "move_right" if dx > 0 else "move_left"
+                    else:
+                        action = "move_down" if dy > 0 else "move_up"
+                    
+                    # Create a decision to escape water
+                    return AgentDecision(
+                        agent_id=agent_state.agent_id,
+                        action=action,
+                        speech="I need to get out of this water!",
+                        reason="Escaping from standing on water",
+                        mood_change=-0.3,  # Negative mood impact
+                        is_escaping_water=True
+                    )
+                else:
+                    # No land tiles found in nearby area, move in a random direction
+                    action = random.choice(["move_left", "move_right", "move_up", "move_down"])
+                    return AgentDecision(
+                        agent_id=agent_state.agent_id,
+                        action=action,
+                        speech="Help! I'm stuck in water!",
+                        reason="Trying to escape water but no land in sight",
+                        mood_change=-0.5,  # Larger negative mood impact
+                        is_escaping_water=True
+                    )
+            
             # Determine if agent has critical needs
             has_critical_thirst = agent_state.thirst < 1
             has_critical_hunger = agent_state.hunger < 1
