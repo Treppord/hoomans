@@ -2,6 +2,10 @@ from entities.rectangle import Rectangle
 import pygame
 import random
 
+from entities.rectangle import Rectangle
+import pygame
+import random
+
 class NPC(Rectangle):
     """An NPC entity controlled by AI"""
     
@@ -26,10 +30,6 @@ class NPC(Rectangle):
         """Set the AI controller for this NPC"""
         self.ai_controller = ai_controller
         self.ai_controller.set_entity(self)
-        
-    def render(self, screen, camera):
-        """Render the NPC with camera transformations"""
-        super().render(screen, camera)
     
     def update(self):
         """Update entity state"""
@@ -44,6 +44,13 @@ class NPC(Rectangle):
                 self.thirst -= 1
                 print(f"NPC thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
+    
+            
+
+        
+    def render(self, screen, camera):
+        """Render the NPC with camera transformations"""
+        super().render(screen, camera)
     
     def debug_player_visibility(self, player_id, can_see_player):
         """Debug method to track player visibility changes"""

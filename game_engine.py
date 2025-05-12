@@ -13,6 +13,20 @@ if __name__ == "__main__":
     engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600)
     
     project_root = os.path.dirname(os.path.abspath(__file__))
+    sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
+    if not os.path.exists(sprite_path):
+        print(f"Warning: Sprite sheet not found at {sprite_path}")
+        print("Creating a placeholder sprite sheet...")
+        # Create a placeholder sprite sheet
+        placeholder = pygame.Surface((32, 16))
+        # First frame (left half)
+        placeholder.fill((255, 255, 255), rect=(0, 0, 16, 16))
+        # Second frame (right half)
+        placeholder.fill((255, 255, 255), rect=(16, 0, 16, 16))
+        # Save the placeholder
+        os.makedirs(os.path.dirname(sprite_path), exist_ok=True)
+        pygame.image.save(placeholder, sprite_path)
+        print(f"Created placeholder sprite sheet at {sprite_path}")
 
     
     # Initialize AI Universe Controller
