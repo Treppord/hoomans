@@ -950,11 +950,16 @@ class AIUniverseController:
         """
         message = message.lower()
         
+        # Check for water-specific queries first
+        if ("water" in message or "drink" in message) and any(word in message for word in ["where", "location", "know", "remember", "nearby"]):
+            logger.info(f"DEBUG: Detected water-specific memory query")
+            return True, "water"
+        
         # Check for location memory queries
         location_patterns = [
             r"(?:where|location of|where is|where can i find|where to find|find)\s+(?:a|the)?\s*(\w+)",
-            r"(?:do you know|remember|recall|according to your memory).+?(?:where|location).+?(\w+)",
-            r"(?:do you know|remember|recall|according to your memory).+?(\w+).+?(?:location|where)"
+            r"(?:do you know|remember|recall).+?(?:where|location).+?(\w+)",
+            r"(?:do you know|remember|recall).+?(\w+).+?(?:location|where)"
         ]
         
         for pattern in location_patterns:
@@ -964,6 +969,10 @@ class AIUniverseController:
                 # Clean up resource type (remove trailing "s" if plural)
                 if resource_type.endswith('s'):
                     resource_type = resource_type[:-1]
+                
+                # Skip common words that aren't resources
+                if resource_type.lower() in ["of", "any", "some", "the", "a", "an", "is", "are", "do", "you", "know"]:
+                    continue
                 
                 # Map common terms to resource types
                 resource_mapping = {
@@ -986,17 +995,24 @@ class AIUniverseController:
                 logger.info(f"DEBUG: Detected memory query for resource: {resource_type}")
                 return True, resource_type
         
+        # Special case for "water sources" or similar phrases
+        if "water" in message and any(word in message for word in ["source", "sources", "location", "locations", "nearby"]):
+            logger.info(f"DEBUG: Detected special case water source query")
+            return True, "water"
+        
         # Check for general memory queries
         if any(phrase in message for phrase in [
             "what do you remember", 
             "what have you seen", 
             "tell me about your memory", 
             "what do you know about",
-            "according to your memory"
+            "according to your memory",
+            "do you know of any"
         ]):
             return True, "general"
             
         return False, None
+
 
 
     def _get_agent_memory_for_location(self, agent_id: str, resource_type: str) -> Optional[Dict]:
@@ -1006,6 +1022,7 @@ class AIUniverseController:
         """
         # First check if agent exists
         if agent_id not in self.agents:
+            print(f"DEBUG: Agent {agent_id} not found in agents dictionary")
             return None
             
         # Check if we have a world cache reference
@@ -1014,25 +1031,31 @@ class AIUniverseController:
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
                 self.world_cache = SimpleGameEngine.instance.world_cache
+                print(f"DEBUG: Got world cache reference from game engine")
             else:
+                print(f"DEBUG: Could not get world cache reference")
                 return None
         
         # Get agent memories from cache
         agent_memories = self.world_cache.get_entity_memories(agent_id) if hasattr(self.world_cache, 'get_entity_memories') else []
+        print(f"DEBUG: Found {len(agent_memories)} memories for agent {agent_id}")
         
         # Look for location memories matching the resource type
         for memory in agent_memories:
             if memory.get("type") == "location_discovery":
                 memory_data = memory.get("data", {})
                 if memory_data.get("location_type") == resource_type:
+                    print(f"DEBUG: Found memory for {resource_type} at ({memory_data.get('x')}, {memory_data.get('y')})")
                     return memory_data
         
         # If agent doesn't have direct memory, check discovered locations
         discovered_locations = self.world_cache.get_discovered_locations(resource_type) if hasattr(self.world_cache, 'get_discovered_locations') else []
+        print(f"DEBUG: Found {len(discovered_locations)} discovered {resource_type} locations")
         
         # Check if any of these locations were discovered by this agent
         for location in discovered_locations:
             if "discovered_by" in location and agent_id in location["discovered_by"]:
+                print(f"DEBUG: Found location discovered by agent at ({location.get('x')}, {location.get('y')})")
                 return location
                 
         # If still not found, check if the agent is near any discovered location of this type
@@ -1042,8 +1065,10 @@ class AIUniverseController:
             distance = abs(location["x"] - agent_state.grid_x) + abs(location["y"] - agent_state.grid_y)
             # If agent is or has been near this location, they might know about it
             if distance <= 10:  # Within reasonable distance
+                print(f"DEBUG: Found nearby location at ({location.get('x')}, {location.get('y')})")
                 return location
                 
+        print(f"DEBUG: No memory found for {resource_type}")
         return None
 
     

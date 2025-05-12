@@ -1,7 +1,7 @@
 {
   "seed": 39,
   "entity_memories": {
-    "6304555648": [
+    "5965349504": [
       {
         "type": "location_discovery",
         "data": {
@@ -20,9 +20,7 @@
         "x": 43,
         "y": 25,
         "name": "Water source found via player advice",
-        "discovered_by": [
-          "6304555648"
-        ],
+        "discovered_by": ["5965349504"],
         "discovery_time": 1747065451.295938
       }
     ]
