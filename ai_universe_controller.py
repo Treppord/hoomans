@@ -1334,6 +1334,11 @@ class AIUniverseController:
             
             logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
             
+            # IMPORTANT: Set a flag to indicate this agent is responding to chat
+            # This will be used to prioritize chat responses
+            agent.is_responding_to_chat = True
+            agent.chat_response_time = time.time()
+            
             # Check if this is a memory query
             is_memory_query, resource_type = self._is_memory_query(player_message)
             
@@ -1758,7 +1763,7 @@ class AIUniverseController:
             # Create a decision with just the speech
             decision = AgentDecision(
                 agent_id=agent_id,
-                action="idle",  # Just stand still while talking
+                action="respond_to_chat",  # Special action for chat responses
                 speech=response_text,
                 mood_change=0.1  # Slight mood boost from social interaction
             )
@@ -1767,6 +1772,7 @@ class AIUniverseController:
             
             # Put the decision in the queue for the game engine
             self.decision_queue.put(decision)
+            
             
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
@@ -1784,12 +1790,32 @@ class AIUniverseController:
         current_time = time.time()
         agents_to_process = []
         
-        # Identify agents that need processing
+        # First, check for agents that are responding to chat
+        chat_responders = []
         for agent_id, agent in self.agents.items():
-            last_time = self.last_processed.get(agent_id, 0)
-            if current_time - last_time >= self.processing_interval:
-                agents_to_process.append(agent)
-                self.last_processed[agent_id] = current_time
+            if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
+                # If the chat response has been pending for too long, clear the flag
+                if current_time - agent.chat_response_time > 5.0:  # 5 second timeout
+                    agent.is_responding_to_chat = False
+                    logger.warning(f"Chat response for agent {agent_id} timed out")
+                else:
+                    chat_responders.append(agent)
+        
+        # Process chat responders first
+        if chat_responders:
+            logger.info(f"Processing {len(chat_responders)} agents responding to chat")
+            agents_to_process.extend(chat_responders)
+        
+        # Then process regular agents that need decisions
+        if not agents_to_process:  # Only if no chat responders
+            for agent_id, agent in self.agents.items():
+                last_time = self.last_processed.get(agent_id, 0)
+                if current_time - last_time >= self.processing_interval:
+                    # Skip agents that are waiting for chat responses
+                    if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
+                        continue
+                    agents_to_process.append(agent)
+                    self.last_processed[agent_id] = current_time
         
         if not agents_to_process:
             return

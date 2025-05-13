@@ -169,7 +169,7 @@ class SimpleGameEngine:
                 
                 # Create a special state update to trigger a response
                 self.ai_universe.update_agent_state(
-                    agent_id=npc.get_entity_id(),  # Use persistent ID
+                    agent_id=npc.get_entity_id(),  # Use persistent entity ID
                     grid_x=npc.grid_x,
                     grid_y=npc.grid_y,
                     player_message=message,
@@ -177,16 +177,16 @@ class SimpleGameEngine:
                 )
                 
                 # Check if the message contains advice about water or other resources
-                # This is a simple check that will be enhanced by the AI universe controller
                 if ("water" in message.lower() or "thirsty" in message.lower()) and hasattr(npc, 'thirst') and npc.thirst <= 2:
                     # If the NPC is thirsty and the player is giving water advice, make them more likely to follow it
                     self.ai_universe.update_agent_state(
-                        agent_id=npc.get_entity_id(),  # Use persistent ID
+                        agent_id=npc.get_entity_id(),  # Use persistent entity ID
                         needs_advice=True,
                         advice_topic="water",
                         advice_urgency=5 - npc.thirst  # Higher urgency for lower thirst
                     )
                     print(f"DEBUG: NPC {npc.get_entity_id()} is thirsty and received potential water advice")
+
                 
 
         
@@ -291,6 +291,38 @@ class SimpleGameEngine:
         # Update game time
         self.data.add_to_value("game_time", 1)
         
+        # Process AI decisions first to prioritize chat responses
+        if hasattr(self, 'ai_universe'):
+            decisions = self.ai_universe.get_pending_decisions()
+            for decision in decisions:
+                print(f"DEBUG: Processing decision for agent {decision.agent_id}, action={decision.action}, speech='{decision.speech}'")
+                # Find the corresponding object
+                found_object = False
+                for obj in self.objects:
+                    # Try both direct ID comparison and entity_id comparison
+                    if (obj.get_entity_id() == decision.agent_id or 
+                        str(id(obj)) == decision.agent_id):
+                        found_object = True
+                        # Apply the decision to the NPC
+                        if isinstance(obj, NPC):
+                            obj.apply_ai_decision(decision)
+                        
+                        # Handle speech with text bubbles
+                        if decision.speech and hasattr(self, 'ui'):
+                            print(f"DEBUG: Adding text bubble for speech: '{decision.speech}'")
+                            self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
+                        elif not decision.speech:
+                            print(f"DEBUG: No speech to display for agent {decision.agent_id}")
+                        
+                        # Add debug output to help diagnose ID issues
+                        print(f"DEBUG: Matched agent ID {decision.agent_id} to object with entity_id {obj.get_entity_id()}")
+                        break
+                
+                if not found_object:
+                    print(f"DEBUG: Could not find object for agent {decision.agent_id}")
+                    # Add more debug info to help diagnose the issue
+                    print(f"DEBUG: Available entity IDs: {[obj.get_entity_id() for obj in self.objects if hasattr(obj, 'get_entity_id')]}")
+        
         # Update all game objects
         for obj in self.objects:
             if hasattr(obj, 'update'):
@@ -310,12 +342,9 @@ class SimpleGameEngine:
                     nearby_entities = WorldStateCollector.collect_nearby_entities(
                         self.objects, obj.grid_x, obj.grid_y, radius=5)
                     
-                    # Use persistent entity ID instead of object ID
-                    entity_id = obj.get_entity_id()
-                    
                     # Update agent state in AI universe
                     self.ai_universe.update_agent_state(
-                        agent_id=entity_id,  # Use persistent ID
+                        agent_id=obj.get_entity_id(),  # Use persistent entity ID
                         grid_x=obj.grid_x,
                         grid_y=obj.grid_y,
                         thirst=obj.thirst if hasattr(obj, 'thirst') else 5,
@@ -343,40 +372,14 @@ class SimpleGameEngine:
                                     if random.random() < 0.2 and hasattr(self, 'ai_universe'):
                                         # Create a special state update for NPC-to-NPC chat
                                         self.ai_universe.update_agent_state(
-                                            agent_id=obj1.get_entity_id(),  # Use persistent ID
+                                            agent_id=obj1.get_entity_id(),  # Use persistent entity ID
                                             grid_x=obj1.grid_x,
                                             grid_y=obj1.grid_y,
                                             npc_interaction=True,
-                                            other_npc_id=obj2.get_entity_id()  # Use persistent ID
+                                            other_npc_id=obj2.get_entity_id()  # Use persistent entity ID
                                         )
                                         # Only one NPC needs to initiate
                                         break
-            
-            # Process AI decisions
-            decisions = self.ai_universe.get_pending_decisions()
-            for decision in decisions:
-                print(f"DEBUG: Processing decision for agent {decision.agent_id}, action={decision.action}, speech='{decision.speech}'")
-                # Find the corresponding object
-                found_object = False
-                for obj in self.objects:
-                    if obj.get_entity_id() == decision.agent_id:  # Use persistent ID
-                        found_object = True
-                        # Apply the decision to the NPC
-                        if isinstance(obj, NPC):
-                            obj.apply_ai_decision(decision)
-                        
-                        # Handle speech with text bubbles
-                        if decision.speech and hasattr(self, 'ui'):
-                            print(f"DEBUG: Adding text bubble for speech: '{decision.speech}'")
-                            self.ui.add_text_bubble(decision.speech, obj, duration=3.0)
-                        elif not decision.speech:
-                            print(f"DEBUG: No speech to display for agent {decision.agent_id}")
-                        
-                        break
-                
-                if not found_object:
-                    print(f"DEBUG: Could not find object for agent {decision.agent_id}")
-
         
         # Update AI for all NPCs (keep the existing AI system as fallback)
         self.ai_manager.update(self.world_map, self.objects)
@@ -398,6 +401,7 @@ class SimpleGameEngine:
                 # Also update player entity's thirst if it exists
                 if self.player and hasattr(self.player, 'thirst') and self.player.thirst > 0:
                     self.player.thirst -= 1
+
 
 
 
