@@ -260,6 +260,263 @@ class ChatInputBox(UIElement):
         # For preventing duplicate messages
         self.skip_next_add = False
         
+        # For scrolling chat history
+        self.scroll_offset = 0
+        self.max_scroll_offset = 0
+    
+    def handle_scroll(self, scroll_amount):
+        """Handle mouse wheel scrolling in chat history"""
+        # Always return True when in chat mode to capture the scroll event
+        print(f"DEBUG: Chat input received scroll event: {scroll_amount}")
+        
+        # Calculate the total number of messages
+        total_messages = len(self.chat_history)
+        
+        # Calculate the maximum scroll offset (total messages - visible messages)
+        self.max_scroll_offset = max(0, total_messages - self.max_visible_history)
+        
+        # Update scroll offset based on scroll amount
+        # In pygame, positive scroll_amount means scroll up (show older messages)
+        self.scroll_offset += scroll_amount
+        
+        # Clamp the scroll offset to valid range
+        if self.scroll_offset < 0:
+            self.scroll_offset = 0
+        if self.scroll_offset > self.max_scroll_offset:
+            self.scroll_offset = self.max_scroll_offset
+        
+        print(f"DEBUG: Chat scroll offset updated to: {self.scroll_offset}/{self.max_scroll_offset}")
+        return True
+    
+    def render(self, screen):
+        # Always render chat log
+        self._render_chat_log(screen)
+        
+        if not self.visible:
+            return
+            
+        # Create a surface with alpha for transparency
+        box_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        
+        # Draw background with transparency
+        pygame.draw.rect(box_surface, self.background_color, 
+                        (0, 0, self.width, self.height), 
+                        border_radius=8)
+        
+        # Draw border
+        pygame.draw.rect(box_surface, self.border_color, 
+                        (0, 0, self.width, self.height), 
+                        border_radius=8, width=2)
+        
+        # Render text or placeholder
+        if self.text:
+            display_text = self.text
+            text_color = self.text_color
+        else:
+            display_text = self.placeholder_text
+            text_color = self.placeholder_color
+        
+        # Add blinking cursor if active
+        self.cursor_timer += 1
+        if self.cursor_timer > 30:  # Toggle cursor every 30 frames
+            self.cursor_visible = not self.cursor_visible
+            self.cursor_timer = 0
+            
+        # Render text with potential truncation if too long
+        text_width = self.font.size(display_text)[0]
+        
+        # If text is too wide, show only the end portion
+        if text_width > self.width - (self.padding * 2):
+            # Calculate how many characters to show
+            visible_width = self.width - (self.padding * 2)
+            char_width = text_width / len(display_text)
+            visible_chars = int(visible_width / char_width)
+            
+            # Show the last visible_chars characters
+            display_text = display_text[-visible_chars:]
+            text_width = self.font.size(display_text)[0]
+        
+        # Draw selection highlight if there's a selection
+        if self.selection_start is not None and self.selection_end is not None and self.selection_start != self.selection_end:
+            start = min(self.selection_start, self.selection_end)
+            end = max(self.selection_start, self.selection_end)
+            
+            # Calculate selection rectangle
+            selection_text = display_text[start:end]
+            selection_width = self.font.size(selection_text)[0]
+            selection_x = self.padding + self.font.size(display_text[:start])[0]
+            
+            # Draw selection highlight
+            pygame.draw.rect(box_surface, (100, 100, 255, 128),  # Light blue semi-transparent
+                            (selection_x, self.height // 2 - 10, selection_width, 20))
+        
+        # Render the text
+        text_surface = self.font.render(display_text, True, text_color)
+        box_surface.blit(text_surface, (self.padding, self.height // 2 - text_surface.get_height() // 2))
+        
+        # Add cursor at current position if visible
+        if self.text and self.cursor_visible:
+            cursor_pos = self.selection_end if self.selection_end is not None else len(self.text)
+            cursor_x = self.padding + self.font.size(display_text[:cursor_pos])[0]
+            pygame.draw.line(box_surface, self.text_color,
+                            (cursor_x, self.height // 2 - 8),
+                            (cursor_x, self.height // 2 + 8), 2)
+        
+        # Draw the input box on the screen
+        screen.blit(box_surface, (self.x, self.y))
+    
+    def _render_chat_log(self, screen):
+        """Render chat log in the bottom left corner"""
+        if not self.chat_history:
+            return
+        
+        # Calculate chat log position (bottom left)
+        log_x = 10  # 10px from left edge
+        log_y = screen.get_height() - self.log_height - 10  # 10px from bottom edge
+        
+        # If chat input is active, position log directly above input box
+        if self.active:
+            log_y = self.y - self.log_height - 5  # 5px gap between log and input
+        
+        # Create a surface with alpha for transparency
+        log_surface = pygame.Surface((self.log_width, self.log_height), pygame.SRCALPHA)
+        
+        # Draw background with transparency
+        pygame.draw.rect(log_surface, (0, 0, 0, 180),  # Semi-transparent black
+                        (0, 0, self.log_width, self.log_height), 
+                        border_radius=8)
+        
+        # Simple approach: select messages based on scroll offset
+        if self.scroll_offset == 0:
+            # Show the most recent messages
+            visible_messages = self.chat_history[-self.max_visible_history:] if len(self.chat_history) > self.max_visible_history else self.chat_history
+        else:
+            # Show older messages based on scroll offset
+            end_idx = max(0, len(self.chat_history) - self.scroll_offset)
+            start_idx = max(0, end_idx - self.max_visible_history)
+            visible_messages = self.chat_history[start_idx:end_idx]
+        
+        
+        # Render each message
+        y_offset = self.log_height - self.history_padding
+        for message in reversed(visible_messages):
+            # Get message text and sender
+            text = message.get('text', '')
+            sender = message.get('sender', 'NPC')
+            is_player = message.get('is_player', False)
+            
+            # Choose color based on sender
+            if is_player:
+                sender_color = (255, 255, 100)  # Yellow for player
+                text_color = (255, 255, 255)    # White for text
+            else:
+                sender_color = (100, 255, 100)  # Green for NPCs
+                text_color = (255, 255, 255)    # White for text
+            
+            # Format message with sender
+            formatted_text = f"{sender}: {text}"
+            
+            # Wrap text to fit within log width
+            wrapped_lines = self._wrap_chat_text(formatted_text, self.log_width - (self.history_padding * 2))
+            
+            # Render each line from bottom to top
+            for line in reversed(wrapped_lines):
+                # Calculate position for this line
+                y_offset -= self.history_line_height
+                
+                # Skip if we've gone beyond the top of the log
+                if y_offset < 0:
+                    continue
+                
+                # Render the line
+                if ":" in line and line.split(":", 1)[0] == sender:
+                    # Split sender and message for different colors
+                    sender_part, message_part = line.split(":", 1)
+                    
+                    # Render sender
+                    sender_surface = self.history_font.render(sender_part + ":", True, sender_color)
+                    log_surface.blit(sender_surface, (self.history_padding, y_offset))
+                    
+                    # Render message
+                    message_surface = self.history_font.render(message_part, True, text_color)
+                    log_surface.blit(message_surface, (self.history_padding + sender_surface.get_width(), y_offset))
+                else:
+                    # Render the whole line in message color (for wrapped lines)
+                    text_surface = self.history_font.render(line, True, text_color)
+                    log_surface.blit(text_surface, (self.history_padding, y_offset))
+                
+            # Add spacing between messages
+            y_offset -= self.history_padding
+        
+        # Draw scroll indicators if needed
+        if self.scroll_offset > 0:
+            # Draw up arrow to indicate more messages above
+            pygame.draw.polygon(log_surface, (200, 200, 200, 200),
+                              [(self.log_width - 20, 10), (self.log_width - 10, 20), (self.log_width - 30, 20)])
+        
+        if self.scroll_offset < self.max_scroll_offset:
+            # Draw down arrow to indicate more messages below
+            pygame.draw.polygon(log_surface, (200, 200, 200, 200),
+                              [(self.log_width - 20, self.log_height - 10), 
+                               (self.log_width - 10, self.log_height - 20), 
+                               (self.log_width - 30, self.log_height - 20)])
+        
+        # Draw the chat log on the screen
+        screen.blit(log_surface, (log_x, log_y))
+    
+    def _wrap_chat_text(self, text, max_width):
+        """Wrap text to fit within a given width"""
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        current_width = 0
+        
+        # Special handling for the first word (which may contain the sender name)
+        if words and ":" in words[0]:
+            # Keep sender name on the first line
+            current_line.append(words[0])
+            current_width = self.history_font.size(words[0])[0]
+            words = words[1:]
+        
+        for word in words:
+            word_width = self.history_font.size(word)[0]
+            
+            # Check if adding this word would exceed the max width
+            if current_line:
+                # Account for space between words
+                space_width = self.history_font.size(' ')[0]
+                test_width = current_width + space_width + word_width
+            else:
+                test_width = current_width + word_width
+            
+            if test_width <= max_width:
+                current_line.append(word)
+                current_width = test_width
+            else:
+                # Start a new line
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+                current_width = word_width
+        
+        # Add the last line
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines
+    
+    def toggle(self):
+        """Toggle the input box visibility and activity"""
+        self.active = not self.active
+        self.visible = self.active
+        if not self.active:
+            self.text = ""
+            self.selection_start = None
+            self.selection_end = None
+
+
+
+        
     def toggle(self):
         """Toggle the input box visibility and activity"""
         self.active = not self.active
@@ -297,8 +554,16 @@ class ChatInputBox(UIElement):
                     # Call the callback
                     self.callback(self.text)
                 
+
                 # Always toggle off even if message was empty
                 self.toggle()
+                
+                # If message was empty, also reset chat mode in input handler
+                if not self.text.strip():
+                    from engine.core import SimpleGameEngine
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'input_handler'):
+                        SimpleGameEngine.instance.input_handler.set_chat_mode(False)
+                
                 return True
                 
             # Handle Escape key - cancel chat
@@ -494,160 +759,7 @@ class ChatInputBox(UIElement):
             "sender": sender or ("You" if is_player else "NPC")
         })
     
-    def render(self, screen):
-        # Always render chat log
-        self._render_chat_log(screen)
-        
-        if not self.visible:
-            return
-            
-        # Create a surface with alpha for transparency
-        box_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
-        # Draw background with transparency
-        pygame.draw.rect(box_surface, self.background_color, 
-                        (0, 0, self.width, self.height), 
-                        border_radius=8)
-        
-        # Draw border
-        pygame.draw.rect(box_surface, self.border_color, 
-                        (0, 0, self.width, self.height), 
-                        border_radius=8, width=2)
-        
-        # Render text or placeholder
-        if self.text:
-            display_text = self.text
-            text_color = self.text_color
-        else:
-            display_text = self.placeholder_text
-            text_color = self.placeholder_color
-        
-        # Add blinking cursor if active
-        self.cursor_timer += 1
-        if self.cursor_timer > 30:  # Toggle cursor every 30 frames
-            self.cursor_visible = not self.cursor_visible
-            self.cursor_timer = 0
-            
-        # Render text with potential truncation if too long
-        text_width = self.font.size(display_text)[0]
-        
-        # If text is too wide, show only the end portion
-        if text_width > self.width - (self.padding * 2):
-            # Calculate how many characters to show
-            visible_width = self.width - (self.padding * 2)
-            char_width = text_width / len(display_text)
-            visible_chars = int(visible_width / char_width)
-            
-            # Show the last visible_chars characters
-            display_text = display_text[-visible_chars:]
-            text_width = self.font.size(display_text)[0]
-        
-        # Draw selection highlight if there's a selection
-        if self.selection_start is not None and self.selection_end is not None and self.selection_start != self.selection_end:
-            start = min(self.selection_start, self.selection_end)
-            end = max(self.selection_start, self.selection_end)
-            
-            # Calculate selection rectangle
-            selection_text = display_text[start:end]
-            selection_width = self.font.size(selection_text)[0]
-            selection_x = self.padding + self.font.size(display_text[:start])[0]
-            
-            # Draw selection highlight
-            pygame.draw.rect(box_surface, (100, 100, 255, 128),  # Light blue semi-transparent
-                            (selection_x, self.height // 2 - 10, selection_width, 20))
-        
-        # Render the text
-        text_surface = self.font.render(display_text, True, text_color)
-        box_surface.blit(text_surface, (self.padding, self.height // 2 - text_surface.get_height() // 2))
-        
-        # Add cursor at current position if visible
-        if self.text and self.cursor_visible:
-            cursor_pos = self.selection_end if self.selection_end is not None else len(self.text)
-            cursor_x = self.padding + self.font.size(display_text[:cursor_pos])[0]
-            pygame.draw.line(box_surface, self.text_color,
-                            (cursor_x, self.height // 2 - 8),
-                            (cursor_x, self.height // 2 + 8), 2)
-        
-        # Draw the input box on the screen
-        screen.blit(box_surface, (self.x, self.y))
-    
-    def _render_chat_log(self, screen):
-        """Render chat log in the bottom left corner"""
-        if not self.chat_history:
-            return
-        
-        # Calculate chat log position (bottom left)
-        log_x = 10  # 10px from left edge
-        log_y = screen.get_height() - self.log_height - 10  # 10px from bottom edge
-        
-        # If chat input is active, position log directly above input box
-        if self.active:
-            log_y = self.y - self.log_height - 5  # 5px gap between log and input
-        
-        # Create a surface with alpha for transparency
-        log_surface = pygame.Surface((self.log_width, self.log_height), pygame.SRCALPHA)
-        
-        # Draw background with transparency
-        pygame.draw.rect(log_surface, (0, 0, 0, 180),  # Semi-transparent black
-                        (0, 0, self.log_width, self.log_height), 
-                        border_radius=8)
-        
-        # Get the most recent messages to display
-        recent_messages = self.chat_history[-self.max_visible_history:] if len(self.chat_history) > self.max_visible_history else self.chat_history
-        
-        # Render each message
-        y_offset = self.log_height - self.history_padding
-        for message in reversed(recent_messages):
-            # Get message text and sender
-            text = message.get('text', '')
-            sender = message.get('sender', 'NPC')
-            is_player = message.get('is_player', False)
-            
-            # Choose color based on sender
-            if is_player:
-                sender_color = (255, 255, 100)  # Yellow for player
-                text_color = (255, 255, 255)    # White for text
-            else:
-                sender_color = (100, 255, 100)  # Green for NPCs
-                text_color = (255, 255, 255)    # White for text
-            
-            # Format message with sender
-            formatted_text = f"{sender}: {text}"
-            
-            # Wrap text to fit within log width
-            wrapped_lines = self._wrap_chat_text(formatted_text, self.log_width - (self.history_padding * 2))
-            
-            # Render each line from bottom to top
-            for line in reversed(wrapped_lines):
-                # Calculate position for this line
-                y_offset -= self.history_line_height
-                
-                # Skip if we've gone beyond the top of the log
-                if y_offset < 0:
-                    continue
-                
-                # Render the line
-                if ":" in line and line.split(":", 1)[0] == sender:
-                    # Split sender and message for different colors
-                    sender_part, message_part = line.split(":", 1)
-                    
-                    # Render sender
-                    sender_surface = self.history_font.render(sender_part + ":", True, sender_color)
-                    log_surface.blit(sender_surface, (self.history_padding, y_offset))
-                    
-                    # Render message
-                    message_surface = self.history_font.render(message_part, True, text_color)
-                    log_surface.blit(message_surface, (self.history_padding + sender_surface.get_width(), y_offset))
-                else:
-                    # Render the whole line in message color (for wrapped lines)
-                    text_surface = self.history_font.render(line, True, text_color)
-                    log_surface.blit(text_surface, (self.history_padding, y_offset))
-                
-            # Add spacing between messages
-            y_offset -= self.history_padding
-        
-        # Draw the chat log on the screen
-        screen.blit(log_surface, (log_x, log_y))
+
     
     def _wrap_chat_text(self, text, max_width):
         """Wrap text to fit within a given width"""

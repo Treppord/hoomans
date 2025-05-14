@@ -235,12 +235,22 @@ class SimpleGameEngine:
                 self.chat_input.toggle()
                 continue
                 
-            # Handle mouse wheel for zooming
+            
+                
+            # Handle mouse wheel for zooming or chat scrolling
             if event.type == pygame.MOUSEWHEEL:
-                if event.y > 0:
-                    self.camera.zoom_in(0.1)
-                elif event.y < 0:
-                    self.camera.zoom_out(0.1)
+                # If in chat mode, scroll the chat history instead of zooming
+                if self.input_handler.chat_mode and hasattr(self, 'chat_input'):
+                    # Pass the scroll event to the chat input
+                    # In pygame, positive y means scroll up (wheel away from user)
+                    self.chat_input.handle_scroll(event.y)
+                    continue
+                else:
+                    # Normal zoom behavior when not in chat mode
+                    if event.y > 0:
+                        self.camera.zoom_in(0.1)
+                    elif event.y < 0:
+                        self.camera.zoom_out(0.1)
                 continue
                 
             # Handle mouse buttons for panning
