@@ -8,7 +8,7 @@ import random
 import os
 import pygame
 # Add this import
-from ai_universe_controller import AIUniverseController, WorldStateCollector
+from ai.controllers.ai_universe_controller import AIUniverseController, WorldStateCollector
 import argparse
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from engine.data_manager import DataManager
 from engine.ui import UIManager, StatsPanel, ChatInputBox
 from engine.camera import Camera
 from entities.npc import NPC
-from ai_universe_controller import WorldStateCollector
+from ai.controllers.ai_universe_controller import WorldStateCollector
 import random
 
 class SimpleGameEngine:
