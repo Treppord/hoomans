@@ -1801,7 +1801,7 @@ class AIUniverseController:
         for agent_id, agent in self.agents.items():
             if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
                 # If the chat response has been pending for too long, clear the flag
-                if current_time - agent.chat_response_time > 5.0:  # 5 second timeout
+                if current_time - agent.chat_response_time > 30.0:  # 30 second timeout
                     agent.is_responding_to_chat = False
                     logger.warning(f"Chat response for agent {agent_id} timed out")
                     
