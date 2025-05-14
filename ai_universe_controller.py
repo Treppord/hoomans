@@ -107,6 +107,8 @@ class AgentState:
 
 
 
+# Add to the AgentDecision class:
+
 @dataclass
 class AgentDecision:
     """Represents an AI decision for an agent"""
@@ -123,6 +125,8 @@ class AgentDecision:
     advice_direction: Optional[str] = None  # Direction from player advice
     advice_distance: int = 0  # Distance from player advice
     advice_remaining_distance: int = 0  # Remaining distance to travel
+    is_heading_to_known_water: bool = False  # Whether heading to a known water source
+    is_escaping_water: bool = False  # Whether escaping from standing on water
 
     
     @classmethod
@@ -298,6 +302,46 @@ PLAYER ADVICE:
 
     def _validate_response_for_needs(self, response_json, has_critical_thirst, has_critical_hunger, nearby_tiles, grid_x, grid_y, agent_id=None):
         """Validate and correct the AI response based on the agent's needs"""
+        
+        knows_water_sources = False
+        water_locations = []
+        
+        if agent_id and hasattr(self, 'world_cache') and self.world_cache:
+            # Get agent memories
+            agent_memories = self.world_cache.get_entity_memories(agent_id)
+            
+            # Look for water discoveries in memories
+            for memory in agent_memories:
+                if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                    knows_water_sources = True
+                    water_data = memory.get('data', {})
+                    water_locations.append((water_data.get('x'), water_data.get('y')))
+        
+        # If agent knows water sources and is critically thirsty, override to move to water
+        if knows_water_sources and has_critical_thirst and water_locations:
+            # Find the closest water source
+            closest_water = min(water_locations, key=lambda loc: abs(loc[0] - grid_x) + abs(loc[1] - grid_y))
+            water_x, water_y = closest_water
+            
+            # Calculate direction to water
+            dx = water_x - grid_x
+            dy = water_y - grid_y
+            
+            # Determine which direction to move
+            if abs(dx) > abs(dy):
+                action = "move_right" if dx > 0 else "move_left"
+            else:
+                action = "move_down" if dy > 0 else "move_up"
+            
+            # Override the action and speech
+            response_json["action"] = action
+            response_json["speech"] = ""  # No speech about thirst when we know where water is
+            response_json["reason"] = f"Moving to known water source at ({water_x}, {water_y})"
+            response_json["is_heading_to_known_water"] = True
+            
+            print(f"DEBUG: Agent {agent_id} knows about water at {closest_water} and is moving there")
+            
+            return response_json
         
         # Ensure we're working with a dictionary
         if isinstance(response_json, str):
@@ -576,12 +620,122 @@ PLAYER ADVICE:
     def generate_decision(self, agent_state: AgentState) -> AgentDecision:
         """Generate a decision for an agent based on its current state"""
         try:
+            # Check if the agent is standing on water (emergency situation)
+            is_on_water = False
+            for tile in agent_state.nearby_tiles:
+                if (tile.get("type") == "water" and 
+                    tile["x"] == agent_state.grid_x and 
+                    tile["y"] == agent_state.grid_y):
+                    is_on_water = True
+                    break
+            
+            # If standing on water, find the nearest land tile and move there
+            if is_on_water:
+                print(f"DEBUG: Agent {agent_state.agent_id} is standing on water! Finding nearest land...")
+                
+                # Find the nearest land tile
+                land_tiles = [tile for tile in agent_state.nearby_tiles 
+                             if tile.get("type") != "water" and tile.get("walkable", False)]
+                
+                if land_tiles:
+                    # Find the closest land tile
+                    nearest_land = min(land_tiles, 
+                                      key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
+                    
+                    # Calculate direction to land
+                    dx = nearest_land["x"] - agent_state.grid_x
+                    dy = nearest_land["y"] - agent_state.grid_y
+                    
+                    # Determine which direction to move (prioritize the larger distance)
+                    if abs(dx) > abs(dy):
+                        action = "move_right" if dx > 0 else "move_left"
+                    else:
+                        action = "move_down" if dy > 0 else "move_up"
+                    
+                    # Create a decision to escape water
+                    return AgentDecision(
+                        agent_id=agent_state.agent_id,
+                        action=action,
+                        speech="I need to get out of this water!",
+                        reason="Escaping from standing on water",
+                        mood_change=-0.3,  # Negative mood impact
+                        is_escaping_water=True
+                    )
+                else:
+                    # No land tiles found in nearby area, move in a random direction
+                    action = random.choice(["move_left", "move_right", "move_up", "move_down"])
+                    return AgentDecision(
+                        agent_id=agent_state.agent_id,
+                        action=action,
+                        speech="Help! I'm stuck in water!",
+                        reason="Trying to escape water but no land in sight",
+                        mood_change=-0.5,  # Larger negative mood impact
+                        is_escaping_water=True
+                    )
+            
             # Determine if agent has critical needs
             has_critical_thirst = agent_state.thirst < 1
             has_critical_hunger = agent_state.hunger < 1
             
             # Create a minimal state representation
             prompt = f"Position: ({agent_state.grid_x}, {agent_state.grid_y})\n"
+            
+            
+            # Check if agent knows about water sources
+            knows_water_sources = False
+            water_locations = []
+            
+            if hasattr(self, 'world_cache') and self.world_cache:
+                # Get agent memories from cache
+                agent_memories = self.world_cache.get_entity_memories(agent_state.agent_id)
+                
+                # Look for water discoveries in memories
+                for memory in agent_memories:
+                    if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                        knows_water_sources = True
+                        water_data = memory.get('data', {})
+                        if 'x' in water_data and 'y' in water_data:
+                            water_locations.append((water_data.get('x'), water_data.get('y')))
+            
+            # If agent is thirsty and knows water locations, prioritize going there
+            if agent_state.thirst <= 3 and knows_water_sources and water_locations:
+                # Find the closest water source
+                closest_water = min(water_locations, key=lambda loc: abs(loc[0] - agent_state.grid_x) + abs(loc[1] - agent_state.grid_y))
+                water_x, water_y = closest_water
+                
+                # Calculate direction to water
+                dx = water_x - agent_state.grid_x
+                dy = water_y - agent_state.grid_y
+                
+                # If we're at the water source, drink
+                if abs(dx) <= 1 and abs(dy) <= 1:
+                    return AgentDecision(
+                        agent_id=agent_state.agent_id,
+                        action="drink",
+                        speech="",  # No speech needed
+                        reason=f"Drinking from known water source at ({water_x}, {water_y})",
+                        mood_change=0.3
+                    )
+                
+                # Determine which direction to move
+                if abs(dx) > abs(dy):
+                    action = "move_right" if dx > 0 else "move_left"
+                else:
+                    action = "move_down" if dy > 0 else "move_up"
+                
+                print(f"DEBUG: Agent {agent_state.agent_id} is thirsty and moving to known water at ({water_x}, {water_y})")
+                
+                return AgentDecision(
+                    agent_id=agent_state.agent_id,
+                    action=action,
+                    speech="",  # No speech about thirst when we know where water is
+                    reason=f"Moving to known water source at ({water_x}, {water_y})",
+                    target_x=water_x,
+                    target_y=water_y,
+                    mood_change=0.1,
+                    is_heading_to_known_water=True
+                )
+            
             
             # Add information about water if critically thirsty
             if has_critical_thirst:
@@ -671,7 +825,6 @@ PLAYER ADVICE:
             logger.error(traceback.format_exc())
             return AgentDecision(agent_id=agent_state.agent_id, action="idle")
 
-
         
     def generate_batch_decisions(self, agent_states: List[AgentState]) -> List[AgentDecision]:
         """Generate decisions for multiple agents (one by one)"""
@@ -687,6 +840,8 @@ PLAYER ADVICE:
 class FallbackAI:
     """Simple rule-based AI that can be used when the LLM is not available"""
     
+# In the FallbackAI.generate_decision method, add logic to check for remembered water locations:
+
     @staticmethod
     def generate_decision(agent_state: AgentState) -> AgentDecision:
         """Generate a decision based on simple rules"""
@@ -697,44 +852,85 @@ class FallbackAI:
         mood_change = 0.0
         memory_update = None
         
-        # Check for critical thirst (only when thirst is 0)
-        if agent_state.thirst == 0:
-            # Look for water in nearby tiles
-            water_tiles = [tile for tile in agent_state.nearby_tiles if tile.get("type") == "water"]
-            if water_tiles:
-                # Check if already adjacent to water
-                is_adjacent_to_water = False
-                for tile in water_tiles:
-                    if abs(tile["x"] - agent_state.grid_x) <= 1 and abs(tile["y"] - agent_state.grid_y) <= 1:
-                        is_adjacent_to_water = True
+        # Check for critical thirst (when thirst is 0 or 1)
+        if agent_state.thirst <= 1:
+            # First check if the agent knows about any water sources
+            known_water_location = None
+            
+            # Check agent's memory for water locations
+            if hasattr(agent_state, 'memory'):
+                for memory in agent_state.memory:
+                    if isinstance(memory, dict) and 'content' in memory:
+                        content = memory['content']
+                        # Look for water location memories
+                        if 'water' in content.lower() and 'coordinates' in content.lower():
+                            # Try to extract coordinates
+                            coords_match = re.search(r'coordinates\s*\((\d+),\s*(\d+)\)', content)
+                            if coords_match:
+                                try:
+                                    water_x = int(coords_match.group(1))
+                                    water_y = int(coords_match.group(2))
+                                    known_water_location = (water_x, water_y)
+                                    break
+                                except ValueError:
+                                    pass
+            
+            # If no water in memory, check if we have access to world cache
+            if not known_water_location and hasattr(agent_state, 'agent_id'):
+                # Try to access world cache through AIUniverseController
+                from ai_universe_controller import AIUniverseController
+                controller = None
+                
+                # Try to get controller instance
+                for obj in globals().values():
+                    if isinstance(obj, AIUniverseController) and hasattr(obj, 'world_cache'):
+                        controller = obj
                         break
                 
-                if is_adjacent_to_water:
-                    # If adjacent to water, drink
-                    action = "drink"
-                    speech = "I need water desperately..."
-                    mood_change = 0.3
-                    memory_update = "I found water when I was extremely thirsty."
+                if controller and controller.world_cache:
+                    # Get agent memories from cache
+                    agent_memories = controller.world_cache.get_entity_memories(agent_state.agent_id)
+                    
+                    # Look for water discoveries in memories
+                    for memory in agent_memories:
+                        if memory.get('type') == 'location_discovery' and memory.get('data', {}).get('location_type') == 'water':
+                            water_data = memory.get('data', {})
+                            if 'x' in water_data and 'y' in water_data:
+                                known_water_location = (water_data.get('x'), water_data.get('y'))
+                                break
+            
+            # If we know a water location, move towards it
+            if known_water_location:
+                water_x, water_y = known_water_location
+                dx = water_x - agent_state.grid_x
+                dy = water_y - agent_state.grid_y
+                
+                # Determine which direction to move
+                if abs(dx) > abs(dy):
+                    action = "move_right" if dx > 0 else "move_left"
                 else:
-                    # Move towards the nearest water
-                    nearest_water = min(water_tiles, key=lambda t: abs(t["x"] - agent_state.grid_x) + abs(t["y"] - agent_state.grid_y))
-                    dx = nearest_water["x"] - agent_state.grid_x
-                    dy = nearest_water["y"] - agent_state.grid_y
-                    
-                    if abs(dx) > abs(dy):
-                        action = "move_right" if dx > 0 else "move_left"
-                    else:
-                        action = "move_down" if dy > 0 else "move_up"
-                    
-                    target_x = nearest_water["x"]
-                    target_y = nearest_water["y"]
-                    speech = "I'm dying of thirst... Need water..."
-                    mood_change = -0.2
-            else:
-                # Wander randomly looking for water
-                action = random.choice(["move_left", "move_right", "move_up", "move_down"])
-                speech = "So thirsty... must find water..."
-                mood_change = -0.3
+                    action = "move_down" if dy > 0 else "move_up"
+                
+                # Set target coordinates
+                target_x = water_x
+                target_y = water_y
+                
+                # No speech about thirst when we know where water is
+                speech = ""
+                mood_change = 0.1  # Slight mood boost for knowing where to find water
+                memory_update = f"I'm heading to the water source I remember at coordinates ({water_x}, {water_y})."
+                
+                return AgentDecision(
+                    agent_id=agent_state.agent_id,
+                    action=action,
+                    speech=speech,
+                    target_x=target_x,
+                    target_y=target_y,
+                    mood_change=mood_change,
+                    memory_update=memory_update,
+                    is_heading_to_known_water=True  # Add a flag to indicate we're heading to known water
+                )
+
         # Random movement if no critical needs
         elif random.random() < 0.3:  # 30% chance to move
             action = random.choice(["move_left", "move_right", "move_up", "move_down"])
@@ -1138,6 +1334,11 @@ class AIUniverseController:
             
             logger.info(f"DEBUG: Generating chat response for agent {agent_id} to message: '{player_message}'")
             
+            # IMPORTANT: Set a flag to indicate this agent is responding to chat
+            # This will be used to prioritize chat responses
+            agent.is_responding_to_chat = True
+            agent.chat_response_time = time.time()
+            
             # Check if this is a memory query
             is_memory_query, resource_type = self._is_memory_query(player_message)
             
@@ -1465,6 +1666,9 @@ class AIUniverseController:
                     self.decision_queue.put(decision)
                     return
             
+            attribute_query = self._detect_attribute_query(player_message)
+
+            
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
             
@@ -1472,7 +1676,20 @@ class AIUniverseController:
                 prompt = f"You are {agent.cna_data.first_name}, a character in a game.\n\nPlayer: {player_message}\n\nRespond in a short, natural way."
             
             # Simplified system prompt
-            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply."
+            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply that reflects your character's attributes. DO NOT prefix your response with your name. DO NOT say you're here to help on a journey or adventure."
+        
+            
+            # Generate response
+            response_text = None
+            
+            # Create a simpler, more direct prompt for the small model
+            prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
+            
+            if agent.cna_data:
+                prompt = self._create_attribute_aware_prompt(agent, player_message, attribute_query)
+            
+            # Simplified system prompt
+            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply that reflects your character's attributes. DO NOT prefix your response with your name. DO NOT say you're here to help on a journey or adventure."
             
             # Generate response
             response_text = None
@@ -1482,7 +1699,6 @@ class AIUniverseController:
                         logger.info(f"DEBUG: Using local model for chat response")
                         
                         # Try direct text generation instead of JSON format for small models
-                        # This bypasses the JSON parsing which might be challenging for TinyLlama
                         try:
                             # Direct text generation approach
                             messages = [
@@ -1492,8 +1708,8 @@ class AIUniverseController:
                             
                             output = self.ai_interface.local_model.llm.create_chat_completion(
                                 messages=messages,
-                                max_tokens=128,  # Increase token limit
-                                temperature=0.8,  # Slightly higher temperature for more varied responses
+                                max_tokens=128,
+                                temperature=0.8,
                                 top_p=0.95,
                                 stop=["</s>", "Player:", "player:", "User:", "user:"]
                             )
@@ -1503,13 +1719,14 @@ class AIUniverseController:
                             logger.info(f"DEBUG: Raw model text response: '{response_text}'")
                             
                             # Clean up the response
+                            # Remove any name prefix (e.g., "Dakota: ")
+                            if ":" in response_text and response_text.split(":")[0].strip() == agent.cna_data.first_name:
+                                response_text = response_text.split(":", 1)[1].strip()
+                            
                             # Remove any JSON-like formatting that might have been generated
                             response_text = response_text.replace('{"speech": "', '').replace('"}', '')
                             response_text = response_text.replace('"', '')
                             
-                            # If response is too long, truncate it
-                            if len(response_text) > 100:
-                                response_text = response_text[:97] + "..."
                                 
                         except Exception as e:
                             logger.error(f"Error with direct text generation: {e}")
@@ -1522,47 +1739,74 @@ class AIUniverseController:
             # If direct text generation failed or is empty, use fallback responses
             if not response_text:
                 logger.info(f"DEBUG: Using fallback responses for chat")
-                # Simple fallback responses
-                fallback_responses = [
-                    f"Hello there!",
-                    f"Nice to meet you.",
-                    f"What an interesting thing to say.",
-                    f"I'm not sure I understand.",
-                    f"That's fascinating.",
-                    f"I was just thinking about that.",
-                    f"I see what you mean.",
-                    f"Is that so?",
-                    f"Tell me more about that."
-                ]
                 
-                # If we have CNA data, add some personalized responses
-                if agent.cna_data:
-                    name = agent.cna_data.first_name
-                    fallback_responses.extend([
-                        f"I'm {name}, nice to meet you!",
-                        f"That's interesting. By the way, I'm {name}.",
-                        f"I'm from {agent.cna_data.nation.name}, we don't talk like that there.",
-                        f"In {agent.cna_data.culture.name} culture, we have a saying about that."
-                    ])
-                
-                # If thirsty, add thirst-related responses
-                if agent.thirst <= 1:
-                    fallback_responses.extend([
-                        "Sorry, I'm too thirsty to chat right now.",
-                        "I need to find water soon...",
-                        "Do you know where I can find some water?"
-                    ])
-                
-                # Always use a fallback response for now to ensure we get a response
-                response_text = random.choice(fallback_responses)
-                logger.info(f"DEBUG: Selected fallback response: '{response_text}'")
+                # Generate attribute-appropriate fallback responses
+                if attribute_query == "mental_health" and agent.cna_data and hasattr(agent.cna_data, 'mental_health'):
+                    mental_health = agent.cna_data.mental_health
+                    if mental_health <= 1:
+                        response_text = "I'm struggling mentally right now. Everything feels overwhelming."
+                    elif mental_health <= 3:
+                        response_text = "My mental state is okay, I suppose. I have good days and bad days."
+                    else:
+                        response_text = "I'm in a good place mentally. My thoughts are clear and I feel positive."
+                elif attribute_query == "physical_health" and agent.cna_data and hasattr(agent.cna_data, 'physical_health'):
+                    physical_health = agent.cna_data.physical_health
+                    if physical_health <= 1:
+                        response_text = "I'm not doing well physically. My body feels weak and I tire easily."
+                    elif physical_health <= 3:
+                        response_text = "I'm in average physical condition. Not great, but I manage."
+                    else:
+                        response_text = "I'm in excellent physical shape. I feel strong and energetic."
+                elif attribute_query == "intelligence" and agent.cna_data and hasattr(agent.cna_data, 'intelligence_factor'):
+                    intelligence = agent.cna_data.intelligence_factor
+                    if intelligence < 0.8:
+                        response_text = "I'm not the brightest, but I get by with what I know."
+                    elif intelligence < 1.2:
+                        response_text = "I'd say I'm of average intelligence. I understand most things."
+                    else:
+                        response_text = "I've always been quick to learn. I understand complex ideas easily."
+                else:
+                    # Simple fallback responses
+                    fallback_responses = [
+                        "Hello there!",
+                        "Nice to meet you.",
+                        "What an interesting thing to say.",
+                        "I'm not sure I understand.",
+                        "That's fascinating.",
+                        "I was just thinking about that.",
+                        "I see what you mean.",
+                        "Is that so?",
+                        "Tell me more about that."
+                    ]
+                    
+                    # If we have CNA data, add some personalized responses
+                    if agent.cna_data:
+                        name = agent.cna_data.first_name
+                        fallback_responses.extend([
+                            f"I'm {name}, nice to meet you!",
+                            f"That's interesting. By the way, I'm {name}.",
+                            f"I'm from {agent.cna_data.nation.name}, we don't talk like that there.",
+                            f"In {agent.cna_data.culture.name} culture, we have a saying about that."
+                        ])
+                    
+                    # If thirsty, add thirst-related responses
+                    if agent.thirst <= 1:
+                        fallback_responses.extend([
+                            "Sorry, I'm too thirsty to chat right now.",
+                            "I need to find water soon...",
+                            "Do you know where I can find some water?"
+                        ])
+                    
+                    # Always use a fallback response for now to ensure we get a response
+                    response_text = random.choice(fallback_responses)
+                    logger.info(f"DEBUG: Selected fallback response: '{response_text}'")
             
             logger.info(f"DEBUG: Final NPC response speech: '{response_text}'")
             
             # Create a decision with just the speech
             decision = AgentDecision(
                 agent_id=agent_id,
-                action="idle",  # Just stand still while talking
+                action="respond_to_chat",  # Special action for chat responses
                 speech=response_text,
                 mood_change=0.1  # Slight mood boost from social interaction
             )
@@ -1571,29 +1815,271 @@ class AIUniverseController:
             
             # Put the decision in the queue for the game engine
             self.decision_queue.put(decision)
+        
+            # IMPORTANT: Clear the responding to chat flag since we've generated a response
+            agent.is_responding_to_chat = False
             
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
             logger.error(traceback.format_exc())
+            
+            # Fallback response
+            fallback_response = "I'm sorry, I didn't quite understand that."
+            decision = AgentDecision(
+                agent_id=agent_id,
+                action="respond_to_chat",
+                speech=fallback_response,
+                mood_change=0.0
+            )
+            self.decision_queue.put(decision)
+            
+            if 'agent' in locals() and agent:
+                agent.is_responding_to_chat = False
+
+    def _detect_attribute_query(self, message):
+        """Detect if the message is asking about a specific attribute"""
+        message = message.lower()
+        
+        # Mental health queries
+        if any(term in message for term in ["mental health", "mentally", "feeling mentally", "mind", "psychological", "psychologically", "psychology"]):
+            return "mental_health"
+        
+        # Physical health queries
+        if any(term in message for term in ["physical health", "physically", "feeling physically", "body", "health", "strength"]):
+            return "physical_health"
+        
+        # Personality queries
+        if any(term in message for term in ["personality", "character", "nature", "temperament", "what are you like"]):
+            return "personality"
+        
+        # Intelligence queries
+        if any(term in message for term in ["intelligence", "smart", "clever", "intellect", "how smart", "how intelligent"]):
+            return "intelligence"
+        
+        # General feeling queries
+        if any(term in message for term in ["how are you", "how do you feel", "feeling", "mood", "how's it going"]):
+            return "general_feeling"
+        
+        return None
 
 
+    def _create_attribute_aware_prompt(self, agent, player_message, attribute_query=None):
+        """Create a prompt that includes CNA attributes for more accurate responses"""
+        if not hasattr(agent, 'cna_data') or not agent.cna_data:
+            return f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
+        
+        cna = agent.cna_data
+        name = cna.first_name
+        
+        # Build a character profile based on CNA attributes
+        profile = f"You are {name}, an NPC with the following attributes:\n"
+        
+        # Add mental health if available
+        if hasattr(cna, 'mental_health'):
+            profile += f"- Mental health: {cna.mental_health}/5 "
+            if cna.mental_health <= 1:
+                profile += "(poor, struggling mentally)\n"
+            elif cna.mental_health <= 3:
+                profile += "(average mental state)\n"
+            else:
+                profile += "(excellent mental health)\n"
+        
+        # Add physical health if available
+        if hasattr(cna, 'physical_health'):
+            profile += f"- Physical health: {cna.physical_health}/5 "
+            if cna.physical_health <= 1:
+                profile += "(poor, physically weak)\n"
+            elif cna.physical_health <= 3:
+                profile += "(average physical condition)\n"
+            else:
+                profile += "(excellent physical condition)\n"
+        
+        # Add intelligence if available
+        if hasattr(cna, 'intelligence_factor'):
+            profile += f"- Intelligence: {cna.intelligence_factor:.1f} "
+            if cna.intelligence_factor < 0.8:
+                profile += "(below average)\n"
+            elif cna.intelligence_factor < 1.2:
+                profile += "(average)\n"
+            else:
+                profile += "(above average)\n"
+        
+        # Add culture and nation
+        profile += f"- Culture: {cna.culture.name}\n"
+        profile += f"- Nation: {cna.nation.name}\n"
+        
+        # Add personality traits if available - fix for float values
+        if hasattr(cna, 'personality_traits') and cna.personality_traits:
+            # Convert float values to strings with descriptive labels
+            if len(cna.personality_traits) > 0 and isinstance(cna.personality_traits[0], float):
+                # Assuming the traits follow the Big Five model
+                trait_names = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
+                trait_descriptions = []
+                
+                for i, trait_value in enumerate(cna.personality_traits):
+                    if i < len(trait_names):
+                        trait_name = trait_names[i]
+                        if trait_value > 0.7:
+                            trait_descriptions.append(f"High {trait_name}")
+                        elif trait_value < 0.3:
+                            trait_descriptions.append(f"Low {trait_name}")
+                        else:
+                            trait_descriptions.append(f"Moderate {trait_name}")
+                
+                profile += f"- Personality traits: {', '.join(trait_descriptions)}\n"
+            else:
+                # If they're already strings, join them directly
+                profile += f"- Personality traits: {', '.join(str(trait) for trait in cna.personality_traits)}\n"
+        
+        # Add current needs
+        if hasattr(agent, 'thirst'):
+            profile += f"- Current thirst: {agent.thirst}/10 "
+            if agent.thirst <= 2:
+                profile += "(very thirsty, this is a priority)\n"
+            elif agent.thirst <= 5:
+                profile += "(somewhat thirsty)\n"
+            else:
+                profile += "(not thirsty)\n"
+        
+        if hasattr(agent, 'hunger'):
+            profile += f"- Current hunger: {agent.hunger}/10 "
+            if agent.hunger <= 2:
+                profile += "(very hungry, this is a priority)\n"
+            elif agent.hunger <= 5:
+                profile += "(somewhat hungry)\n"
+            else:
+                profile += "(not hungry)\n"
+        
+        # Add specific instructions based on the attribute being queried
+        query_instructions = ""
+        if attribute_query:
+            if attribute_query == "mental_health":
+                query_instructions = f"\nIMPORTANT: The player is asking about your mental health. Your mental health is {cna.mental_health}/5. Your response MUST accurately reflect this level of mental well-being. DO NOT say you're just a game character or that you're here to help on a journey."
+            elif attribute_query == "physical_health":
+                query_instructions = f"\nIMPORTANT: The player is asking about your physical health. Your physical health is {cna.physical_health}/5. Your response MUST accurately reflect this level of physical condition. DO NOT say you're just a game character or that you're here to help on a journey."
+            elif attribute_query == "intelligence":
+                query_instructions = f"\nIMPORTANT: The player is asking about your intelligence. Your intelligence factor is {cna.intelligence_factor:.1f}. Your response MUST accurately reflect this level of intelligence. DO NOT say you're just a game character or that you're here to help on a journey."
+            elif attribute_query == "personality":
+                query_instructions = f"\nIMPORTANT: The player is asking about your personality. Describe your personality based on your traits and background. DO NOT say you're just a game character or that you're here to help on a journey."
+            elif attribute_query == "general_feeling":
+                query_instructions = f"\nIMPORTANT: The player is asking how you're feeling. Consider your mental health ({cna.mental_health}/5), physical health ({cna.physical_health}/5), and current needs in your response. DO NOT say you're just a game character or that you're here to help on a journey."
+                
+        # Complete the prompt with stronger instructions
+        prompt = f"{profile}{query_instructions}\n\nPlayer: {player_message}\n\nIMPORTANT INSTRUCTIONS:\n1. Respond as {name} in a way that accurately reflects your attributes and current state.\n2. Keep your response natural, concise, and in character.\n3. DO NOT prefix your response with your name.\n4. DO NOT say you're just a game character.\n5. DO NOT say you're here to help on a journey or adventure.\n6. DO NOT break the fourth wall or reference that you're in a game.\n7. If asked about your mental health, physical health, or intelligence, your response MUST reflect your actual attribute values."
+        
+        return prompt
+
+    def _extract_npc_response(self, response_text, agent):
+        """Extract and clean up the NPC's response from the model output"""
+        if not response_text:
+            return "I'm not sure what to say."
+        
+        # Remove any name prefix (e.g., "Dakota: ")
+        if ":" in response_text and hasattr(agent, 'cna_data') and agent.cna_data:
+            name = agent.cna_data.first_name
+            if response_text.split(":")[0].strip() == name:
+                response_text = response_text.split(":", 1)[1].strip()
+        
+        # Remove any JSON-like formatting that might have been generated
+        response_text = response_text.replace('{"speech": "', '').replace('"}', '')
+        response_text = response_text.replace('"', '')
+        
+        # Remove any references to being a game character or helping on a journey
+        lower_text = response_text.lower()
+        if "game character" in lower_text or "npc" in lower_text or "ai" in lower_text:
+            return self._generate_fallback_response(agent)
+        
+        if "journey" in lower_text or "adventure" in lower_text or "quest" in lower_text:
+            if "help you" in lower_text or "assist you" in lower_text:
+                return self._generate_fallback_response(agent)
+        
+        return response_text
+
+    def _generate_fallback_response(self, agent):
+        """Generate a fallback response based on agent attributes"""
+        if not hasattr(agent, 'cna_data') or not agent.cna_data:
+            return "I'm not sure what to say about that."
+        
+        cna = agent.cna_data
+        
+        # Check if agent is thirsty
+        if hasattr(agent, 'thirst') and agent.thirst <= 2:
+            return "I'm too thirsty to think clearly right now. I need to find water."
+        
+        # Generate responses based on mental health
+        if hasattr(cna, 'mental_health'):
+            if cna.mental_health <= 1:
+                return "Sorry, I'm not in a good place mentally right now. It's hard to focus."
+            elif cna.mental_health <= 3:
+                return "I'm doing alright, I suppose. What were we talking about?"
+            else:
+                return "I'm feeling quite good today! What's on your mind?"
+        
+        # Default fallback
+        return f"That's an interesting question. I'm from {cna.culture.name} culture, we have different perspectives on things."
 
 
+    def _is_memory_query(self, message):
+        """Check if the message is asking about memories or known locations"""
+        message = message.lower()
+        
+        # Check for water-related queries
+        if any(water_term in message for water_term in ["water", "drink", "thirsty", "river", "lake"]):
+            if any(query_term in message for query_term in ["where", "know", "find", "location", "nearby", "close", "remember"]):
+                return True, "water"
+        
+        # Check for food-related queries
+        if any(food_term in message for food_term in ["food", "eat", "hungry", "berries", "fruit"]):
+            if any(query_term in message for query_term in ["where", "know", "find", "location", "nearby", "close", "remember"]):
+                return True, "food"
+        
+        # Check for general location queries
+        if any(query_term in message for query_term in ["what have you found", "what did you discover", "what do you know about", "tell me about", "share your discoveries"]):
+            return True, "general"
+        
+        return False, None
 
 
-
-    
     def _process_agents(self):
         """Process agents that need decisions"""
         current_time = time.time()
         agents_to_process = []
         
-        # Identify agents that need processing
+        # First, check for agents that are responding to chat
+        chat_responders = []
         for agent_id, agent in self.agents.items():
-            last_time = self.last_processed.get(agent_id, 0)
-            if current_time - last_time >= self.processing_interval:
-                agents_to_process.append(agent)
-                self.last_processed[agent_id] = current_time
+            if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
+                # If the chat response has been pending for too long, clear the flag
+                if current_time - agent.chat_response_time > 60.0:  # 60 second timeout
+                    agent.is_responding_to_chat = False
+                    logger.warning(f"Chat response for agent {agent_id} timed out")
+                    
+                    # Create a fallback response to ensure the NPC doesn't stay paused
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="respond_to_chat",
+                        speech="Sorry, I got distracted. What were you saying?",
+                        mood_change=-0.1  # Slight negative mood impact for getting distracted
+                    )
+                    self.decision_queue.put(decision)
+                else:
+                    chat_responders.append(agent)
+        
+        # Process chat responders first
+        if chat_responders:
+            logger.info(f"Processing {len(chat_responders)} agents responding to chat")
+            agents_to_process.extend(chat_responders)
+        
+        # Then process regular agents that need decisions
+        if not agents_to_process:  # Only if no chat responders
+            for agent_id, agent in self.agents.items():
+                last_time = self.last_processed.get(agent_id, 0)
+                if current_time - last_time >= self.processing_interval:
+                    # Skip agents that are waiting for chat responses
+                    if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
+                        continue
+                    agents_to_process.append(agent)
+                    self.last_processed[agent_id] = current_time
         
         if not agents_to_process:
             return
@@ -1761,6 +2247,19 @@ class AIUniverseController:
         update = {"agent_id": agent_id, **kwargs}
         self.state_update_queue.put(update)
         
+        # Check if this is a chat response request and notify the game engine
+        if "player_message" in kwargs and "should_respond" in kwargs and kwargs["should_respond"]:
+            # Find the NPC in the game engine and pause its activities
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance'):
+                engine = SimpleGameEngine.instance
+                for obj in engine.objects:
+                    if hasattr(obj, 'get_entity_id') and obj.get_entity_id() == agent_id:
+                        if hasattr(obj, '_pause_for_chat'):
+                            obj._pause_for_chat()
+                            print(f"DEBUG: AI Universe notified NPC {agent_id} to pause for chat")
+                        break
+        
         # Check if there's a player message to process
         if "player_message" in kwargs:
             # Parse the message for advice
@@ -1770,9 +2269,10 @@ class AIUniverseController:
                 agent_state = self.agents[agent_id]
                 # Store the advice in the agent state
                 agent_state.player_advice = advice
-                agent_state.player_advice_time = time.time()  # Use current time instead of self.current_time
+                agent_state.player_advice_time = time.time()
                 agent_state.advice_followed = False  # Reset this flag
                 logger.info(f"DEBUG: Stored player advice for agent {agent_id}: {advice}")
+
 
     
     def get_pending_decisions(self) -> List[AgentDecision]:

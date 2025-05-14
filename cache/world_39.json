@@ -1,0 +1,255 @@
+{
+  "seed": 39,
+  "entity_memories": {
+    "0b3979fb9a5aa5cf8c": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 42,
+          "y": 25,
+          "name": "Water source found via player advice"
+        },
+        "timestamp": 1747066649.444036
+      }
+    ],
+    "0b20fbee8f66f55e37": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 42,
+          "y": 25,
+          "name": "Water source"
+        },
+        "timestamp": 1747093561.304472
+      }
+    ],
+    "0b27fd4629f7c9bb8f": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 27,
+          "y": 17,
+          "name": "Water source"
+        },
+        "timestamp": 1747094532.075424
+      }
+    ],
+    "0b7c253f41ae356dd7": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 27,
+          "y": 16,
+          "name": "Water source"
+        },
+        "timestamp": 1747094532.078052
+      }
+    ],
+    "0be09bd592ef9eedd5": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 53,
+          "y": 40,
+          "name": "Water source"
+        },
+        "timestamp": 1747094532.615398
+      }
+    ],
+    "0bc691720421c3d027": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 54,
+          "y": 40,
+          "name": "Water source"
+        },
+        "timestamp": 1747094532.617389
+      }
+    ],
+    "0b269a30b4a9752397": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 46,
+          "y": 26,
+          "name": "Water source"
+        },
+        "timestamp": 1747094536.8569531
+      }
+    ],
+    "0beaf08bae24586de6": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 61,
+          "y": 37,
+          "name": "Water source"
+        },
+        "timestamp": 1747094536.942296
+      }
+    ],
+    "0bf3b6fe4676e43aa9": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 39,
+          "y": 21,
+          "name": "Water source"
+        },
+        "timestamp": 1747094540.514956
+      }
+    ],
+    "0b29144c1e9a0b5675": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 56,
+          "y": 44,
+          "name": "Water source"
+        },
+        "timestamp": 1747094541.9658382
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 56,
+          "y": 44,
+          "name": "Water source"
+        },
+        "timestamp": 1747094541.982503
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 56,
+          "y": 44,
+          "name": "Water source"
+        },
+        "timestamp": 1747094542.0002072
+      }
+    ],
+    "5896187664": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 42,
+          "y": 25,
+          "name": "Water source found via player advice"
+        },
+        "timestamp": 1747127183.64639
+      }
+    ]
+  },
+  "discovered_locations": {
+    "water": [
+      {
+        "x": 42,
+        "y": 25,
+        "name": "Water source found via player advice",
+        "discovered_by": [
+          "0b3979fb9a5aa5cf8c",
+          "0b20fbee8f66f55e37",
+          "5896187664"
+        ],
+        "discovery_time": 1747066649.444038
+      },
+      {
+        "x": 42,
+        "y": 26,
+        "name": "Water source found via player advice",
+        "discovered_by": [
+          "0b3979fb9a5aa5cf8c"
+        ],
+        "discovery_time": 1747066735.258083
+      },
+      {
+        "x": 27,
+        "y": 17,
+        "name": "Water source",
+        "discovered_by": [
+          "0b27fd4629f7c9bb8f"
+        ],
+        "discovery_time": 1747094532.0754309
+      },
+      {
+        "x": 27,
+        "y": 16,
+        "name": "Water source",
+        "discovered_by": [
+          "0b7c253f41ae356dd7"
+        ],
+        "discovery_time": 1747094532.078054
+      },
+      {
+        "x": 53,
+        "y": 40,
+        "name": "Water source",
+        "discovered_by": [
+          "0be09bd592ef9eedd5"
+        ],
+        "discovery_time": 1747094532.615401
+      },
+      {
+        "x": 54,
+        "y": 40,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc691720421c3d027"
+        ],
+        "discovery_time": 1747094532.6173902
+      },
+      {
+        "x": 46,
+        "y": 26,
+        "name": "Water source",
+        "discovered_by": [
+          "0b269a30b4a9752397"
+        ],
+        "discovery_time": 1747094536.857012
+      },
+      {
+        "x": 61,
+        "y": 37,
+        "name": "Water source",
+        "discovered_by": [
+          "0beaf08bae24586de6"
+        ],
+        "discovery_time": 1747094536.9422982
+      },
+      {
+        "x": 39,
+        "y": 21,
+        "name": "Water source",
+        "discovered_by": [
+          "0bf3b6fe4676e43aa9"
+        ],
+        "discovery_time": 1747094540.5150158
+      },
+      {
+        "x": 56,
+        "y": 44,
+        "name": "Water source",
+        "discovered_by": [
+          "0b29144c1e9a0b5675"
+        ],
+        "discovery_time": 1747094541.965847
+      }
+    ]
+  },
+  "entity_relationships": {},
+  "last_updated": 1747127183.646404
+}
