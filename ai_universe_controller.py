@@ -1666,6 +1666,9 @@ class AIUniverseController:
                     self.decision_queue.put(decision)
                     return
             
+            attribute_query = self._detect_attribute_query(player_message)
+
+            
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
             
@@ -1673,55 +1676,11 @@ class AIUniverseController:
                 prompt = f"You are {agent.cna_data.first_name}, a character in a game.\n\nPlayer: {player_message}\n\nRespond in a short, natural way."
             
             # Simplified system prompt
-            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply."
+            system_prompt = "You are an NPC in a game. Respond to the player's message with a short, natural reply that reflects your character's attributes. DO NOT prefix your response with your name. DO NOT say you're here to help on a journey or adventure."
+        
             
             # Generate response
             response_text = None
-            if self.use_llm and hasattr(self, 'ai_interface'):
-                try:
-                    if hasattr(self.ai_interface, 'local_model'):
-                        logger.info(f"DEBUG: Using local model for chat response")
-                        
-                        # Try direct text generation instead of JSON format for small models
-                        # This bypasses the JSON parsing which might be challenging for TinyLlama
-                        try:
-                            # Direct text generation approach
-                            messages = [
-                                {"role": "system", "content": system_prompt},
-                                {"role": "user", "content": prompt}
-                            ]
-                            
-                            output = self.ai_interface.local_model.llm.create_chat_completion(
-                                messages=messages,
-                                max_tokens=128,  # Increase token limit
-                                temperature=0.8,  # Slightly higher temperature for more varied responses
-                                top_p=0.95,
-                                stop=["</s>", "Player:", "player:", "User:", "user:"]
-                            )
-                            
-                            # Extract the raw text response
-                            response_text = output["choices"][0]["message"]["content"].strip()
-                            logger.info(f"DEBUG: Raw model text response: '{response_text}'")
-                            
-                            # Clean up the response
-                            # Remove any JSON-like formatting that might have been generated
-                            response_text = response_text.replace('{"speech": "', '').replace('"}', '')
-                            response_text = response_text.replace('"', '')
-                            
-                            # If response is too long, truncate it
-                            if len(response_text) > 100:
-                                response_text = response_text[:97] + "..."
-                                
-                        except Exception as e:
-                            logger.error(f"Error with direct text generation: {e}")
-                            response_text = None
-                            
-                except Exception as e:
-                    logger.error(f"Error generating chat response: {e}")
-                    logger.error(traceback.format_exc())
-            
-                        # Check for attribute-specific queries
-            attribute_query = self._detect_attribute_query(player_message)
             
             # Create a simpler, more direct prompt for the small model
             prompt = f"Player: {player_message}\n\nRespond as an NPC in a game. Keep it short and natural."
@@ -1768,9 +1727,6 @@ class AIUniverseController:
                             response_text = response_text.replace('{"speech": "', '').replace('"}', '')
                             response_text = response_text.replace('"', '')
                             
-                            # If response is too long, truncate it
-                            if len(response_text) > 100:
-                                response_text = response_text[:97] + "..."
                                 
                         except Exception as e:
                             logger.error(f"Error with direct text generation: {e}")
@@ -1859,6 +1815,9 @@ class AIUniverseController:
             
             # Put the decision in the queue for the game engine
             self.decision_queue.put(decision)
+        
+            # IMPORTANT: Clear the responding to chat flag since we've generated a response
+            agent.is_responding_to_chat = False
             
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
@@ -1873,6 +1832,9 @@ class AIUniverseController:
                 mood_change=0.0
             )
             self.decision_queue.put(decision)
+            
+            if 'agent' in locals() and agent:
+                agent.is_responding_to_chat = False
 
     def _detect_attribute_query(self, message):
         """Detect if the message is asking about a specific attribute"""
@@ -2088,7 +2050,7 @@ class AIUniverseController:
         for agent_id, agent in self.agents.items():
             if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
                 # If the chat response has been pending for too long, clear the flag
-                if current_time - agent.chat_response_time > 30.0:  # 30 second timeout
+                if current_time - agent.chat_response_time > 60.0:  # 60 second timeout
                     agent.is_responding_to_chat = False
                     logger.warning(f"Chat response for agent {agent_id} timed out")
                     
