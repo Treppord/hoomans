@@ -474,6 +474,15 @@ class UIManager:
         
     def add_text_bubble(self, text, entity, duration=3.0):
         """Add a speech bubble above an entity"""
+        # Check for existing bubbles with the same text for this entity
+        for existing_bubble in self.text_bubbles:
+            if (existing_bubble.entity == entity and 
+                existing_bubble.text == text and 
+                not existing_bubble.is_expired()):
+                # Don't create duplicate bubbles
+                print(f"DEBUG: Skipping duplicate text bubble for entity {id(entity)}")
+                return existing_bubble
+        
         bubble = TextBubble(text, entity, duration)
         
         # Calculate vertical offset for stacking bubbles
@@ -499,10 +508,21 @@ class UIManager:
             elif hasattr(entity, 'controllable') and entity.controllable:
                 entity_name = "You"
             
-            # Add to chat log (will be skipped if it's a duplicate player message)
-            chat_input.add_message(text, sender=entity_name, is_player=(hasattr(entity, 'controllable') and entity.controllable))
+            # Check for duplicate messages (same entity, same text, within last 5 seconds)
+            current_time = time.time()
+            recent_messages = [msg for msg in chat_input.chat_history 
+                              if msg.get('sender') == entity_name and 
+                                 msg.get('text') == text and 
+                                 current_time - msg.get('time', 0) < 5.0]
+            
+            # Only add if not a duplicate
+            if not recent_messages:
+                chat_input.add_message(text, sender=entity_name, is_player=(hasattr(entity, 'controllable') and entity.controllable))
+            else:
+                print(f"DEBUG: Skipping duplicate chat log entry for {entity_name}")
         
         return bubble
+
 
         
     def show_entity_info(self, entity):

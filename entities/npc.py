@@ -40,10 +40,13 @@ class NPC(Rectangle):
         self.is_responding_to_chat = False
         self.paused_state = None  # Will store the state before being paused
         self.chat_response_time = 0
+        self.last_chat_response_id = None  # Track the last chat response to avoid duplicates
+        self.chat_cooldown = 5000  # Milliseconds to wait before processing another chat response
         
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
             self.ai_controller.set_entity(self)
+
 
     def update(self):
         """Update entity state"""
@@ -866,11 +869,23 @@ class NPC(Rectangle):
         """Apply an AI decision to this NPC"""
         # Check if this is a chat response - highest priority
         if decision.action == "respond_to_chat":
+            # Get current time for cooldown check
+            current_time = pygame.time.get_ticks()
+            
+            # Check if we've already processed a chat response recently
+            if (hasattr(self, 'last_chat_response_time') and 
+                current_time - self.last_chat_response_time < self.chat_cooldown):
+                print(f"DEBUG: NPC {self.get_entity_id()} ignoring duplicate chat response (cooldown active)")
+                return
+            
             # Just display the speech bubble and don't change any other state
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
                 SimpleGameEngine.instance.ui.add_text_bubble(decision.speech, self, duration=4.0)
                 print(f"DEBUG: NPC {self.get_entity_id()} responding to chat: '{decision.speech}'")
+            
+            # Update last chat response time
+            self.last_chat_response_time = current_time
             
             # Resume paused activities after responding
             self.is_responding_to_chat = False
@@ -881,6 +896,7 @@ class NPC(Rectangle):
         if self.is_responding_to_chat:
             print(f"DEBUG: NPC {self.get_entity_id()} ignoring decision while responding to chat")
             return
+
         
         # For other actions, continue with the existing implementation
         # Check if this is advice to move multiple tiles
