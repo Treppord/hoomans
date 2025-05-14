@@ -107,7 +107,7 @@ class Rectangle:
     
     def update_animation(self, delta_time=1/60):
         """Update the animation frame"""
-        self.animation_timer += delta_time
+        self.animation_timer += delta_time * 0.25
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0
             self.current_frame = (self.current_frame + 1) % len(self.animation_frames)

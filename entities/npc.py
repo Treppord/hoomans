@@ -63,7 +63,7 @@ class NPC(Rectangle):
             self.update_animation()
             
             # Check if we've been waiting too long (timeout after 10 seconds)
-            if current_time - self.chat_response_time > 30000:  # 30 seconds
+            if current_time - self.chat_response_time > 60000:  # 60 seconds
                 print(f"DEBUG: NPC {self.get_entity_id()} chat response timed out, resuming normal activities")
                 self.is_responding_to_chat = False
                 self._resume_paused_state()
