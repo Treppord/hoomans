@@ -1777,11 +1777,17 @@ class AIUniverseController:
         except Exception as e:
             logger.error(f"Error generating chat response: {e}")
             logger.error(traceback.format_exc())
-
-
-
-
-
+            
+            # Even if there's an error, we should create a fallback response
+            # so the NPC doesn't stay paused forever
+            fallback_response = "I'm sorry, I didn't quite understand that."
+            decision = AgentDecision(
+                agent_id=agent_id,
+                action="respond_to_chat",
+                speech=fallback_response,
+                mood_change=0.0
+            )
+            self.decision_queue.put(decision)
 
 
     
@@ -1798,6 +1804,15 @@ class AIUniverseController:
                 if current_time - agent.chat_response_time > 5.0:  # 5 second timeout
                     agent.is_responding_to_chat = False
                     logger.warning(f"Chat response for agent {agent_id} timed out")
+                    
+                    # Create a fallback response to ensure the NPC doesn't stay paused
+                    decision = AgentDecision(
+                        agent_id=agent_id,
+                        action="respond_to_chat",
+                        speech="Sorry, I got distracted. What were you saying?",
+                        mood_change=-0.1  # Slight negative mood impact for getting distracted
+                    )
+                    self.decision_queue.put(decision)
                 else:
                     chat_responders.append(agent)
         
@@ -1983,6 +1998,19 @@ class AIUniverseController:
         update = {"agent_id": agent_id, **kwargs}
         self.state_update_queue.put(update)
         
+        # Check if this is a chat response request and notify the game engine
+        if "player_message" in kwargs and "should_respond" in kwargs and kwargs["should_respond"]:
+            # Find the NPC in the game engine and pause its activities
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance'):
+                engine = SimpleGameEngine.instance
+                for obj in engine.objects:
+                    if hasattr(obj, 'get_entity_id') and obj.get_entity_id() == agent_id:
+                        if hasattr(obj, '_pause_for_chat'):
+                            obj._pause_for_chat()
+                            print(f"DEBUG: AI Universe notified NPC {agent_id} to pause for chat")
+                        break
+        
         # Check if there's a player message to process
         if "player_message" in kwargs:
             # Parse the message for advice
@@ -1992,9 +2020,10 @@ class AIUniverseController:
                 agent_state = self.agents[agent_id]
                 # Store the advice in the agent state
                 agent_state.player_advice = advice
-                agent_state.player_advice_time = time.time()  # Use current time instead of self.current_time
+                agent_state.player_advice_time = time.time()
                 agent_state.advice_followed = False  # Reset this flag
                 logger.info(f"DEBUG: Stored player advice for agent {agent_id}: {advice}")
+
 
     
     def get_pending_decisions(self) -> List[AgentDecision]:

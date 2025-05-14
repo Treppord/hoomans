@@ -36,14 +36,36 @@ class NPC(Rectangle):
         self.last_memory_record_time = 0  # Time of last memory recording
         self.memory_cooldown = 10000  # Milliseconds between memory recordings (10 seconds)
         
+        # Add state for handling chat questions
+        self.is_responding_to_chat = False
+        self.paused_state = None  # Will store the state before being paused
+        self.chat_response_time = 0
+        
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
             self.ai_controller.set_entity(self)
-    
+
     def update(self):
         """Update entity state"""
         # Get current time for timing controls
         current_time = pygame.time.get_ticks()
+        
+        # Check if we're responding to chat - if so, pause other actions
+        if self.is_responding_to_chat:
+            # Only update visual position with smooth interpolation
+            self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
+            self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+            
+            # Update animation (from Rectangle class)
+            self.update_animation()
+            
+            # Check if we've been waiting too long (timeout after 10 seconds)
+            if current_time - self.chat_response_time > 30000:  # 30 seconds
+                print(f"DEBUG: NPC {self.get_entity_id()} chat response timed out, resuming normal activities")
+                self.is_responding_to_chat = False
+                self._resume_paused_state()
+            
+            return  # Skip the rest of the update while responding to chat
         
         # Update visual position with smooth interpolation (from Rectangle class)
         self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
@@ -392,7 +414,7 @@ class NPC(Rectangle):
         if current_time - self.last_thirst_update > 10000:  # 10 seconds
             if self.thirst > 0:
                 self.thirst -= 1
-                print(f"NPC thirst decreased to {self.thirst}")
+                print(f"NPC {self.get_entity_id()} thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
 
 
@@ -667,7 +689,7 @@ class NPC(Rectangle):
         if hasattr(self, 'cna_file') and self.cna_file:
             cna_filename = os.path.basename(self.cna_file)
             # Create a more specific ID for NPCs with CNA data
-            id_string = f"NPC_{cna_filename}_{self.grid_x}_{self.grid_y}"
+            id_string = f"NPC_{cna_filename}"
             hash_object = hashlib.md5(id_string.encode())
             return f"0b{hash_object.hexdigest()[:16]}"
         # Otherwise use the base class implementation
@@ -770,14 +792,94 @@ class NPC(Rectangle):
             self.debug_player_detected = False
             print(f"DEBUG: NPC {id(self)} lost sight of player {player_id}")
             
+    def _pause_for_chat(self):
+        """Pause current activities to respond to chat"""
+        # Store current state
+        self.paused_state = {
+            'is_moving': self.is_moving,
+            'target_grid_x': self.target_grid_x if hasattr(self, 'target_grid_x') else None,
+            'target_grid_y': self.target_grid_y if hasattr(self, 'target_grid_y') else None,
+            'exploration_mode': self.exploration_mode,
+            'exploration_target_x': self.exploration_target_x,
+            'exploration_target_y': self.exploration_target_y
+        }
+        
+        # If we were heading to known water, store that too
+        if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+            self.paused_state['heading_to_known_water'] = True
+            self.paused_state['known_water_x'] = self.known_water_x if hasattr(self, 'known_water_x') else None
+            self.paused_state['known_water_y'] = self.known_water_y if hasattr(self, 'known_water_y') else None
+        
+        # If we were following advice, store that too
+        if hasattr(self, 'following_advice') and self.following_advice:
+            self.paused_state['following_advice'] = True
+            self.paused_state['advice_direction'] = self.advice_direction
+            self.paused_state['advice_remaining_distance'] = self.advice_remaining_distance
+        
+        # Pause movement
+        self.is_moving = False
+        
+        # Set chat response state
+        self.is_responding_to_chat = True
+        self.chat_response_time = pygame.time.get_ticks()
+        
+        print(f"DEBUG: NPC {self.get_entity_id()} paused activities to respond to chat")
+
+    def _resume_paused_state(self):
+        """Resume activities after responding to chat"""
+        if not self.paused_state:
+            return
+        
+        # Restore movement state
+        self.is_moving = self.paused_state.get('is_moving', False)
+        if self.paused_state.get('target_grid_x') is not None:
+            self.target_grid_x = self.paused_state.get('target_grid_x')
+        if self.paused_state.get('target_grid_y') is not None:
+            self.target_grid_y = self.paused_state.get('target_grid_y')
+        
+        # Restore exploration state
+        self.exploration_mode = self.paused_state.get('exploration_mode', 'idle')
+        self.exploration_target_x = self.paused_state.get('exploration_target_x')
+        self.exploration_target_y = self.paused_state.get('exploration_target_y')
+        
+        # Restore water seeking state if applicable
+        if self.paused_state.get('heading_to_known_water'):
+            self.heading_to_known_water = True
+            if self.paused_state.get('known_water_x') is not None:
+                self.known_water_x = self.paused_state.get('known_water_x')
+            if self.paused_state.get('known_water_y') is not None:
+                self.known_water_y = self.paused_state.get('known_water_y')
+        
+        # Restore advice following state if applicable
+        if self.paused_state.get('following_advice'):
+            self.following_advice = True
+            self.advice_direction = self.paused_state.get('advice_direction')
+            self.advice_remaining_distance = self.paused_state.get('advice_remaining_distance')
+        
+        # Clear paused state
+        self.paused_state = None
+        
+        print(f"DEBUG: NPC {self.get_entity_id()} resumed activities after chat response")
+            
+            
     def apply_ai_decision(self, decision):
         """Apply an AI decision to this NPC"""
+        # Check if this is a chat response - highest priority
         if decision.action == "respond_to_chat":
             # Just display the speech bubble and don't change any other state
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
                 SimpleGameEngine.instance.ui.add_text_bubble(decision.speech, self, duration=4.0)
                 print(f"DEBUG: NPC {self.get_entity_id()} responding to chat: '{decision.speech}'")
+            
+            # Resume paused activities after responding
+            self.is_responding_to_chat = False
+            self._resume_paused_state()
+            return
+        
+        # If we're responding to chat, don't process other decisions
+        if self.is_responding_to_chat:
+            print(f"DEBUG: NPC {self.get_entity_id()} ignoring decision while responding to chat")
             return
         
         # For other actions, continue with the existing implementation
