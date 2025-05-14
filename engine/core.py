@@ -129,8 +129,7 @@ class SimpleGameEngine:
         """Handle a chat message from the player"""
         if self.player:
             print(f"Chat message: {message}")  # Debug output
-            self.ui.add_text_bubble(message, self.player, duration=5.0)
-            
+            bubble = self.ui.add_text_bubble(message, self.player, duration=5.0)
             # Find NPCs in vicinity and have them respond
             self.process_npc_responses_to_chat(message)
             
