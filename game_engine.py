@@ -10,6 +10,8 @@ import pygame
 # Add this import
 from ai.controllers.ai_universe_controller import AIUniverseController, WorldStateCollector
 import argparse
+from engine.constants import GameBalanceConstants
+
 
 if __name__ == "__main__":
     # Create the game engine
@@ -71,13 +73,13 @@ if __name__ == "__main__":
     player = engine.add_object(Rectangle(grid_x=25, grid_y=19, color=(255, 0, 0), speed=1, controllable=True))
     
     # Add thirst attribute to player
-    player.thirst = 10
+    player.thirst = GameBalanceConstants.STARTING_THIRST
     player.last_thirst_update = pygame.time.get_ticks()
     player.last_drink_time = 0
     
 
     # Add thirst attribute to player
-    player.hunger = 10
+    player.hunger = GameBalanceConstants.STARTING_HUNGER
     player.last_hunger_update = pygame.time.get_ticks()
     player.last_drink_time = 0
     

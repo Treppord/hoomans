@@ -152,6 +152,28 @@
         },
         "timestamp": 1747127183.64639
       }
+    ],
+    "0becaffe083b41b291": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 29,
+          "y": 19,
+          "name": "Water source"
+        },
+        "timestamp": 1747310115.2745862
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 29,
+          "y": 19,
+          "name": "Water source"
+        },
+        "timestamp": 1747310115.293351
+      }
     ]
   },
   "discovered_locations": {
@@ -247,9 +269,18 @@
           "0b29144c1e9a0b5675"
         ],
         "discovery_time": 1747094541.965847
+      },
+      {
+        "x": 29,
+        "y": 19,
+        "name": "Water source",
+        "discovered_by": [
+          "0becaffe083b41b291"
+        ],
+        "discovery_time": 1747310115.27459
       }
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747127183.646404
+  "last_updated": 1747310115.293359
 }

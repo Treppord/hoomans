@@ -1,5 +1,7 @@
 import random
 import pygame
+from engine.constants import TimeConstants
+
 
 class AIController:
     """Base AI controller class that can be extended for different AI behaviors"""
@@ -7,7 +9,7 @@ class AIController:
     def __init__(self, entity=None):
         self.entity = entity
         self.thinking_time = 0
-        self.decision_cooldown = 30  # Frames between decisions
+        self.decision_cooldown = TimeConstants.AI_DECISION_COOLDOWN
     
     def set_entity(self, entity):
         """Set the entity this AI controls"""
@@ -282,9 +284,9 @@ class FoodWanderAI(AIController):
     def __init__(self, entity=None, wander_probability=0.2):
         super().__init__(entity)
         self.wander_probability = wander_probability
-        self.decision_cooldown = 60  # Longer cooldown for food entities
+        self.decision_cooldown = TimeConstants.AI_DECISION_COOLDOWN * 2  # Longer cooldown for food
         self.last_direction_change = 0
-        self.direction_change_cooldown = 5000  # 5 seconds between direction changes
+        self.direction_change_cooldown = TimeConstants.FOOD_DIRECTION_CHANGE_COOLDOWN
     
     def think(self, world_map, entities):
         """Make a random movement decision with food-specific behavior"""

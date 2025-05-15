@@ -48,6 +48,7 @@ class Rectangle:
         
         # Generate a persistent ID
         self.entity_id = self.generate_persistent_id()
+        
     
     def generate_persistent_id(self):
         """Generate a persistent ID based on entity characteristics"""

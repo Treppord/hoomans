@@ -10,6 +10,7 @@ from entities.npc import NPC
 from ai.controllers.ai_universe_controller import WorldStateCollector
 import random
 
+
 class SimpleGameEngine:
     def setup_world_cache(self):
         """Set up the world cache for persistent memory"""

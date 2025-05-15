@@ -4,6 +4,8 @@ import hashlib
 import os
 from entities.rectangle import Rectangle
 from engine.ai import RandomWanderAI
+from engine.constants import TimeConstants, GameBalanceConstants, MovementConstants
+
 
 class FoodNPC(Rectangle):
     """A food entity that wanders around and can be consumed by players or NPCs"""
@@ -23,7 +25,7 @@ class FoodNPC(Rectangle):
             self.ai_controller.set_entity(self)
         
         # Food properties
-        self.nutrition_value = 5  # How much hunger is restored when consumed
+        self.nutrition_value = GameBalanceConstants.FOOD_NUTRITION_VALUE
         self.is_consumed = False  # Flag to track if this food has been consumed
         self.consumption_progress = 0  # Track consumption animation progress
         self.consumption_time = 0  # Time when consumption started
@@ -77,8 +79,8 @@ class FoodNPC(Rectangle):
             elapsed_time = current_time - self.consumption_time
             
             # Consumption animation takes 500ms
-            if elapsed_time < 500:
-                self.consumption_progress = elapsed_time / 500.0
+            if elapsed_time < TimeConstants.FOOD_CONSUMPTION_ANIMATION_DURATION:
+                self.consumption_progress = elapsed_time / TimeConstants.FOOD_CONSUMPTION_ANIMATION_DURATION
                 # Shrink the entity as it's being consumed
                 self.visual_scale = 1.0 - self.consumption_progress
             else:
@@ -124,7 +126,7 @@ class FoodNPC(Rectangle):
             if not hasattr(self, 'last_move_time'):
                 self.last_move_time = current_time
                 
-            if current_time - self.last_move_time >= 1500:  # 1.5 seconds delay (slower than NPCs)
+            if current_time - self.last_move_time >= TimeConstants.FOOD_MOVE_COOLDOWN:
                 # Calculate direction to target
                 dx = self.target_grid_x - self.grid_x
                 dy = self.target_grid_y - self.grid_y
@@ -193,7 +195,7 @@ class FoodNPC(Rectangle):
             if hasattr(consumer, 'last_eat_time'):
                 consumer.last_eat_time = pygame.time.get_ticks()
                 
-            print(f"Entity {consumer.get_entity_id()} consumed food, hunger increased from {old_hunger} to {consumer.hunger}")
+            print(f"NPC {consumer.get_entity_id()} consumed food, hunger increased from {old_hunger} to {consumer.hunger}")
             
             # Show a speech bubble for the consumer
             from engine.core import SimpleGameEngine
@@ -226,7 +228,7 @@ class FoodNPC(Rectangle):
             if hasattr(consumer, 'last_eat_time'):
                 consumer.last_eat_time = pygame.time.get_ticks()
                 
-            print(f"Entity {consumer.get_entity_id()} consumed food, hunger increased from {old_hunger} to {consumer.hunger}")
+            print(f"NPC {consumer.get_entity_id()} consumed food, hunger increased from {old_hunger} to {consumer.hunger}")
             
             # Show a speech bubble for the consumer
             from engine.core import SimpleGameEngine

@@ -3,6 +3,9 @@ import pygame
 import random
 import hashlib
 import os
+from engine.constants import TimeConstants, GameBalanceConstants
+from speech_constants import SpeechConstants
+
 
 class NPC(Rectangle):
     """An NPC entity controlled by AI"""
@@ -12,15 +15,14 @@ class NPC(Rectangle):
         self.ai_controller = ai_controller
         
         # Add thirst attribute (0-10 scale)
-        self.thirst = 4  # Start with full thirst
-        self.last_thirst_update = 0  # Track time for thirst decrease
-        self.last_drink_time = 0  # Track time for drinking
-        
+        self.thirst = GameBalanceConstants.STARTING_THIRST // 2  # Start with half thirst
+        self.last_thirst_update = 0
+        self.last_drink_time = 0
 
         # Add hunger attribute (0-10 scale)
-        self.hunger = 5  # Start with some hunger
-        self.last_hunger_update = 0  # Track time for hunger decrease
-        self.last_eat_time = 0  # Track time for eating
+        self.hunger = GameBalanceConstants.STARTING_HUNGER // 2  # Start with half hunger
+        self.last_hunger_update = 0
+        self.last_eat_time = 0
         
         # Debug tracking for player detection
         self.debug_player_detected = False
@@ -47,7 +49,11 @@ class NPC(Rectangle):
         self.paused_state = None  # Will store the state before being paused
         self.chat_response_time = 0
         self.last_chat_response_id = None  # Track the last chat response to avoid duplicates
-        self.chat_cooldown = 5000  # Milliseconds to wait before processing another chat response
+        self.chat_cooldown = TimeConstants.CHAT_RESPONSE_COOLDOWN
+        
+        self.heading_to_known_water = False  # Add this line to fix the error
+        self.heading_to_food = False  # Also initialize food-seeking attribute
+
         
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
@@ -69,7 +75,7 @@ class NPC(Rectangle):
             self.update_animation()
             
             # Check if we've been waiting too long (timeout after 10 seconds)
-            if current_time - self.chat_response_time > 60000:  # 60 seconds
+            if current_time - self.chat_response_time > TimeConstants.CHAT_RESPONSE_TIMEOUT:
                 print(f"DEBUG: NPC {self.get_entity_id()} chat response timed out, resuming normal activities")
                 self.is_responding_to_chat = False
                 self._resume_paused_state()
@@ -154,13 +160,7 @@ class NPC(Rectangle):
                         
                         # Show a speech bubble about going to water
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            water_seeking_speeches = [
-                                "I know there's water nearby.",
-                                "I need to find that water source.",
-                                "I remember seeing water in this area.",
-                                "I'm so thirsty, I need to find that water."
-                            ]
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_seeking_speeches), self, duration=2.0)
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_FOUND_SPEECHES), self, duration=2.0)
         # Check if we're critically hungry and should seek food
         if hasattr(self, 'hunger') and self.hunger <= 3 and not self.is_moving:
             # Try to find food nearby
@@ -277,21 +277,14 @@ class NPC(Rectangle):
                     
                     # Show a speech bubble about escaping water
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                        water_escape_speeches = [
-                            "I need to get out of this water!",
-                            "Help! I'm in water!",
-                            "This water is too deep!",
-                            "I can't swim!"
-                        ]
-                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_escape_speeches), self, duration=1.5)
-        
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_ESCAPE_SPEECHES), self, duration=1.5)
         # Handle movement with timing control (1 tile per second)
         if self.is_moving:
             # Only move if enough time has passed (1000ms = 1 second)
             if not hasattr(self, 'last_move_time'):
                 self.last_move_time = current_time
                 
-            if current_time - self.last_move_time >= 1000:  # 1 second delay
+            if current_time - self.last_move_time >= TimeConstants.NPC_MOVE_COOLDOWN:
                 # Calculate direction to target
                 dx = self.target_grid_x - self.grid_x
                 dy = self.target_grid_y - self.grid_y
@@ -340,14 +333,7 @@ class NPC(Rectangle):
                                 
                                 # Show a speech bubble about finding water
                                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                                    water_speeches = [
-                                        "Ah, refreshing water!",
-                                        "Finally, water!",
-                                        "This water is just what I needed.",
-                                        "So good to drink water when you're thirsty!"
-                                    ]
-                                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
-                                
+                                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SEEKING_SPEECHES), self, duration=2.0)
                                 # After drinking, start exploring
                                 self.start_exploring()
                             
@@ -429,14 +415,14 @@ class NPC(Rectangle):
                 self.start_exploring_away_from_water()
         
         # Decrease thirst every 10 seconds
-        if current_time - self.last_thirst_update > 10000:  # 10 seconds
+        if current_time - self.last_thirst_update > TimeConstants.THIRST_DECREASE_INTERVAL:
             if self.thirst > 0:
                 self.thirst -= 1
                 print(f"NPC {self.get_entity_id()} thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
 
         # Decrease hunger every 15 seconds (hunger decreases more slowly than thirst)
-        if current_time - self.last_hunger_update > 10000:  # 10 seconds
+        if current_time - self.last_hunger_update > TimeConstants.HUNGER_DECREASE_INTERVAL:
             if self.hunger > 0:
                 self.hunger -= 1
                 print(f"NPC {self.get_entity_id()} hunger decreased to {self.hunger}")
@@ -516,14 +502,8 @@ class NPC(Rectangle):
             # Show a speech bubble about exploring
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                exploring_speeches = [
-                    "Now that I've had some water, time to explore!",
-                    "Feeling refreshed! Let's see what's out there.",
-                    "That was refreshing. Now to continue my journey.",
-                    "Water break done, back to exploring!",
-                    "I wonder what I'll find over there..."
-                ]
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
+
         else:
             # No water nearby, just use regular exploration
             self.start_exploring()
@@ -592,14 +572,7 @@ class NPC(Rectangle):
         # Show a speech bubble about exploring
         from engine.core import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-            exploring_speeches = [
-                "Time to explore!",
-                "Let's see what's out there.",
-                "I wonder what I'll find over there...",
-                "Exploring is fun!",
-                "I'm going on an adventure!"
-            ]
-            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
 
 
 
@@ -780,14 +753,7 @@ class NPC(Rectangle):
         # Show a speech bubble about exploring
         from engine.core import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-            exploring_speeches = [
-                "Now that I've had some water, time to explore!",
-                "Feeling refreshed! Let's see what's out there.",
-                "That was refreshing. Now to continue my journey.",
-                "Water break done, back to exploring!",
-                "I wonder what I'll find over there..."
-            ]
-            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
 
 
 
@@ -972,14 +938,7 @@ class NPC(Rectangle):
             # Show a speech bubble about escaping water
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                water_escape_speeches = [
-                    "I need to get out of this water!",
-                    "Help! I'm in water!",
-                    "This water is too deep!",
-                    "I can't swim!"
-                ]
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_escape_speeches), self, duration=1.5)
-            
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_ESCAPE_SPEECHES), self, duration=1.5)
             return
         if hasattr(decision, 'is_heading_to_known_water') and decision.is_heading_to_known_water:
             # If we have target coordinates, set them as our destination
@@ -1073,15 +1032,7 @@ class NPC(Rectangle):
                         # Show a speech bubble about going to water
                         from engine.core import SimpleGameEngine
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            water_seeking_speeches = [
-                                "I know where to find water.",
-                                "I remember seeing water nearby.",
-                                "I'll head to that water source I found earlier.",
-                                "Good thing I know where water is.",
-                                "I'll go to the water I discovered before."
-                            ]
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_seeking_speeches), self, duration=2.0)
-                    
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SEEKING_SPEECHES), self, duration=2.0)
                     # Override the AI decision
                     return
                 else:
@@ -1186,14 +1137,8 @@ class NPC(Rectangle):
                     # Show a speech bubble about exploring
                     from engine.core import SimpleGameEngine
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                        exploring_speeches = [
-                            "Now that I've had some water, time to explore!",
-                            "Feeling refreshed! Let's see what's out there.",
-                            "That was refreshing. Now to continue my journey.",
-                            "Water break done, back to exploring!",
-                            "I wonder what I'll find over there..."
-                        ]
-                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
+
         elif decision.action == "eat" and self.hunger < 5:
             # Handle eating (for now, just increase hunger without requiring food source)
             self.hunger = min(10, self.hunger + 3)
@@ -1205,15 +1150,9 @@ class NPC(Rectangle):
             # Show a speech bubble about eating
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                eating_speeches = [
-                    "Mmm, that was delicious!",
-                    "I needed that meal.",
-                    "Food always makes me feel better.",
-                    "That hit the spot!",
-                    "I feel much better after eating."
-                ]
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(eating_speeches), self, duration=2.0)
-        
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EATING_SPEECHES), self, duration=2.0)
+
+
         
         # Handle fast movement for critical needs
         if decision.is_fast_movement and not self.is_moving:
@@ -1267,7 +1206,7 @@ class NPC(Rectangle):
         
         # Find nearby food entities
         food_entities = []
-        view_range = 8  # 8x8 tiles around the NPC
+        view_range = GameBalanceConstants.NPC_FOOD_VIEW_RANGE
         
         if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
             for obj in SimpleGameEngine.instance.objects:
@@ -1297,15 +1236,8 @@ class NPC(Rectangle):
             # Show a speech bubble about finding food
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                food_speeches = [
-                    "I see some food over there!",
-                    "Food! Just what I needed.",
-                    "I'm going to get that food.",
-                    "That looks delicious!",
-                    "I'm hungry and that looks good to eat."
-                ]
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(food_speeches), self, duration=2.0)
-            
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.FOOD_SEEKING_SPEECHES), self, duration=2.0)
+
             return True
         else:
             # No food found, explore randomly to look for food

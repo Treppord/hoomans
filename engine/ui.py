@@ -284,7 +284,6 @@ class ChatInputBox(UIElement):
         if self.scroll_offset > self.max_scroll_offset:
             self.scroll_offset = self.max_scroll_offset
         
-        print(f"DEBUG: Chat scroll offset updated to: {self.scroll_offset}/{self.max_scroll_offset}")
         return True
     
     def render(self, screen):
