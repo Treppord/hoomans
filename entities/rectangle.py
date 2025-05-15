@@ -30,13 +30,21 @@ class Rectangle:
         self.visual_y = float(grid_y)
         self.move_lerp_factor = 0.2  # Adjust for smoother/faster visual transitions
         
+
         # For animation
         self.sprite_sheet = None
+        self.walk_sprite_sheet = None  # Add walk sprite sheet
         self.animation_frames = []
+        self.walk_animation_frames = []  # Add walk animation frames
         self.current_frame = 0
         self.animation_speed = 0.1  # Adjust as needed
         self.animation_timer = 0
-        self.load_sprite_sheet()
+        self.load_sprite_sheets()  # Changed to load multiple sprite sheets
+        
+        # Add these new attributes for animation control
+        self.force_walk_animation = False
+        self.walk_animation_start_time = 0
+        self.walk_animation_duration = 500  # milliseconds to show walking animation
         
         # For CNA data
         self.cna_data = None
@@ -78,39 +86,82 @@ class Rectangle:
     def y(self):
         return self.visual_y * 16  # Use visual position for rendering
     
-    def load_sprite_sheet(self):
-        """Load the sprite sheet and extract frames"""
+    def load_sprite_sheets(self):
+        """Load both idle and walking sprite sheets and extract frames"""
         try:
-            # Get the path to the sprite sheet
+            # Get the path to the sprite sheets
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
+            idle_sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
+            walk_sprite_path = os.path.join(project_root, "assets", "ai_walk.png")
             
-            # Load the sprite sheet
-            self.sprite_sheet = pygame.image.load(sprite_path).convert_alpha()
+            # Load the idle sprite sheet
+            self.sprite_sheet = pygame.image.load(idle_sprite_path).convert_alpha()
             
-            # Extract the two frames (each 16x16)
-            frame1 = self.sprite_sheet.subsurface((0, 0, 16, 16))
-            frame2 = self.sprite_sheet.subsurface((16, 0, 16, 16))
+            # Extract the idle frames (each 16x16)
+            idle_frame1 = self.sprite_sheet.subsurface((0, 0, 16, 16))
+            idle_frame2 = self.sprite_sheet.subsurface((16, 0, 16, 16))
             
-            # Store the frames
-            self.animation_frames = [frame1, frame2]
+            # Store the idle frames
+            self.animation_frames = [idle_frame1, idle_frame2]
             
+            # Load the walking sprite sheet if it exists
+            if os.path.exists(walk_sprite_path):
+                self.walk_sprite_sheet = pygame.image.load(walk_sprite_path).convert_alpha()
+                
+                # Extract the walking frames (each 16x16)
+                # Assuming the walk sheet has at least 2 frames
+                walk_frame1 = self.walk_sprite_sheet.subsurface((0, 0, 16, 16))
+                walk_frame2 = self.walk_sprite_sheet.subsurface((16, 0, 16, 16))
+                walk_frame3 = self.walk_sprite_sheet.subsurface((32, 0, 16, 16))
+                walk_frame4 = self.walk_sprite_sheet.subsurface((48, 0, 16, 16))
+
+                
+                # Store the walking frames
+                self.walk_animation_frames = [walk_frame1, walk_frame2, walk_frame3, walk_frame4]
+                
+                # Debug output for player
+                if hasattr(self, 'controllable') and self.controllable:
+                    print(f"DEBUG: Player loaded walk sprite sheet with {len(self.walk_animation_frames)} frames")
+            else:
+                # If walk sprite sheet doesn't exist, use idle frames for walking too
+                self.walk_animation_frames = self.animation_frames
+                print("Walk sprite sheet not found, using idle frames for walking")
+            
+            print(f"Loaded idle sprite sheet with {len(self.animation_frames)} frames")
         except Exception as e:
-            print(f"Error loading sprite sheet: {e}")
+            print(f"Error loading sprite sheets: {e}")
             # Create fallback frames (colored squares)
             self.animation_frames = [
                 pygame.Surface((16, 16), pygame.SRCALPHA),
                 pygame.Surface((16, 16), pygame.SRCALPHA)
             ]
+            self.walk_animation_frames = self.animation_frames
             for frame in self.animation_frames:
                 frame.fill(self.color)
+
     
     def update_animation(self, delta_time=1/60):
         """Update the animation frame"""
         self.animation_timer += delta_time * 0.25
         if self.animation_timer >= self.animation_speed:
             self.animation_timer = 0
-            self.current_frame = (self.current_frame + 1) % len(self.animation_frames)
+            self.current_frame = (self.current_frame + 1) % len(self.get_current_animation_frames())
+    
+    def get_current_animation_frames(self):
+        """Get the appropriate animation frames based on movement state"""
+        if self.is_moving and hasattr(self, 'walk_animation_frames') and self.walk_animation_frames:
+            # Only print for player to avoid console spam
+            if hasattr(self, 'controllable') and self.controllable:
+                print(f"DEBUG: Player is moving, using walk animation frames")
+            return self.walk_animation_frames
+        
+        # Only print for player to avoid console spam
+        if hasattr(self, 'controllable') and self.controllable and self.is_moving:
+            print(f"DEBUG: Player is moving but walk_animation_frames not available")
+        
+        return self.animation_frames
+
+
     
     def apply_color_tint(self, frame):
         """Apply color tint to the sprite based on entity color"""
@@ -174,7 +225,15 @@ class Rectangle:
         if self.is_moving:
             # Check if we've reached the target
             if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
-                self.is_moving = False
+                # Only set is_moving to False if we're not a player or if no movement keys are pressed
+                if not (hasattr(self, 'controllable') and self.controllable):
+                    self.is_moving = False
+                else:
+                    # For player, keep is_moving true if force_walk_animation is active
+                    if hasattr(self, 'force_walk_animation') and self.force_walk_animation:
+                        self.is_moving = True
+                    else:
+                        self.is_moving = False
             else:
                 # Move towards target one tile at a time
                 if self.grid_x < self.target_grid_x:
@@ -186,13 +245,22 @@ class Rectangle:
                     self.grid_y += self.speed
                 elif self.grid_y > self.target_grid_y:
                     self.grid_y -= self.speed
+                
+                # Debug output for player
+                if hasattr(self, 'controllable') and self.controllable:
+                    print(f"DEBUG: Player moving towards target ({self.target_grid_x}, {self.target_grid_y}), current: ({self.grid_x}, {self.grid_y})")
+        
+        # Check if we should turn off force_walk_animation
+        if hasattr(self, 'force_walk_animation') and self.force_walk_animation:
+            if current_time - self.walk_animation_start_time > self.walk_animation_duration:
+                self.force_walk_animation = False
+                # Only set is_moving to False if we're not actively moving
+                if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
+                    self.is_moving = False
         
         # Update visual position with smooth interpolation
         self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
         self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
-
-        
-        
 
     
     def render(self, screen, camera):
@@ -207,8 +275,9 @@ class Rectangle:
             screen_y + height < 0 or screen_y > screen.get_height()):
             return
         
-        # Get the current animation frame
-        current_frame = self.animation_frames[self.current_frame]
+        # Get the current animation frame based on movement state
+        animation_frames = self.get_current_animation_frames()
+        current_frame = animation_frames[self.current_frame % len(animation_frames)]
         
         # Apply color tint
         tinted_frame = self.apply_color_tint(current_frame)
@@ -219,6 +288,9 @@ class Rectangle:
         
         # Draw the sprite
         screen.blit(tinted_frame, (screen_x, screen_y))
+
+
+
     
     def contains_point(self, screen_x, screen_y, camera):
         """Check if a screen point is within this entity"""

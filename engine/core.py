@@ -377,6 +377,21 @@ class SimpleGameEngine:
         for obj in self.objects:
             if hasattr(obj, 'update'):
                 obj.update()
+                
+                # Special check for player to ensure animation state is correct
+                if hasattr(obj, 'controllable') and obj.controllable:
+                    # Check if any movement keys are pressed
+                    keys = pygame.key.get_pressed()
+                    movement_keys = [
+                        pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
+                        pygame.K_a, pygame.K_d, pygame.K_w, pygame.K_s
+                    ]
+                    
+                    # If any movement key is pressed, force the walk animation
+                    if any(keys[key] for key in movement_keys):
+                        obj.force_walk_animation = True
+                        obj.walk_animation_start_time = pygame.time.get_ticks()
+                        obj.is_moving = True
         
         # Update player thirst in data manager if player exists
         if self.player and hasattr(self.player, 'thirst'):

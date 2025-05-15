@@ -33,9 +33,12 @@ if __name__ == "__main__":
 
     project_root = os.path.dirname(os.path.abspath(__file__))
     sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
+    walk_sprite_path = os.path.join(project_root, "assets", "ai_walk.png")
+    
+    # Check if sprite sheets exist and create placeholders if needed
     if not os.path.exists(sprite_path):
-        print(f"Warning: Sprite sheet not found at {sprite_path}")
-        print("Creating a placeholder sprite sheet...")
+        print(f"Warning: Idle sprite sheet not found at {sprite_path}")
+        print("Creating a placeholder idle sprite sheet...")
         # Create a placeholder sprite sheet
         placeholder = pygame.Surface((32, 16))
         # First frame (left half)
@@ -45,7 +48,25 @@ if __name__ == "__main__":
         # Save the placeholder
         os.makedirs(os.path.dirname(sprite_path), exist_ok=True)
         pygame.image.save(placeholder, sprite_path)
-        print(f"Created placeholder sprite sheet at {sprite_path}")
+        print(f"Created placeholder idle sprite sheet at {sprite_path}")
+    
+    if not os.path.exists(walk_sprite_path):
+        print(f"Warning: Walk sprite sheet not found at {walk_sprite_path}")
+        print("Creating a placeholder walk sprite sheet...")
+        # Create a placeholder walk sprite sheet with slightly different frames
+        placeholder = pygame.Surface((32, 16))
+        # First frame (left half) - slightly different color to distinguish
+        placeholder.fill((240, 240, 240), rect=(0, 0, 16, 16))
+        # Second frame (right half) - slightly different color to distinguish
+        placeholder.fill((240, 240, 240), rect=(16, 0, 16, 16))
+        # Add some walking indicators
+        pygame.draw.line(placeholder, (200, 200, 200), (4, 12), (12, 12), 2)
+        pygame.draw.line(placeholder, (200, 200, 200), (20, 12), (28, 12), 2)
+        # Save the placeholder
+        os.makedirs(os.path.dirname(walk_sprite_path), exist_ok=True)
+        pygame.image.save(placeholder, walk_sprite_path)
+        print(f"Created placeholder walk sprite sheet at {walk_sprite_path}")
+
 
     
     # Initialize AI Universe Controller

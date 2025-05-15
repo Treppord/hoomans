@@ -257,8 +257,10 @@ class FoodNPC(Rectangle):
             screen_y + height < 0 or screen_y > screen.get_height()):
             return
         
-        # Get the current animation frame
-        current_frame = self.animation_frames[self.current_frame]
+        # Get the current animation frame - FIXED: ensure index is in bounds
+        frames = self.get_current_animation_frames() if hasattr(self, 'get_current_animation_frames') else self.animation_frames
+        frame_index = self.current_frame % len(frames)  # Ensure index is in bounds
+        current_frame = frames[frame_index]
         
         # Apply color tint
         tinted_frame = self.apply_color_tint(current_frame)

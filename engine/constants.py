@@ -6,7 +6,7 @@ Game constants module - centralizes all configurable values used throughout the 
 class TimeConstants:
     # Movement timing
     PLAYER_MOVE_COOLDOWN = 250  # Time between player movements (250ms = 4 tiles per second)
-    NPC_MOVE_COOLDOWN = 1000    # Time between NPC movements (1 second per tile)
+    NPC_MOVE_COOLDOWN = 500    # Time between NPC movements (1 second per tile)
     FOOD_MOVE_COOLDOWN = 1500   # Time between food movements (slower than NPCs)
     
     # Need decay rates

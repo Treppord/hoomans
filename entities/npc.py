@@ -65,7 +65,6 @@ class NPC(Rectangle):
         # Get current time for timing controls
         current_time = pygame.time.get_ticks()
         
-        # Check if we're responding to chat - if so, pause other actions
         if self.is_responding_to_chat:
             # Only update visual position with smooth interpolation
             self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor

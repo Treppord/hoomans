@@ -61,9 +61,6 @@ class InputHandler:
         if self.chat_mode:
             return
     
-        if not hasattr(entity, 'is_moving') or entity.is_moving:
-            return
-        
         current_ticks = pygame.time.get_ticks()
         
         if not hasattr(entity, 'last_move_time'):
@@ -75,20 +72,35 @@ class InputHandler:
             return
             
         entity.last_move_time = current_ticks
-            
-            
+        
+        # Check for movement input and set target position
+        moved = False
+        
         if self.is_action_pressed("move_left"):
             entity.target_grid_x = max(0, entity.grid_x - 1)
-            entity.is_moving = True
+            entity.target_grid_y = entity.grid_y  # Keep Y the same
+            moved = True
         elif self.is_action_pressed("move_right"):
             entity.target_grid_x = entity.grid_x + 1
-            entity.is_moving = True
+            entity.target_grid_y = entity.grid_y  # Keep Y the same
+            moved = True
         elif self.is_action_pressed("move_up"):
+            entity.target_grid_x = entity.grid_x  # Keep X the same
             entity.target_grid_y = max(0, entity.grid_y - 1)
-            entity.is_moving = True
+            moved = True
         elif self.is_action_pressed("move_down"):
+            entity.target_grid_x = entity.grid_x  # Keep X the same
             entity.target_grid_y = entity.grid_y + 1
+            moved = True
+            
+        # Only set is_moving if we actually moved
+        if moved:
             entity.is_moving = True
+            # Force the animation to use walking frames for a short time
+            if hasattr(entity, 'force_walk_animation'):
+                entity.force_walk_animation = True
+                entity.walk_animation_start_time = current_ticks
+
     
     def handle_entity_action(self, entity):
         """Apply action input to an entity"""
