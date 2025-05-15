@@ -14,8 +14,95 @@ class AIController:
         self.entity = entity
     
     def think(self, world_map, entities):
-        """Process AI logic - override in subclasses"""
-        pass
+        """Make a random movement decision with food-specific behavior"""
+        if not self.entity or not hasattr(self.entity, 'is_moving') or self.entity.is_moving:
+            return
+            
+        # Check if any NPC is nearby and try to avoid them
+        nearby_npc = None
+        for entity in entities:
+            if hasattr(entity, '__class__') and entity.__class__.__name__ == 'NPC':
+                # Calculate distance to NPC
+                dx = abs(entity.grid_x - self.entity.grid_x)
+                dy = abs(entity.grid_y - self.entity.grid_y)
+                
+                # If NPC is within 2 tiles, try to move away
+                if dx <= 2 and dy <= 2:
+                    nearby_npc = entity
+                    break
+        
+        if nearby_npc:
+            # Try to move away from the NPC
+            dx = self.entity.grid_x - nearby_npc.grid_x
+            dy = self.entity.grid_y - nearby_npc.grid_y
+            
+            # Determine which direction to move (away from NPC)
+            if abs(dx) > abs(dy):
+                # Move horizontally away
+                target_x = self.entity.grid_x + (1 if dx > 0 else -1)
+                target_y = self.entity.grid_y
+            else:
+                # Move vertically away
+                target_x = self.entity.grid_x
+                target_y = self.entity.grid_y + (1 if dy > 0 else -1)
+            
+            # Check if target is valid (not a wall or water)
+            if world_map:
+                # Ensure target is within map bounds
+                if 0 <= target_x < world_map.width and 0 <= target_y < world_map.height:
+                    # Check if target is walkable
+                    if not hasattr(world_map, 'is_wall') or not world_map.is_wall(target_x, target_y):
+                        # Check if target is not water
+                        if not hasattr(world_map, 'get_tile') or not (hasattr(world_map.get_tile(target_x, target_y), 'is_water') and world_map.get_tile(target_x, target_y).is_water()):
+                            # Set the target position
+                            self.entity.target_grid_x = target_x
+                            self.entity.target_grid_y = target_y
+                            self.entity.is_moving = True
+                            return
+        
+        # Only move occasionally (food is more stationary than NPCs)
+        if random.random() > self.wander_probability:
+            return
+            
+        # Get current time
+        current_time = pygame.time.get_ticks()
+        
+        # Only change direction after cooldown
+        if current_time - self.last_direction_change < self.direction_change_cooldown:
+            return
+            
+        self.last_direction_change = current_time
+            
+        # Choose a random direction
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        dx, dy = random.choice(directions)
+        
+        # Set target position (shorter movement range)
+        move_distance = random.randint(1, 2)  # Food moves shorter distances
+        target_x = self.entity.grid_x + (dx * move_distance)
+        target_y = self.entity.grid_y + (dy * move_distance)
+        
+        # Check if target is valid (not a wall or water)
+        if world_map:
+            # Ensure target is within map bounds
+            if target_x < 0 or target_x >= world_map.width or target_y < 0 or target_y >= world_map.height:
+                return
+                
+            # Check if target is walkable
+            if hasattr(world_map, 'is_wall') and world_map.is_wall(target_x, target_y):
+                return
+                
+            # Check if target is water (food shouldn't go in water)
+            if hasattr(world_map, 'get_tile'):
+                tile = world_map.get_tile(target_x, target_y)
+                if tile and hasattr(tile, 'is_water') and tile.is_water():
+                    return
+        
+        # Set the target position
+        self.entity.target_grid_x = target_x
+        self.entity.target_grid_y = target_y
+        self.entity.is_moving = True
+
     
     def update(self, world_map, entities):
         """Update AI state and make decisions"""

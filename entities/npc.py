@@ -161,6 +161,14 @@ class NPC(Rectangle):
                                 "I'm so thirsty, I need to find that water."
                             ]
                             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_seeking_speeches), self, duration=2.0)
+        # Check if we're critically hungry and should seek food
+        if hasattr(self, 'hunger') and self.hunger <= 3 and not self.is_moving:
+            # Try to find food nearby
+            self.start_searching_for_food()
+            
+            # If we're heading to food, override other actions
+            if hasattr(self, 'heading_to_food') and self.heading_to_food:
+                return
         
         # Check if we're standing on water (emergency situation)
         from engine.core import SimpleGameEngine
@@ -1110,32 +1118,13 @@ class NPC(Rectangle):
                         # Override the AI decision
                         return
         
-        # Check if the NPC is hungry and should eat
-        if hasattr(self, 'hunger') and self.hunger <= 3:
-            # For now, just eat without requiring a food source
-            # In a more advanced implementation, you would check for food sources
-            self.hunger = min(10, self.hunger + 3)
-            print(f"NPC {self.get_entity_id()} ate food, hunger increased to {self.hunger}")
-            
-            # Set the last eat time
-            self.last_eat_time = pygame.time.get_ticks()
-            
-            # Show a speech bubble about eating
-            from engine.core import SimpleGameEngine
-            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                eating_speeches = [
-                    "Mmm, that was delicious!",
-                    "I needed that meal.",
-                    "Food always makes me feel better.",
-                    "That hit the spot!",
-                    "I feel much better after eating."
-                ]
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(eating_speeches), self, duration=2.0)
-            
-            # After eating, continue with normal activities
-            if decision.action == "eat":
+        # Check if the NPC is hungry and should seek food
+        if hasattr(self, 'hunger') and self.hunger <= 3 and not self.is_moving:
+            # Try to find food nearby
+            if self.start_searching_for_food():
+                # Successfully found and targeting food
                 return
-        
+
         # Continue with the original decision handling
         # Check if this is a special action from NPCActionHandler
         if decision.action in ["follow_player", "stop_following", "give_item", "trade", "show_info"]:
@@ -1264,3 +1253,62 @@ class NPC(Rectangle):
             summary["interesting_locations"][location_type] = len(locations)
         
         return summary
+
+    def start_searching_for_food(self):
+        """Start searching for food when hungry"""
+        from engine.core import SimpleGameEngine
+        world_map = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        # Get current position
+        current_x = self.grid_x
+        current_y = self.grid_y
+        
+        # Find nearby food entities
+        food_entities = []
+        view_range = 8  # 8x8 tiles around the NPC
+        
+        if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
+            for obj in SimpleGameEngine.instance.objects:
+                # Check if this is a food entity
+                if hasattr(obj, '__class__') and obj.__class__.__name__ == 'FoodNPC':
+                    # Calculate distance to food
+                    dx = abs(obj.grid_x - current_x)
+                    dy = abs(obj.grid_y - current_y)
+                    
+                    # Check if food is within view range
+                    if dx <= view_range and dy <= view_range:
+                        food_entities.append(obj)
+        
+        if food_entities:
+            # Found food entities, head to the nearest one
+            nearest_food = min(food_entities, 
+                             key=lambda food: abs(food.grid_x - current_x) + abs(food.grid_y - current_y))
+            
+            print(f"DEBUG: NPC {self.get_entity_id()} found food at ({nearest_food.grid_x}, {nearest_food.grid_y})")
+            
+            # Set target to the food location
+            self.target_grid_x = nearest_food.grid_x
+            self.target_grid_y = nearest_food.grid_y
+            self.is_moving = True
+            self.heading_to_food = True
+            
+            # Show a speech bubble about finding food
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                food_speeches = [
+                    "I see some food over there!",
+                    "Food! Just what I needed.",
+                    "I'm going to get that food.",
+                    "That looks delicious!",
+                    "I'm hungry and that looks good to eat."
+                ]
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(food_speeches), self, duration=2.0)
+            
+            return True
+        else:
+            # No food found, explore randomly to look for food
+            print(f"DEBUG: NPC {self.get_entity_id()} searching for food, none found in view range")
+            self.start_exploring()
+            return False

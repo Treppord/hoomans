@@ -267,7 +267,6 @@ class ChatInputBox(UIElement):
     def handle_scroll(self, scroll_amount):
         """Handle mouse wheel scrolling in chat history"""
         # Always return True when in chat mode to capture the scroll event
-        print(f"DEBUG: Chat input received scroll event: {scroll_amount}")
         
         # Calculate the total number of messages
         total_messages = len(self.chat_history)

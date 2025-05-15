@@ -304,7 +304,6 @@ class FoodNPC(Rectangle):
             # Store the frames
             self.animation_frames = [frame1, frame2]
             
-            print(f"Loaded sprite sheet with {len(self.animation_frames)} frames")
         except Exception as e:
             print(f"Error loading sprite sheet: {e}")
             # Create fallback frames (colored squares)

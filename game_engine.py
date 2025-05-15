@@ -117,9 +117,8 @@ if __name__ == "__main__":
     
 
     print("Spawning food NPCs in the world...")
-    for _ in range(10):  # Spawn 10 food NPCs
+    for _ in range(30):  # Spawn 10 food NPCs
         food_npc = engine.spawn_food_npc()
-        print(f"Spawned {food_npc.food_type} at ({food_npc.grid_x}, {food_npc.grid_y})")
 
 
     # Initialize exploration attributes for NPCs

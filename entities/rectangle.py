@@ -94,7 +94,6 @@ class Rectangle:
             # Store the frames
             self.animation_frames = [frame1, frame2]
             
-            print(f"Loaded sprite sheet with {len(self.animation_frames)} frames")
         except Exception as e:
             print(f"Error loading sprite sheet: {e}")
             # Create fallback frames (colored squares)
@@ -167,7 +166,7 @@ class Rectangle:
             if current_time - self.last_hunger_update > 15000:  # 15 seconds
                 if self.hunger > 0:
                     self.hunger -= 1
-                    print(f"Entity {self.get_entity_id()} hunger decreased to {self.hunger}")
+                    print(f"NPC {self.get_entity_id()} hunger decreased to {self.hunger}")
                 self.last_hunger_update = current_time
                 
         # Handle movement towards target
