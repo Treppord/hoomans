@@ -206,9 +206,49 @@ class SimpleGameEngine:
             
         return obj
         
+    def spawn_food_npc(self, x=None, y=None, food_type=None):
+        """Spawn a food NPC at the specified position or a random valid position"""
+        from entities.food_npc import FoodNPC
+        from engine.ai import FoodWanderAI
+        
+        # If no position specified, find a random valid position
+        if x is None or y is None:
+            valid_positions = []
+            
+            # Find valid spawn positions (grass or dirt, not water or walls)
+            for y_pos in range(self.world_map.height):
+                for x_pos in range(self.world_map.width):
+                    tile = self.world_map.get_tile(x_pos, y_pos)
+                    if tile and hasattr(tile, 'is_walkable') and tile.is_walkable():
+                        # Don't spawn on water
+                        if not (hasattr(tile, 'is_water') and tile.is_water()):
+                            valid_positions.append((x_pos, y_pos))
+            
+            # Choose a random valid position
+            if valid_positions:
+                x, y = random.choice(valid_positions)
+            else:
+                # Fallback to a default position if no valid positions found
+                x, y = 10, 10
+        
+        # Create the food NPC
+        food_ai = FoodWanderAI()
+        food_npc = FoodNPC(grid_x=x, grid_y=y, ai_controller=food_ai)
+        
+        # Set specific food type if provided
+        if food_type:
+            food_npc.food_type = food_type
+            food_npc.set_color_by_food_type()
+        
+        # Add the food NPC to the game objects
+        self.add_object(food_npc)
+        
+        return food_npc
+        
     def add_ai_controller(self, controller):
         """Add an AI controller to the game"""
         return self.ai_manager.add_controller(controller)
+
         
     def handle_events(self):
         """Process all input events"""
@@ -340,6 +380,9 @@ class SimpleGameEngine:
         # Update player thirst in data manager if player exists
         if self.player and hasattr(self.player, 'thirst'):
             self.data.get_player_stat("thirst").set(self.player.thirst)
+            
+        if hasattr(self.player, 'hunger'):
+            self.data.get_player_stat("hunger").set(self.player.hunger)
         
         # Update AI Universe for NPCs
         if hasattr(self, 'ai_universe'):

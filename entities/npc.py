@@ -16,6 +16,12 @@ class NPC(Rectangle):
         self.last_thirst_update = 0  # Track time for thirst decrease
         self.last_drink_time = 0  # Track time for drinking
         
+
+        # Add hunger attribute (0-10 scale)
+        self.hunger = 5  # Start with some hunger
+        self.last_hunger_update = 0  # Track time for hunger decrease
+        self.last_eat_time = 0  # Track time for eating
+        
         # Debug tracking for player detection
         self.debug_player_detected = False
         self.debug_last_player_id = None
@@ -79,6 +85,7 @@ class NPC(Rectangle):
         
         # Check if we're critically thirsty and should seek water from world cache
         if hasattr(self, 'thirst') and self.thirst <= 2 and not self.is_moving:
+            
             # Try to find water from world cache
             from engine.core import SimpleGameEngine
             if (hasattr(SimpleGameEngine, 'instance') and 
@@ -420,6 +427,12 @@ class NPC(Rectangle):
                 print(f"NPC {self.get_entity_id()} thirst decreased to {self.thirst}")
             self.last_thirst_update = current_time
 
+        # Decrease hunger every 15 seconds (hunger decreases more slowly than thirst)
+        if current_time - self.last_hunger_update > 10000:  # 10 seconds
+            if self.hunger > 0:
+                self.hunger -= 1
+                print(f"NPC {self.get_entity_id()} hunger decreased to {self.hunger}")
+            self.last_hunger_update = current_time
 
 
     def start_exploring_away_from_water(self):
@@ -1097,6 +1110,32 @@ class NPC(Rectangle):
                         # Override the AI decision
                         return
         
+        # Check if the NPC is hungry and should eat
+        if hasattr(self, 'hunger') and self.hunger <= 3:
+            # For now, just eat without requiring a food source
+            # In a more advanced implementation, you would check for food sources
+            self.hunger = min(10, self.hunger + 3)
+            print(f"NPC {self.get_entity_id()} ate food, hunger increased to {self.hunger}")
+            
+            # Set the last eat time
+            self.last_eat_time = pygame.time.get_ticks()
+            
+            # Show a speech bubble about eating
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                eating_speeches = [
+                    "Mmm, that was delicious!",
+                    "I needed that meal.",
+                    "Food always makes me feel better.",
+                    "That hit the spot!",
+                    "I feel much better after eating."
+                ]
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(eating_speeches), self, duration=2.0)
+            
+            # After eating, continue with normal activities
+            if decision.action == "eat":
+                return
+        
         # Continue with the original decision handling
         # Check if this is a special action from NPCActionHandler
         if decision.action in ["follow_player", "stop_following", "give_item", "trade", "show_info"]:
@@ -1166,6 +1205,26 @@ class NPC(Rectangle):
                             "I wonder what I'll find over there..."
                         ]
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(exploring_speeches), self, duration=2.0)
+        elif decision.action == "eat" and self.hunger < 5:
+            # Handle eating (for now, just increase hunger without requiring food source)
+            self.hunger = min(10, self.hunger + 3)
+            print(f"NPC {self.get_entity_id()} ate food, hunger increased to {self.hunger}")
+            
+            # Set the last eat time
+            self.last_eat_time = pygame.time.get_ticks()
+            
+            # Show a speech bubble about eating
+            from engine.core import SimpleGameEngine
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                eating_speeches = [
+                    "Mmm, that was delicious!",
+                    "I needed that meal.",
+                    "Food always makes me feel better.",
+                    "That hit the spot!",
+                    "I feel much better after eating."
+                ]
+                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(eating_speeches), self, duration=2.0)
+        
         
         # Handle fast movement for critical needs
         if decision.is_fast_movement and not self.is_moving:

@@ -75,6 +75,12 @@ if __name__ == "__main__":
     player.last_thirst_update = pygame.time.get_ticks()
     player.last_drink_time = 0
     
+
+    # Add thirst attribute to player
+    player.hunger = 10
+    player.last_hunger_update = pygame.time.get_ticks()
+    player.last_drink_time = 0
+    
     # Load CNA file for player if it exists
     cna_file_path = os.path.join(project_root, "cna", "data", "Alex_Brown.cna")
     if os.path.exists(cna_file_path):
@@ -109,6 +115,13 @@ if __name__ == "__main__":
     else:
         print(f"CNA file not found: {cna_file_path}")
     
+
+    print("Spawning food NPCs in the world...")
+    for _ in range(10):  # Spawn 10 food NPCs
+        food_npc = engine.spawn_food_npc()
+        print(f"Spawned {food_npc.food_type} at ({food_npc.grid_x}, {food_npc.grid_y})")
+
+
     # Initialize exploration attributes for NPCs
     for obj in engine.objects:
         if isinstance(obj, NPC):
@@ -129,6 +142,7 @@ if __name__ == "__main__":
             obj.advice_direction = None
             
             print(f"DEBUG: Initialized exploration attributes for NPC at ({obj.grid_x}, {obj.grid_y})")
+
     
     # Start the game loop
     engine.run()

@@ -1,4 +1,5 @@
 import random
+import pygame
 
 class AIController:
     """Base AI controller class that can be extended for different AI behaviors"""
@@ -187,3 +188,61 @@ class WaterSeekingAI(AIController):
         else:
             # No water found, wander randomly
             RandomWanderAI.think(self, world_map, entities)
+
+class FoodWanderAI(AIController):
+    """AI that makes food entities wander randomly with specific behavior"""
+    
+    def __init__(self, entity=None, wander_probability=0.2):
+        super().__init__(entity)
+        self.wander_probability = wander_probability
+        self.decision_cooldown = 60  # Longer cooldown for food entities
+        self.last_direction_change = 0
+        self.direction_change_cooldown = 5000  # 5 seconds between direction changes
+    
+    def think(self, world_map, entities):
+        """Make a random movement decision with food-specific behavior"""
+        if not self.entity or not hasattr(self.entity, 'is_moving') or self.entity.is_moving:
+            return
+            
+        # Only move occasionally (food is more stationary than NPCs)
+        if random.random() > self.wander_probability:
+            return
+            
+        # Get current time
+        current_time = pygame.time.get_ticks()
+        
+        # Only change direction after cooldown
+        if current_time - self.last_direction_change < self.direction_change_cooldown:
+            return
+            
+        self.last_direction_change = current_time
+            
+        # Choose a random direction
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        dx, dy = random.choice(directions)
+        
+        # Set target position (shorter movement range)
+        move_distance = random.randint(1, 2)  # Food moves shorter distances
+        target_x = self.entity.grid_x + (dx * move_distance)
+        target_y = self.entity.grid_y + (dy * move_distance)
+        
+        # Check if target is valid (not a wall or water)
+        if world_map:
+            # Ensure target is within map bounds
+            if target_x < 0 or target_x >= world_map.width or target_y < 0 or target_y >= world_map.height:
+                return
+                
+            # Check if target is walkable
+            if hasattr(world_map, 'is_wall') and world_map.is_wall(target_x, target_y):
+                return
+                
+            # Check if target is water (food shouldn't go in water)
+            if hasattr(world_map, 'get_tile'):
+                tile = world_map.get_tile(target_x, target_y)
+                if tile and hasattr(tile, 'is_water') and tile.is_water():
+                    return
+        
+        # Set the target position
+        self.entity.target_grid_x = target_x
+        self.entity.target_grid_y = target_y
+        self.entity.is_moving = True

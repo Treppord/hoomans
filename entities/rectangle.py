@@ -157,11 +157,19 @@ class Rectangle:
         # Update animation
         self.update_animation()
 
-
         # Check if we're near water and replenish thirst if needed
         if hasattr(self, 'check_and_replenish_thirst'):
             self.check_and_replenish_thirst()
-            
+        
+        # Decrease hunger over time if the entity has hunger attribute
+        if hasattr(self, 'hunger') and hasattr(self, 'last_hunger_update'):
+            current_time = pygame.time.get_ticks()
+            if current_time - self.last_hunger_update > 15000:  # 15 seconds
+                if self.hunger > 0:
+                    self.hunger -= 1
+                    print(f"Entity {self.get_entity_id()} hunger decreased to {self.hunger}")
+                self.last_hunger_update = current_time
+                
         # Handle movement towards target
         if self.is_moving:
             # Check if we've reached the target
@@ -182,6 +190,7 @@ class Rectangle:
         # Update visual position with smooth interpolation
         self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
         self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+
         
         
 
