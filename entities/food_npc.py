@@ -297,6 +297,7 @@ class FoodNPC(Rectangle):
             # Get the path to the sprite sheet
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             sprite_path = os.path.join(project_root, "assets", "food_sheet.png")
+            walk_sprite_path = os.path.join(project_root, "assets", "food_walk.png")
             
             # Load the sprite sheet
             self.sprite_sheet = pygame.image.load(sprite_path).convert_alpha()
@@ -308,12 +309,37 @@ class FoodNPC(Rectangle):
             # Store the frames
             self.animation_frames = [frame1, frame2]
             
+            # Load the walking sprite sheet if it exists
+            if os.path.exists(walk_sprite_path):
+                self.walk_sprite_sheet = pygame.image.load(walk_sprite_path).convert_alpha()
+                
+                # Extract the walking frames (each 16x16)
+                # Assuming the walk sheet has at least 2 frames
+                walk_frame1 = self.walk_sprite_sheet.subsurface((0, 0, 16, 16))
+                walk_frame2 = self.walk_sprite_sheet.subsurface((16, 0, 16, 16))
+                
+                # Store the walking frames
+                self.walk_animation_frames = [walk_frame1, walk_frame2]
+                
+                print(f"DEBUG: Food NPC loaded walk sprite sheet with {len(self.walk_animation_frames)} frames")
+            else:
+                # If walk sprite sheet doesn't exist, use idle frames for walking too
+                self.walk_animation_frames = self.animation_frames
+                print("Food walk sprite sheet not found, using idle frames for walking")
+            
         except Exception as e:
-            print(f"Error loading sprite sheet: {e}")
+            print(f"Error loading food sprite sheets: {e}")
             # Create fallback frames (colored squares)
             self.animation_frames = [
                 pygame.Surface((16, 16), pygame.SRCALPHA),
                 pygame.Surface((16, 16), pygame.SRCALPHA)
             ]
+            self.walk_animation_frames = self.animation_frames
             for frame in self.animation_frames:
                 frame.fill(self.color)
+    
+    def get_current_animation_frames(self):
+        """Get the appropriate animation frames based on movement state"""
+        if self.is_moving and hasattr(self, 'walk_animation_frames') and self.walk_animation_frames:
+            return self.walk_animation_frames
+        return self.animation_frames
