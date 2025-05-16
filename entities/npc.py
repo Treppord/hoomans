@@ -429,84 +429,201 @@ class NPC(Rectangle):
 
 
     def start_exploring_away_from_water(self):
-        """Start exploring in a direction away from water sources"""
+        """Start exploring in a direction away from water sources with improved pathfinding"""
         from engine.core import SimpleGameEngine
         world_map = None
         if hasattr(SimpleGameEngine, 'instance'):
             world_map = SimpleGameEngine.instance.world_map
         
+        if not world_map:
+            # Fallback to regular exploration if no world map
+            self.start_exploring()
+            return
+            
         # Get current position
         current_x = self.grid_x
         current_y = self.grid_y
         
-        # Find nearby water tiles to avoid
-        water_tiles = []
+        # Find nearby water tiles
+        water_tiles = self._find_nearby_water_tiles(current_x, current_y, world_map, radius=5)
         
-        # Check if we're adjacent to water
-        if world_map:
-            # Check in a 3x3 grid around the NPC
-            for y in range(current_y - 1, current_y + 2):
-                for x in range(current_x - 1, current_x + 2):
-                    # Check if position is within map bounds
-                    if 0 <= x < world_map.width and 0 <= y < world_map.height:
-                        tile = world_map.get_tile(x, y)
-                        if tile and hasattr(tile, 'is_water') and tile.is_water():
-                            water_tiles.append((x, y))
-        
-        # If we found water tiles, avoid them
         if water_tiles:
-            print(f"DEBUG: NPC {self.get_entity_id()} avoiding {len(water_tiles)} nearby water tiles when exploring")
+            print(f"DEBUG: NPC {self.get_entity_id()} found {len(water_tiles)} nearby water tiles when exploring")
             
-            # Calculate average water position
-            avg_water_x = sum(x for x, y in water_tiles) / len(water_tiles)
-            avg_water_y = sum(y for x, y in water_tiles) / len(water_tiles)
+            # Find the best direction to move away from water
+            best_direction, best_distance = self._find_best_direction_away_from_water(
+                current_x, current_y, water_tiles, world_map, search_radius=25
+            )
             
-            # Choose a direction away from water
-            dx = current_x - avg_water_x
-            dy = current_y - avg_water_y
-            
-            # Determine primary direction (horizontal or vertical)
-            if abs(dx) > abs(dy):
-                # Move horizontally away from water
-                direction = "right" if dx > 0 else "left"
+            if best_direction and best_distance > 0:
+                # Set target position based on the best direction and distance
+                if best_direction == "right":
+                    target_x = min(current_x + best_distance, world_map.width - 1)
+                    target_y = current_y
+                elif best_direction == "left":
+                    target_x = max(current_x - best_distance, 0)
+                    target_y = current_y
+                elif best_direction == "down":
+                    target_x = current_x
+                    target_y = min(current_y + best_distance, world_map.height - 1)
+                elif best_direction == "up":
+                    target_x = current_x
+                    target_y = max(current_y - best_distance, 0)
+                else:
+                    # Fallback to regular exploration if no good direction found
+                    self.start_exploring()
+                    return
+                
+                # Set target position
+                self.target_grid_x = target_x
+                self.target_grid_y = target_y
+                
+                # Set the NPC to moving state
+                self.is_moving = True
+                print(f"DEBUG: NPC {self.get_entity_id()} exploring {best_distance} tiles {best_direction} away from water")
+                
+                # Show a speech bubble about exploring
+                from engine.core import SimpleGameEngine
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
             else:
-                # Move vertically away from water
-                direction = "down" if dy > 0 else "up"
-            
-            # Set exploration distance
-            distance = random.randint(8, 15)  # Explore 8-15 tiles away from water
-            
-            # Calculate target position
-            if direction == "right":
-                target_x = min(current_x + distance, world_map.width - 1 if world_map else 100)
-                target_y = current_y
-            elif direction == "left":
-                target_x = max(current_x - distance, 0)
-                target_y = current_y
-            elif direction == "up":
-                target_x = current_x
-                target_y = max(current_y - distance, 0)
-            elif direction == "down":
-                target_x = current_x
-                target_y = min(current_y + distance, world_map.height - 1 if world_map else 100)
-            
-            # Set target position
-            self.target_grid_x = target_x
-            self.target_grid_y = target_y
-            
-            # Set the NPC to moving state
-            self.is_moving = True
-            print(f"DEBUG: NPC {self.get_entity_id()} exploring {distance} tiles {direction} away from water")
-            
-            # Show a speech bubble about exploring
-            from engine.core import SimpleGameEngine
-            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
-
+                # No good direction found, use regular exploration
+                self.start_exploring()
         else:
             # No water nearby, just use regular exploration
             self.start_exploring()
-
+    
+    def _find_nearby_water_tiles(self, center_x, center_y, world_map, radius=5):
+        """Find water tiles within a given radius of the center position"""
+        water_tiles = []
+        
+        # Check in the four cardinal directions only (N, E, S, W)
+        directions = [
+            (0, -1),  # North
+            (1, 0),   # East
+            (0, 1),   # South
+            (-1, 0)   # West
+        ]
+        
+        # For each direction, check tiles up to the radius
+        for dx, dy in directions:
+            for distance in range(1, radius + 1):
+                check_x = center_x + (dx * distance)
+                check_y = center_y + (dy * distance)
+                
+                # Check if position is within map bounds
+                if 0 <= check_x < world_map.width and 0 <= check_y < world_map.height:
+                    tile = world_map.get_tile(check_x, check_y)
+                    if tile and hasattr(tile, 'is_water') and tile.is_water():
+                        water_tiles.append((check_x, check_y))
+                        # Once we find water in this direction, no need to check further
+                        break
+        
+        return water_tiles
+    
+    def _find_best_direction_away_from_water(self, current_x, current_y, water_tiles, world_map, search_radius=25):
+        """Find the best direction and distance to move away from water"""
+        # The four cardinal directions to check
+        directions = ["right", "left", "down", "up"]
+        direction_vectors = {
+            "right": (1, 0),
+            "left": (-1, 0),
+            "down": (0, 1),
+            "up": (0, -1)
+        }
+        
+        # Calculate the center of water mass
+        if not water_tiles:
+            return None, 0
+            
+        water_center_x = sum(x for x, y in water_tiles) / len(water_tiles)
+        water_center_y = sum(y for x, y in water_tiles) / len(water_tiles)
+        
+        # Calculate vector away from water center
+        away_vector_x = current_x - water_center_x
+        away_vector_y = current_y - water_center_y
+        
+        # Determine primary direction based on the away vector
+        # We'll prioritize the direction with the largest component
+        if abs(away_vector_x) > abs(away_vector_y):
+            # Horizontal movement is primary
+            primary_direction = "right" if away_vector_x > 0 else "left"
+            secondary_direction = "down" if away_vector_y > 0 else "up"
+        else:
+            # Vertical movement is primary
+            primary_direction = "down" if away_vector_y > 0 else "up"
+            secondary_direction = "right" if away_vector_x > 0 else "left"
+        
+        # Prioritize directions: primary, secondary, then others
+        prioritized_directions = [primary_direction, secondary_direction]
+        for direction in directions:
+            if direction not in prioritized_directions:
+                prioritized_directions.append(direction)
+        
+        # For each direction, find the maximum safe distance
+        best_direction = None
+        best_distance = 0
+        
+        for direction in prioritized_directions:
+            dx, dy = direction_vectors[direction]
+            
+            # Check tiles in this direction up to search_radius
+            for distance in range(1, search_radius + 1):
+                check_x = current_x + (dx * distance)
+                check_y = current_y + (dy * distance)
+                
+                # Check if position is within map bounds
+                if not (0 <= check_x < world_map.width and 0 <= check_y < world_map.height):
+                    # We've reached the edge of the map
+                    max_distance = distance - 1
+                    break
+                
+                # Check if this tile is walkable and not water
+                tile = world_map.get_tile(check_x, check_y)
+                if not tile or not hasattr(tile, 'is_walkable') or not tile.is_walkable():
+                    # We've hit an unwalkable tile
+                    max_distance = distance - 1
+                    break
+                
+                if hasattr(tile, 'is_water') and tile.is_water():
+                    # We've hit water, so this direction isn't good
+                    max_distance = 0
+                    break
+                
+                # If we've reached the search radius, this is a good direction
+                if distance == search_radius:
+                    max_distance = distance
+            
+            # If this direction has a better distance than our current best, update it
+            if max_distance > best_distance:
+                best_direction = direction
+                best_distance = max_distance
+                
+                # If we found a direction with the maximum search radius, use it
+                if best_distance == search_radius:
+                    break
+        
+        # If we didn't find a good direction, try a random one
+        if best_direction is None or best_distance == 0:
+            # Try each direction with a smaller search radius as a fallback
+            fallback_radius = 10
+            for direction in random.sample(directions, len(directions)):
+                dx, dy = direction_vectors[direction]
+                
+                # Check if we can move at least 5 tiles in this direction
+                check_x = current_x + (dx * fallback_radius)
+                check_y = current_y + (dy * fallback_radius)
+                
+                # Check if position is within map bounds
+                if 0 <= check_x < world_map.width and 0 <= check_y < world_map.height:
+                    # Check if the destination is walkable and not water
+                    tile = world_map.get_tile(check_x, check_y)
+                    if tile and hasattr(tile, 'is_walkable') and tile.is_walkable() and not (hasattr(tile, 'is_water') and tile.is_water()):
+                        best_direction = direction
+                        best_distance = fallback_radius
+                        break
+        
+        return best_direction, best_distance
 
             
 
