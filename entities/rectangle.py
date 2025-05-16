@@ -127,7 +127,6 @@ class Rectangle:
                 self.walk_animation_frames = self.animation_frames
                 print("Walk sprite sheet not found, using idle frames for walking")
             
-            print(f"Loaded idle sprite sheet with {len(self.animation_frames)} frames")
         except Exception as e:
             print(f"Error loading sprite sheets: {e}")
             # Create fallback frames (colored squares)
@@ -150,15 +149,7 @@ class Rectangle:
     def get_current_animation_frames(self):
         """Get the appropriate animation frames based on movement state"""
         if self.is_moving and hasattr(self, 'walk_animation_frames') and self.walk_animation_frames:
-            # Only print for player to avoid console spam
-            if hasattr(self, 'controllable') and self.controllable:
-                print(f"DEBUG: Player is moving, using walk animation frames")
             return self.walk_animation_frames
-        
-        # Only print for player to avoid console spam
-        if hasattr(self, 'controllable') and self.controllable and self.is_moving:
-            print(f"DEBUG: Player is moving but walk_animation_frames not available")
-        
         return self.animation_frames
 
 

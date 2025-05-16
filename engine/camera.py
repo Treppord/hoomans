@@ -14,6 +14,25 @@ class Camera:
         self.drag_start = None
         self.dragging = False
         self.follow_target = None
+    
+    def update_screen_size(self, width, height):
+        """Update camera parameters when screen size changes"""
+        # Store old center point in world coordinates
+        old_center_x = (self.width / 2) / self.zoom + self.offset_x
+        old_center_y = (self.height / 2) / self.zoom + self.offset_y
+        
+        # Update dimensions
+        self.width = width
+        self.height = height
+        
+        # Adjust offset to keep the same center point
+        self.offset_x = old_center_x - (self.width / 2) / self.zoom
+        self.offset_y = old_center_y - (self.height / 2) / self.zoom
+        
+        # If we have a follow target, immediately center on it
+        if self.follow_target:
+            self.center_on_target()
+
         
     def apply(self, x, y, width, height):
         """Apply camera transformations to a rectangle"""

@@ -814,7 +814,6 @@ class UIManager:
         self.entity_info_time = 0
         self.entity_info_duration = 3.0  # How long to show entity info
         
-
         # Create character info panel
         panel_width = 600
         panel_height = 500
@@ -822,7 +821,27 @@ class UIManager:
         panel_y = (screen_height - panel_height) // 2
         self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
         self.elements.append(self.char_info_panel)
+    
+    def update_screen_size(self, screen_width, screen_height):
+        """Update UI elements when screen size changes"""
+        self.screen_width = screen_width
+        self.screen_height = screen_height
         
+        # Reposition UI elements based on new screen size
+        for element in self.elements:
+            if isinstance(element, StatsPanel):
+                # Keep stats panel in top right corner
+                element.x = self.screen_width - element.width - 10
+                element.y = 10
+            elif isinstance(element, ChatInputBox):
+                # Keep chat input in bottom right corner
+                element.x = self.screen_width - element.width - 10
+                element.y = self.screen_height - element.height - 10
+            elif isinstance(element, CharacterInfoPanel):
+                # Center character info panel
+                element.x = (self.screen_width - element.width) // 2
+                element.y = (self.screen_height - element.height) // 2
+
     def show_entity_info(self, entity):
         """Show the character info panel for an entity"""
         self.char_info_panel.set_entity(entity)

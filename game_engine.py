@@ -18,6 +18,10 @@ if __name__ == "__main__":
     map_seed = 39
     arg_parser = argparse.ArgumentParser(description='Grid-Based Game')
     arg_parser.add_argument('--seed', type=int, help='Seed for map generation')
+    arg_parser.add_argument('--fullscreen', action='store_true', help='Start in fullscreen mode')
+    arg_parser.add_argument('--borderless', action='store_true', help='Start in borderless fullscreen mode')
+    arg_parser.add_argument('--width', type=int, default=800, help='Window width (default: 800)')
+    arg_parser.add_argument('--height', type=int, default=600, help='Window height (default: 600)')
     args = arg_parser.parse_args()
 
     def debug_cna_data(self, entity, name):
@@ -29,7 +33,14 @@ if __name__ == "__main__":
         else:
             print(f"DEBUG: {name} has no CNA data")
 
-    engine = SimpleGameEngine(title="Grid-Based Game", width=800, height=600, map_seed=args.seed)
+    engine = SimpleGameEngine(title="Grid-Based Game", width=args.width, height=args.height, map_seed=args.seed)
+    
+    # Toggle fullscreen if requested
+    if args.fullscreen:
+        engine.toggle_fullscreen()
+
+    elif args.borderless:
+        engine.toggle_borderless_fullscreen()
 
     project_root = os.path.dirname(os.path.abspath(__file__))
     sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")

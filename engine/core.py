@@ -24,10 +24,15 @@ class SimpleGameEngine:
         # Initialize pygame
         pygame.init()
         
+        # Store default dimensions
+        self.default_width = width
+        self.default_height = height
+        
         # Set up the display
         self.width = width
         self.height = height
-        self.screen = pygame.display.set_mode((width, height))
+        self.fullscreen = False
+        self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
         pygame.display.set_caption(title)
         
         # Store instance reference
@@ -37,7 +42,6 @@ class SimpleGameEngine:
         self.clock = pygame.time.Clock()
         self.fps = fps
         self.map_seed = map_seed
-
         
         # Initialize camera
         self.camera = Camera(width, height)
@@ -81,6 +85,41 @@ class SimpleGameEngine:
         
         # Game state
         self.running = False
+    
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and windowed mode"""
+        self.fullscreen = not self.fullscreen
+        
+        if self.fullscreen:
+            # Get desktop size for fullscreen
+            desktop_info = pygame.display.Info()
+            new_width, new_height = desktop_info.current_w, desktop_info.current_h
+            self.screen = pygame.display.set_mode((new_width, new_height), pygame.FULLSCREEN)
+        else:
+            # Return to windowed mode with default size
+            self.screen = pygame.display.set_mode((self.default_width, self.default_height), pygame.RESIZABLE)
+        
+        # Update width and height
+        self.width, self.height = self.screen.get_size()
+        
+        # Update camera and UI
+        self.camera.update_screen_size(self.width, self.height)
+        self.ui.update_screen_size(self.width, self.height)
+        
+        print(f"Screen mode changed: {'Fullscreen' if self.fullscreen else 'Windowed'} ({self.width}x{self.height})")
+    
+    def handle_resize(self, new_width, new_height):
+        """Handle window resize event"""
+        if not self.fullscreen:
+            self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
+            self.width, self.height = new_width, new_height
+            
+            # Update camera and UI
+            self.camera.update_screen_size(self.width, self.height)
+            self.ui.update_screen_size(self.width, self.height)
+            
+            print(f"Window resized to {self.width}x{self.height}")
+
 
         
     def setup_game_data(self):
@@ -258,10 +297,27 @@ class SimpleGameEngine:
             if event.type == pygame.QUIT:
                 self.running = False
                 return
+            
+
+            # Handle window resize events
+            elif event.type == pygame.VIDEORESIZE:
+                if not self.fullscreen:
+                    self.handle_resize(event.w, event.h)
                 
             # Let UI handle events first (for active chat input)
             if self.ui.handle_event(event):
                 continue
+                
+            # Check for F11 to toggle fullscreen
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+                self.toggle_fullscreen()
+                continue
+                
+            # Check for F10 to toggle borderless fullscreen
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F10:
+                self.toggle_borderless_fullscreen()
+                continue
+                
                 
             # Check for spacebar to toggle pause
             if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and not self.input_handler.chat_mode:
@@ -320,6 +376,7 @@ class SimpleGameEngine:
             elif event.type == pygame.MOUSEMOTION:
                 if self.camera.dragging:
                     self.camera.update_drag(event.pos[0], event.pos[1])
+                    
         
         # Update input handler for continuous key state
         self.input_handler.update()
@@ -330,6 +387,58 @@ class SimpleGameEngine:
                 self.input_handler.handle_entity_movement(obj)
                 self.input_handler.handle_entity_action(obj)
                 self.input_handler.handle_entity_interaction(obj)
+                
+    def toggle_borderless_fullscreen(self):
+        """Toggle borderless fullscreen mode (windowed fullscreen)"""
+        import sys
+        
+        self.fullscreen = not self.fullscreen
+        
+        if self.fullscreen:
+            # Get desktop size for fullscreen
+            desktop_info = pygame.display.Info()
+            new_width, new_height = desktop_info.current_w, desktop_info.current_h
+            
+            print(f"Attempting borderless fullscreen at resolution: {new_width}x{new_height}")
+            
+            # For macOS, we need a special approach
+            if sys.platform == 'darwin':
+                try:
+                    # On macOS, we'll use a combination that works better
+                    self.screen = pygame.display.set_mode(
+                        (0, 0),  # Use (0,0) to get full desktop size
+                        pygame.FULLSCREEN | pygame.DOUBLEBUF
+                    )
+                    self.borderless = False  # Not truly borderless, but fullscreen
+                except pygame.error as e:
+                    print(f"Error creating fullscreen window: {e}")
+                    # Fallback to windowed mode
+                    self.screen = pygame.display.set_mode(
+                        (self.default_width, self.default_height),
+                        pygame.RESIZABLE
+                    )
+                    self.fullscreen = False
+                    self.borderless = False
+        else:
+            # Return to windowed mode with default size
+            self.screen = pygame.display.set_mode((self.default_width, self.default_height), pygame.RESIZABLE)
+            self.borderless = False
+        
+        # Update width and height
+        self.width, self.height = self.screen.get_size()
+        
+        # Update camera and UI
+        self.camera.update_screen_size(self.width, self.height)
+        self.ui.update_screen_size(self.width, self.height)
+        
+        mode_str = "Fullscreen"
+        if self.fullscreen and self.borderless:
+            mode_str = "Borderless Fullscreen"
+        elif not self.fullscreen:
+            mode_str = "Windowed"
+            
+        print(f"Screen mode changed: {mode_str} ({self.width}x{self.height})")
+
     
     def update(self):
         """Update game logic"""
