@@ -25,19 +25,21 @@ class Tile:
         }
         
         # Add variation to natural tiles
-        self.variation = random.randint(0, 15)
+        # Use a smaller variation range to avoid drastic color changes
+        self.variation = random.randint(0, 10)
         
     def render(self, screen, x, y, width, height):
         """Render the tile at the specified position with the given size"""
         base_color = self.colors.get(self.type, (255, 0, 255))  # Default to magenta for unknown types
         
-        # Add slight color variation to natural tiles
-        if self.type in ["grass", "sand", "water", "forest", "mountain", "deep_water", "shallow_water"]:
-            # Adjust color slightly based on variation
+        # Add slight color variation to natural tiles - include path in the list
+        if self.type in ["grass", "sand", "water", "forest", "mountain", "deep_water", "shallow_water", "path", "snow"]:
+            # Adjust color slightly based on variation, but with a smaller range
             r, g, b = base_color
-            r = max(0, min(255, r + self.variation - 8))
-            g = max(0, min(255, g + self.variation - 8))
-            b = max(0, min(255, b + self.variation - 8))
+            # Use a more subtle variation formula
+            r = max(0, min(255, r + (self.variation - 5)))
+            g = max(0, min(255, g + (self.variation - 5)))
+            b = max(0, min(255, b + (self.variation - 5)))
             color = (r, g, b)
         else:
             color = base_color
@@ -48,12 +50,12 @@ class Tile:
         # Only add details if the tile is large enough (prevents errors when zoomed out)
         if width >= 4 and height >= 4:
             # Add details based on tile type
-            if self.type == "grass" and self.variation > 12:
+            if self.type == "grass" and self.variation > 8:
                 # Add small grass tufts
                 detail_color = (0, 180, 0)
                 pygame.draw.rect(screen, detail_color, (x + width//4, y + height//4, max(1, width//8), max(1, height//8)))
             
-            elif self.type == "sand" and self.variation > 10:
+            elif self.type == "sand" and self.variation > 7:
                 # Add small pebbles
                 detail_color = (180, 170, 120)
                 pygame.draw.circle(screen, detail_color, (int(x + width//3), int(y + height//3)), max(1, width//10))
@@ -82,16 +84,13 @@ class Tile:
                 pygame.draw.polygon(screen, peak_color, points)
             
             elif self.type == "path":
-                # Add path texture
-                for i in range(2):
-                    detail_color = (133, 116, 99)
-                    # Make sure we use integers for the coordinates
-                    # Also ensure width and height are at least 1
-                    int_width = max(1, int(width))
-                    int_height = max(1, int(height))
-                    pygame.draw.circle(screen, detail_color, 
-                                      (int(x + random.randint(0, int_width)), int(y + random.randint(0, int_height))), 
-                                      max(1, int(width//10)))
+                # Add path texture - use fewer details to avoid the "line" effect
+                if self.variation > 5:  # Only add details sometimes
+                    
+                    # Add small grass tufts
+                    detail_color = (0, 180, 0)
+                    pygame.draw.rect(screen, detail_color, (x + width//4, y + height//4, max(1, width//8), max(1, height//8)))
+
     
     def is_water(self):
         """Check if this tile is a water tile"""

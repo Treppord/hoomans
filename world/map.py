@@ -186,8 +186,6 @@ class WorldMap:
                 else:
                     self.set_tile(x, y, "snow")
         
-        # Add some paths connecting areas
-        self._add_paths()
         
         # Add border walls
         self._add_border_walls()
@@ -195,31 +193,19 @@ class WorldMap:
         # Ensure there's at least one accessible water area
         self._ensure_accessible_water()
     
-    def _add_paths(self):
-        """Add some natural-looking paths through the terrain"""
-        # Create a few random paths
-        num_paths = random.randint(3, 6)
+    def add_path(self, start_x, start_y, end_x, end_y):
+        """Add a path between two points on the map"""
+        # Find a path between the start and end points
+        path = self._find_path(start_x, start_y, end_x, end_y)
         
-        for _ in range(num_paths):
-            # Pick random start and end points
-            start_x = random.randint(5, self.width - 5)
-            start_y = random.randint(5, self.height - 5)
-            end_x = random.randint(5, self.width - 5)
-            end_y = random.randint(5, self.height - 5)
-            
-            # Ensure we're not starting in water or mountains
-            if (self.get_tile(start_x, start_y).is_water() or 
-                self.get_tile(start_x, start_y).type == "mountain"):
-                continue
-                
-            # Simple A* pathfinding to create natural-looking paths
-            path = self._find_path(start_x, start_y, end_x, end_y)
-            
-            # Create the path
-            for x, y in path:
-                # Don't place paths in water
-                if not self.get_tile(x, y).is_water():
-                    self.set_tile(x, y, "path")
+        # Create the path
+        for x, y in path:
+            # Don't place paths in water
+            if not self.get_tile(x, y).is_water():
+                self.set_tile(x, y, "path")
+        
+        return path
+
     
     def _find_path(self, start_x, start_y, end_x, end_y):
         """Simple A* pathfinding to create natural-looking paths"""
@@ -292,6 +278,7 @@ class WorldMap:
         
         # No path found
         return []
+
     
     def _heuristic(self, x1, y1, x2, y2):
         """Calculate Manhattan distance heuristic"""
