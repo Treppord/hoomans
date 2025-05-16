@@ -237,10 +237,7 @@ class Rectangle:
                 elif self.grid_y > self.target_grid_y:
                     self.grid_y -= self.speed
                 
-                # Debug output for player
-                if hasattr(self, 'controllable') and self.controllable:
-                    print(f"DEBUG: Player moving towards target ({self.target_grid_x}, {self.target_grid_y}), current: ({self.grid_x}, {self.grid_y})")
-        
+
         # Check if we should turn off force_walk_animation
         if hasattr(self, 'force_walk_animation') and self.force_walk_animation:
             if current_time - self.walk_animation_start_time > self.walk_animation_duration:

@@ -1,15 +1,18 @@
+from engine.camera import Camera
+from entities.npc import NPC
+from ai.controllers.ai_universe_controller import WorldStateCollector
+
 import pygame
 import sys
 from engine.physics import PhysicsEngine
 from engine.input_handler import InputHandler
 from engine.ai import AIManager
 from engine.data_manager import DataManager
-from engine.ui import UIManager, StatsPanel, ChatInputBox
+from engine.ui.ui_manager import UIManager
+from engine.ui.panels.stats_panel import StatsPanel
+from engine.ui.elements.chat_input import ChatInputBox
 from engine.camera import Camera
-from entities.npc import NPC
-from ai.controllers.ai_universe_controller import WorldStateCollector
 import random
-
 
 class SimpleGameEngine:
     def setup_world_cache(self):
@@ -64,8 +67,27 @@ class SimpleGameEngine:
         # Initialize data manager
         self.data = DataManager()
         
-        # Initialize UI manager
+        # Initialize UI
         self.ui = UIManager(width, height)
+        
+        # Create chat input box BEFORE adding it to UI
+        chat_input_width = 400
+        chat_input_height = 40
+        chat_input_x = self.width - chat_input_width - 10  # 10px from right edge
+        chat_input_y = self.height - chat_input_height - 10  # 10px from bottom edge
+        
+        print("DEBUG: Creating chat input box")
+        self.chat_input = ChatInputBox(
+            chat_input_x, 
+            chat_input_y, 
+            chat_input_width, 
+            chat_input_height,
+            callback=self.handle_chat_message
+        )
+        
+        print(f"DEBUG: Adding chat input to UI manager: {self.chat_input}")
+        # Now add the chat input to the UI manager
+        self.ui.add_element(self.chat_input)
         
         # Initialize world cache if seed is provided
         if self.map_seed is not None:
@@ -85,6 +107,7 @@ class SimpleGameEngine:
         
         # Game state
         self.running = False
+
     
     def toggle_fullscreen(self):
         """Toggle between fullscreen and windowed mode"""
@@ -149,21 +172,13 @@ class SimpleGameEngine:
             StatsPanel(stats_panel_x, stats_panel_y, stats_panel_width, stats_panel_height, self.data)
         )
         
-        # Add chat input box in bottom right corner
-        chat_input_width = 400
-        chat_input_height = 40
-        chat_input_x = self.width - chat_input_width - 10  # 10px from right edge
-        chat_input_y = self.height - chat_input_height - 10  # 10px from bottom edge
-        
-        self.chat_input = self.ui.add_element(
-            ChatInputBox(
-                chat_input_x, 
-                chat_input_y, 
-                chat_input_width, 
-                chat_input_height,
-                callback=self.handle_chat_message
-            )
-        )
+        if hasattr(self, 'chat_input') and self.chat_input:
+            chat_input_width = 400
+            chat_input_height = 40
+            chat_input_x = self.width - chat_input_width - 10  # 10px 
+            chat_input_y = self.height - chat_input_height - 10  # 10px 
+            self.chat_input.x = chat_input_x
+            self.chat_input.y = chat_input_y
         
     def handle_chat_message(self, message):
         """Handle a chat message from the player"""
@@ -328,10 +343,12 @@ class SimpleGameEngine:
             # Direct check for T key to toggle chat
             if event.type == pygame.KEYDOWN and event.key == pygame.K_t and not self.input_handler.chat_mode:
                 print("Chat mode activated")  # Debug output
-                self.input_handler.chat_mode = True
-                self.chat_input.toggle()
+                if hasattr(self, 'chat_input') and self.chat_input is not None:
+                    self.input_handler.chat_mode = True
+                    self.chat_input.toggle()
+                else:
+                    print("ERROR: Chat input not initialized")
                 continue
-                
             
                 
             # Handle mouse wheel for zooming or chat scrolling
@@ -438,6 +455,74 @@ class SimpleGameEngine:
             mode_str = "Windowed"
             
         print(f"Screen mode changed: {mode_str} ({self.width}x{self.height})")
+
+    def process_chat(self, message):
+        """Process a chat message from the player"""
+        if not message.strip():
+            return
+            
+        # Set input handler to chat mode
+        self.input_handler.chat_mode = False
+        
+        # Get the player entity
+        player = None
+        for obj in self.objects:
+            if hasattr(obj, 'controllable') and obj.controllable:
+                player = obj
+                break
+        
+        if not player:
+            return
+        
+        # Check for commands
+        if message.startswith("/"):
+            self.process_command(message[1:])
+            return
+        
+        # Find the nearest NPC within chat range
+        nearest_npc = None
+        min_distance = float('inf')
+        chat_range = 5  # Maximum distance for chat in grid cells
+        
+        for obj in self.objects:
+            if hasattr(obj, 'is_npc') and obj.is_npc:
+                # Calculate distance
+                dx = obj.grid_x - player.grid_x
+                dy = obj.grid_y - player.grid_y
+                distance = (dx ** 2 + dy ** 2) ** 0.5
+                
+                if distance <= chat_range and distance < min_distance:
+                    nearest_npc = obj
+                    min_distance = distance
+        
+        # If an NPC is in range, send the message to it
+        if nearest_npc:
+            # Add the message to chat history
+            self.chat_input.add_chat_message(message, "player")
+            
+            # Set a flag to prevent duplicate message
+            self.chat_input.skip_next_add = True
+            
+            # Get the NPC's entity ID
+            npc_id = nearest_npc.get_entity_id() if hasattr(nearest_npc, 'get_entity_id') else None
+            
+            if npc_id:
+                # Add a text bubble above the player
+                self.ui.add_text_bubble(message, player)
+                
+                # Request a response from the AI controller
+                if hasattr(self, 'ai_controller'):
+                    self.ai_controller.update_agent_state(
+                        npc_id,
+                        player_message=message,
+                        should_respond=True
+                    )
+        else:
+            # No NPC in range, just add to chat history
+            self.chat_input.add_chat_message(message, "player")
+            
+            # Add a text bubble above the player
+            self.ui.add_text_bubble(message, player)
 
     
     def update(self):

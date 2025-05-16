@@ -1,223 +1,13 @@
-# At the top of the file, add:
-import sys
-import os
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.append(parent_dir)
-from cna_utils import Gender, Culture, Nation
-
+"""Chat input box UI element"""
 import pygame
 import time
-
-class UIElement:
-    """Base class for UI elements"""
-    def __init__(self, x, y, width, height):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.visible = True
-        
-    def render(self, screen):
-        """Render the UI element - override in subclasses"""
-        pass
-    
-    def handle_event(self, event):
-        """Handle input events - override in subclasses"""
-        pass
-
-class StatsPanel(UIElement):
-    """Panel that displays player stats"""
-    def __init__(self, x, y, width, height, data_manager):
-        super().__init__(x, y, width, height)
-        self.data_manager = data_manager
-        self.background_color = (100, 100, 100, 150)  # Gray with transparency
-        self.text_color = (255, 255, 255)  # White
-        self.font = pygame.font.SysFont(None, 24)
-        self.padding = 10
-        
-    def render(self, screen):
-        if not self.visible:
-            return
-        
-    # Create a surface with alpha for transparency
-        panel_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-    
-    # Draw background with transparency
-        pygame.draw.rect(panel_surface, self.background_color, 
-                    (0, 0, self.width, self.height))
-    
-    # Get stats from data manager
-        health = self.data_manager.get_player_stat("health")
-        hunger = self.data_manager.get_player_stat("hunger")
-        thirst = self.data_manager.get_player_stat("thirst")
-    
-    # Render text for each stat
-        y_offset = self.padding
-    
-        if health:
-            health_text = f"Health: {health.value}/{health.max_value}"
-            text_surface = self.font.render(health_text, True, self.text_color)
-            panel_surface.blit(text_surface, (self.padding, y_offset))
-            y_offset += 30
-    
-        if hunger:
-            hunger_text = f"Hunger: {hunger.value}/{hunger.max_value}"
-            text_surface = self.font.render(hunger_text, True, self.text_color)
-            panel_surface.blit(text_surface, (self.padding, y_offset))
-            y_offset += 30
-    
-        if thirst:
-            thirst_text = f"Thirst: {thirst.value}/{thirst.max_value}"
-            text_surface = self.font.render(thirst_text, True, self.text_color)
-            panel_surface.blit(text_surface, (self.padding, y_offset))
-    
-    # Draw the panel on the screen
-        screen.blit(panel_surface, (self.x, self.y))
-
-
-class TextBubble:
-    """Speech bubble that appears above an entity"""
-    def __init__(self, text, entity, duration=3.0):
-        self.text = text
-        self.entity = entity
-        self.creation_time = time.time()
-        self.duration = duration
-        self.font = pygame.font.SysFont(None, 20)
-        self.padding = 10
-        self.background_color = (40, 40, 40, 220)  # Dark gray with transparency
-        self.border_color = (80, 80, 80, 255)  # Lighter gray border
-        self.text_color = (255, 255, 255)  # White text
-        self.max_width = 200  # Maximum width for text wrapping
-        
-        # Wrap text if needed
-        self.wrapped_text = self._wrap_text(self.text, self.max_width)
-        
-        # Calculate size based on wrapped text
-        max_line_width = max([self.font.render(line, True, self.text_color).get_width() for line in self.wrapped_text])
-        self.width = max_line_width + self.padding * 2
-        self.height = len(self.wrapped_text) * self.font.get_linesize() + self.padding * 2
-        
-        # Animation properties
-        self.appear_time = 0.2  # Time in seconds for bubble to appear
-        self.disappear_time = 0.3  # Time in seconds for bubble to disappear
-        
-        # For stacking bubbles
-        self.vertical_offset = 0  # Will be set by UIManager
-        
-    def _wrap_text(self, text, max_width):
-        """Wrap text to fit within max_width"""
-        words = text.split(' ')
-        lines = []
-        current_line = []
-        current_width = 0
-        
-        for word in words:
-            word_surface = self.font.render(word, True, self.text_color)
-            word_width = word_surface.get_width()
-            
-            # Add space width except for first word in line
-            if current_line:
-                space_width = self.font.render(' ', True, self.text_color).get_width()
-                test_width = current_width + space_width + word_width
-            else:
-                test_width = current_width + word_width
-            
-            if test_width <= max_width:
-                current_line.append(word)
-                current_width = test_width
-            else:
-                # Start a new line
-                if current_line:
-                    lines.append(' '.join(current_line))
-                current_line = [word]
-                current_width = word_width
-        
-        # Add the last line
-        if current_line:
-            lines.append(' '.join(current_line))
-        
-        return lines
-        
-    def is_expired(self):
-        """Check if the bubble should disappear"""
-        return time.time() - self.creation_time > self.duration
-        
-    def render(self, screen):
-        if self.is_expired():
-            return
-            
-        # Get camera from game engine
-        from engine.core import SimpleGameEngine
-        camera = None
-        if hasattr(SimpleGameEngine, 'instance'):
-            camera = SimpleGameEngine.instance.camera
-            
-        if not camera:
-            return
-            
-        # Calculate position above entity in world coordinates
-        world_x = self.entity.x + self.entity.width // 2
-        world_y = self.entity.y - self.height - 5 - self.vertical_offset  # Add vertical offset for stacking
-        
-        # Apply camera transformation
-        screen_x, screen_y, _, _ = camera.apply(world_x, world_y, 0, 0)
-        
-        # Adjust position to center the bubble
-        screen_x -= self.width // 2
-        
-        # Keep bubble on screen
-        screen_x = max(5, min(screen_x, screen.get_width() - self.width - 5))
-        screen_y = max(5, min(screen_y, screen.get_height() - self.height - 5))
-        
-        # Calculate alpha based on time
-        elapsed = time.time() - self.creation_time
-        alpha = 255
-        
-        # Fade in
-        if elapsed < self.appear_time:
-            alpha = int(255 * (elapsed / self.appear_time))
-        # Fade out
-        elif elapsed > self.duration - self.disappear_time:
-            alpha = int(255 * (1 - (elapsed - (self.duration - self.disappear_time)) / self.disappear_time))
-        
-        # Create a surface with alpha for transparency
-        bubble_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
-        # Draw rounded rectangle background
-        pygame.draw.rect(bubble_surface, (self.background_color[0], self.background_color[1], 
-                                         self.background_color[2], int(self.background_color[3] * alpha / 255)), 
-                        (0, 0, self.width, self.height), 
-                        border_radius=8)
-        
-        # Draw border
-        pygame.draw.rect(bubble_surface, (self.border_color[0], self.border_color[1], 
-                                         self.border_color[2], int(self.border_color[3] * alpha / 255)), 
-                        (0, 0, self.width, self.height), 
-                        border_radius=8, width=2)
-        
-        # Draw little triangle pointer at the bottom
-        pointer_points = [
-            (self.width // 2 - 8, self.height),
-            (self.width // 2, self.height + 8),
-            (self.width // 2 + 8, self.height)
-        ]
-        pygame.draw.polygon(bubble_surface, (self.background_color[0], self.background_color[1], 
-                                           self.background_color[2], int(self.background_color[3] * alpha / 255)), 
-                          pointer_points)
-        
-        # Draw text
-        y_offset = self.padding
-        for line in self.wrapped_text:
-            text_surface = self.font.render(line, True, (self.text_color[0], self.text_color[1], 
-                                                       self.text_color[2], int(alpha)))
-            bubble_surface.blit(text_surface, 
-                              (self.padding, y_offset))
-            y_offset += self.font.get_linesize()
-        
-        # Draw the bubble on the screen
-        screen.blit(bubble_surface, (screen_x, screen_y))
-
+import re
+from engine.ui.elements.base import UIElement
+from engine.ui.constants.colors import (
+    CHAT_INPUT_BG, BORDER_COLOR, TEXT_COLOR, PLACEHOLDER_COLOR, 
+    SELECTION_COLOR, CHAT_LOG_BG, PLAYER_TEXT_COLOR, NPC_TEXT_COLOR,
+    SCROLL_INDICATOR_COLOR
+)
 
 class ChatInputBox(UIElement):
     """Input box for typing chat messages"""
@@ -227,12 +17,12 @@ class ChatInputBox(UIElement):
         self.text = ""
         self.active = False
         self.visible = False  # Start hidden
-        self.background_color = (40, 40, 40, 220)  # Dark gray with transparency
-        self.border_color = (80, 80, 80, 255)  # Lighter gray border
-        self.text_color = (255, 255, 255)  # White
+        self.background_color = CHAT_INPUT_BG  # Using color constant
+        self.border_color = BORDER_COLOR  # Using color constant
+        self.text_color = TEXT_COLOR  # Using color constant
         self.placeholder_text = "Press T to chat..."
-        self.placeholder_color = (170, 170, 170)  # Light gray
-        self.font = pygame.font.SysFont(None, 24)
+        self.placeholder_color = PLACEHOLDER_COLOR  # Using color constant
+        self.font = pygame.font.Font("assets/font/CandC_LAN.ttf", 24)
         self.padding = 12
         self.cursor_visible = True
         self.cursor_timer = 0
@@ -345,7 +135,7 @@ class ChatInputBox(UIElement):
             selection_x = self.padding + self.font.size(display_text[:start])[0]
             
             # Draw selection highlight
-            pygame.draw.rect(box_surface, (100, 100, 255, 128),  # Light blue semi-transparent
+            pygame.draw.rect(box_surface, SELECTION_COLOR,  # Using color constant
                             (selection_x, self.height // 2 - 10, selection_width, 20))
         
         # Render the text
@@ -363,6 +153,7 @@ class ChatInputBox(UIElement):
         # Draw the input box on the screen
         screen.blit(box_surface, (self.x, self.y))
     
+    # In the _render_chat_log method, update the color references
     def _render_chat_log(self, screen):
         """Render chat log in the bottom left corner"""
         if not self.chat_history:
@@ -380,7 +171,7 @@ class ChatInputBox(UIElement):
         log_surface = pygame.Surface((self.log_width, self.log_height), pygame.SRCALPHA)
         
         # Draw background with transparency
-        pygame.draw.rect(log_surface, (0, 0, 0, 180),  # Semi-transparent black
+        pygame.draw.rect(log_surface, CHAT_LOG_BG,  # Using color constant
                         (0, 0, self.log_width, self.log_height), 
                         border_radius=8)
         
@@ -405,11 +196,11 @@ class ChatInputBox(UIElement):
             
             # Choose color based on sender
             if is_player:
-                sender_color = (255, 255, 100)  # Yellow for player
-                text_color = (255, 255, 255)    # White for text
+                sender_color = PLAYER_TEXT_COLOR  # Using color constant
+                text_color = TEXT_COLOR  # Using color constant
             else:
-                sender_color = (100, 255, 100)  # Green for NPCs
-                text_color = (255, 255, 255)    # White for text
+                sender_color = NPC_TEXT_COLOR  # Using color constant
+                text_color = TEXT_COLOR  # Using color constant
             
             # Format message with sender
             formatted_text = f"{sender}: {text}"
@@ -449,12 +240,12 @@ class ChatInputBox(UIElement):
         # Draw scroll indicators if needed
         if self.scroll_offset > 0:
             # Draw up arrow to indicate more messages above
-            pygame.draw.polygon(log_surface, (200, 200, 200, 200),
+            pygame.draw.polygon(log_surface, SCROLL_INDICATOR_COLOR,  # Using color constant
                               [(self.log_width - 20, 10), (self.log_width - 10, 20), (self.log_width - 30, 20)])
         
         if self.scroll_offset < self.max_scroll_offset:
             # Draw down arrow to indicate more messages below
-            pygame.draw.polygon(log_surface, (200, 200, 200, 200),
+            pygame.draw.polygon(log_surface, SCROLL_INDICATOR_COLOR,  # Using color constant
                               [(self.log_width - 20, self.log_height - 10), 
                                (self.log_width - 10, self.log_height - 20), 
                                (self.log_width - 30, self.log_height - 20)])
@@ -529,12 +320,16 @@ class ChatInputBox(UIElement):
             return False
             
         if event.type == pygame.KEYDOWN:
-            # Skip processing if it's just a modifier key by itself
-            if event.key in (pygame.K_LMETA, pygame.K_RMETA, pygame.K_LCTRL, pygame.K_RCTRL, 
-                            pygame.K_LSHIFT, pygame.K_RSHIFT, pygame.K_LALT, pygame.K_RALT):
+            # Set shift_pressed flag when shift key is pressed
+            if event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                self.shift_pressed = True
                 return True
                 
-                
+            # Skip processing if it's just a modifier key by itself
+            if event.key in (pygame.K_LMETA, pygame.K_RMETA, pygame.K_LCTRL, pygame.K_RCTRL, 
+                            pygame.K_LALT, pygame.K_RALT):
+                return True
+            
             # Handle Enter key - send message
             if event.key == pygame.K_RETURN:
                 if self.text.strip() and self.callback:
@@ -688,8 +483,8 @@ class ChatInputBox(UIElement):
                     self.selection_end = cursor_pos
                 else:
                     # Clear selection and just move cursor
-                    self.selection_start = None
-                    self.selection_end = None
+                    self.selection_start = cursor_pos
+                    self.selection_end = cursor_pos
                 
                 return True
                 
@@ -799,331 +594,3 @@ class ChatInputBox(UIElement):
             lines.append(' '.join(current_line))
         
         return lines
-
-
-
-class UIManager:
-    """Manages all UI elements"""
-    
-    def __init__(self, screen_width, screen_height):
-        self.screen_width = screen_width
-        self.screen_height = screen_height
-        self.elements = []
-        self.text_bubbles = []
-        self.entity_info = None
-        self.entity_info_time = 0
-        self.entity_info_duration = 3.0  # How long to show entity info
-        
-        # Create character info panel
-        panel_width = 600
-        panel_height = 500
-        panel_x = (screen_width - panel_width) // 2
-        panel_y = (screen_height - panel_height) // 2
-        self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
-        self.elements.append(self.char_info_panel)
-    
-    def update_screen_size(self, screen_width, screen_height):
-        """Update UI elements when screen size changes"""
-        self.screen_width = screen_width
-        self.screen_height = screen_height
-        
-        # Reposition UI elements based on new screen size
-        for element in self.elements:
-            if isinstance(element, StatsPanel):
-                # Keep stats panel in top right corner
-                element.x = self.screen_width - element.width - 10
-                element.y = 10
-            elif isinstance(element, ChatInputBox):
-                # Keep chat input in bottom right corner
-                element.x = self.screen_width - element.width - 10
-                element.y = self.screen_height - element.height - 10
-            elif isinstance(element, CharacterInfoPanel):
-                # Center character info panel
-                element.x = (self.screen_width - element.width) // 2
-                element.y = (self.screen_height - element.height) // 2
-
-    def show_entity_info(self, entity):
-        """Show the character info panel for an entity"""
-        self.char_info_panel.set_entity(entity)
-    
-    def add_element(self, element):
-        """Add a UI element"""
-        self.elements.append(element)
-        return element
-        
-    def add_text_bubble(self, text, entity, duration=3.0):
-        """Add a speech bubble above an entity"""
-        # Check for existing bubbles with the same text for this entity
-        for existing_bubble in self.text_bubbles:
-            if (existing_bubble.entity == entity and 
-                existing_bubble.text == text and 
-                not existing_bubble.is_expired()):
-                # Don't create duplicate bubbles
-                print(f"DEBUG: Skipping duplicate text bubble for entity {id(entity)}")
-                return existing_bubble
-        
-        bubble = TextBubble(text, entity, duration)
-        
-        # Calculate vertical offset for stacking bubbles
-        # Find existing bubbles for this entity
-        entity_bubbles = [b for b in self.text_bubbles if b.entity == entity and not b.is_expired()]
-        
-        # Stack with newest at the bottom
-        total_offset = 0
-        for existing_bubble in entity_bubbles:
-            total_offset += existing_bubble.height + 10  # 10px gap between bubbles
-        
-        bubble.vertical_offset = total_offset
-        
-        self.text_bubbles.append(bubble)
-        
-        # Also add to chat log if we have one
-        chat_input = next((e for e in self.elements if isinstance(e, ChatInputBox)), None)
-        if chat_input:
-            # Get entity name if available
-            entity_name = "NPC"
-            if hasattr(entity, 'cna_data') and entity.cna_data and hasattr(entity.cna_data, 'name'):
-                entity_name = entity.cna_data.name
-            elif hasattr(entity, 'controllable') and entity.controllable:
-                entity_name = "You"
-            
-            # Check for duplicate messages (same entity, same text, within last 5 seconds)
-            current_time = time.time()
-            recent_messages = [msg for msg in chat_input.chat_history 
-                              if msg.get('sender') == entity_name and 
-                                 msg.get('text') == text and 
-                                 current_time - msg.get('time', 0) < 5.0]
-            
-            # Only add if not a duplicate
-            if not recent_messages:
-                chat_input.add_message(text, sender=entity_name, is_player=(hasattr(entity, 'controllable') and entity.controllable))
-            else:
-                print(f"DEBUG: Skipping duplicate chat log entry for {entity_name}")
-        
-        return bubble
-
-
-        
-        
-    def handle_event(self, event):
-        """Handle UI events"""
-        for element in self.elements:
-            if hasattr(element, 'handle_event') and element.handle_event(event):
-                return True
-        return False
-        
-    def render(self, screen):
-        """Render all UI elements"""
-        # Render regular UI elements
-        for element in self.elements:
-            if hasattr(element, 'render'):
-                element.render(screen)
-        
-        # Render text bubbles
-        for bubble in self.text_bubbles[:]:
-            if bubble.is_expired():
-                self.text_bubbles.remove(bubble)
-            else:
-                bubble.render(screen)
-    
-class CharacterInfoPanel(UIElement):
-    """Panel that displays character information from CNA data"""
-    def __init__(self, x, y, width, height):
-        super().__init__(x, y, width, height)
-        self.entity = None
-        self.background_color = (60, 60, 60, 230)  # Dark gray with transparency
-        self.text_color = (255, 255, 255)  # White
-        self.title_color = (200, 200, 100)  # Light yellow
-        self.font = pygame.font.SysFont(None, 24)
-        self.title_font = pygame.font.SysFont(None, 28)
-        self.small_font = pygame.font.SysFont(None, 20)
-        self.padding = 15
-        self.visible = False
-        self.animation_timer = 0
-        self.current_frame = 0
-        self.animation_speed = 0.5  # Slower animation for the info panel
-        
-    def set_entity(self, entity):
-        """Set the entity to display information for"""
-        self.entity = entity
-        self.visible = (entity is not None and entity.cna_data is not None)
-        
-    def update_animation(self, delta_time=1/60):
-        """Update the animation frame"""
-        self.animation_timer += delta_time
-        if self.animation_timer >= self.animation_speed:
-            self.animation_timer = 0
-            if hasattr(self.entity, 'animation_frames') and self.entity.animation_frames:
-                self.current_frame = (self.current_frame + 1) % len(self.entity.animation_frames)
-        
-    def render(self, screen):
-        if not self.visible or not self.entity or not self.entity.cna_data:
-            return
-            
-        # Update animation
-        self.update_animation()
-            
-        # Create a surface with alpha for transparency
-        panel_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
-        # Draw background with transparency
-        pygame.draw.rect(panel_surface, self.background_color, 
-                        (0, 0, self.width, self.height),
-                        border_radius=10)
-        
-        # Draw divider line down the middle
-        divider_x = self.width // 2
-        pygame.draw.line(panel_surface, (100, 100, 100, 200),
-                        (divider_x, 10), (divider_x, self.height - 10), 2)
-        
-        # Get CNA data
-        cna = self.entity.cna_data
-        
-        # Draw title
-        title_text = f"{cna.first_name} {cna.last_name}"
-        title_surface = self.title_font.render(title_text, True, self.title_color)
-        panel_surface.blit(title_surface, (self.padding, self.padding))
-        
-        # Left side - Entity visualization
-        # Check if entity has animation frames
-        if hasattr(self.entity, 'animation_frames') and self.entity.animation_frames:
-            # Calculate position and size for the sprite display
-            sprite_rect = pygame.Rect(
-                self.padding, 
-                self.padding + 40, 
-                (self.width // 2) - (self.padding * 2), 
-                100
-            )
-            
-            # Get the current animation frame
-            if 0 <= self.current_frame < len(self.entity.animation_frames):
-                current_frame = self.entity.animation_frames[self.current_frame]
-                
-                # Apply color tint if the entity has this method
-                if hasattr(self.entity, 'apply_color_tint'):
-                    current_frame = self.entity.apply_color_tint(current_frame)
-                
-                # Scale the sprite to fit the display area while maintaining aspect ratio
-                frame_width, frame_height = current_frame.get_size()
-                scale_factor = min(sprite_rect.width / frame_width, sprite_rect.height / frame_height)
-                scaled_width = int(frame_width * scale_factor * 1.5)  # Make it 3x larger
-                scaled_height = int(frame_height * scale_factor * 1.5)
-                
-                # Center the sprite in the display area
-                sprite_x = sprite_rect.x + (sprite_rect.width - scaled_width) // 2
-                sprite_y = sprite_rect.y + (sprite_rect.height - scaled_height) // 2
-                
-                # Scale and draw the sprite
-                scaled_frame = pygame.transform.scale(current_frame, (scaled_width, scaled_height))
-                panel_surface.blit(scaled_frame, (sprite_x, sprite_y))
-                
-                
-            else:
-                # Fallback: draw a colored rectangle
-                pygame.draw.rect(panel_surface, self.entity.color, sprite_rect)
-        else:
-            # Fallback: draw a colored rectangle
-            entity_rect = pygame.Rect(
-                self.padding, 
-                self.padding + 40, 
-                (self.width // 2) - (self.padding * 2), 
-                100
-            )
-            pygame.draw.rect(panel_surface, self.entity.color, entity_rect)
-        
-        # Add entity stats below the visualization
-        stats_y = self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
-        
-        # Display entity stats if available
-        if hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or hasattr(self.entity, 'health'):
-            stats_title = self.font.render("Entity Stats", True, self.title_color)
-            panel_surface.blit(stats_title, (self.padding, stats_y))
-            stats_y += 30
-            
-            # Display thirst if available
-            if hasattr(self.entity, 'thirst'):
-                thirst_text = f"Thirst: {self.entity.thirst}/10"
-                thirst_surface = self.small_font.render(thirst_text, True, self.text_color)
-                panel_surface.blit(thirst_surface, (self.padding, stats_y))
-                stats_y += 25
-            
-            # Display hunger if available
-            if hasattr(self.entity, 'hunger'):
-                hunger_text = f"Hunger: {self.entity.hunger}/10"
-                hunger_surface = self.small_font.render(hunger_text, True, self.text_color)
-                panel_surface.blit(hunger_surface, (self.padding, stats_y))
-                stats_y += 25
-            
-            # Display health if available
-            if hasattr(self.entity, 'health'):
-                health_text = f"Health: {self.entity.health}/20"
-                health_surface = self.small_font.render(health_text, True, self.text_color)
-                panel_surface.blit(health_surface, (self.padding, stats_y))
-                stats_y += 25
-        
-        # Right side - CNA attributes
-        right_x = (self.width // 2) + self.padding
-        y_offset = self.padding
-        
-        # Basic info section
-        y_offset += 10
-        info_text = self.font.render("Basic Information", True, self.title_color)
-        panel_surface.blit(info_text, (right_x, y_offset))
-        y_offset += 30
-        
-        # Gender, Culture, Nation
-        attributes = [
-            f"Gender: {cna.gender.name}",
-            f"Culture: {cna.culture.name}",
-            f"Nation: {cna.nation.name}",
-            f"Age: {cna.age_minutes} minutes"
-        ]
-        
-        for attr in attributes:
-            text_surface = self.small_font.render(attr, True, self.text_color)
-            panel_surface.blit(text_surface, (right_x, y_offset))
-            y_offset += 25
-        
-        # Health section
-        y_offset += 10
-        health_text = self.font.render("Health Attributes", True, self.title_color)
-        panel_surface.blit(health_text, (right_x, y_offset))
-        y_offset += 30
-        
-        health_attrs = [
-            f"Physical: {cna.physical_health}/5",
-            f"Generational: {cna.generational_health}/5",
-            f"Mental: {cna.mental_health}/5"
-        ]
-        
-        for attr in health_attrs:
-            text_surface = self.small_font.render(attr, True, self.text_color)
-            panel_surface.blit(text_surface, (right_x, y_offset))
-            y_offset += 25
-        
-        # Extended attributes section
-        y_offset += 10
-        ext_text = self.font.render("Extended Attributes", True, self.title_color)
-        panel_surface.blit(ext_text, (right_x, y_offset))
-        y_offset += 30
-        
-        ext_attrs = [
-            f"Intelligence: {cna.intelligence_factor:.2f}",
-            f"Adaptability: {cna.adaptability:.2f}",
-            f"Immunity: {cna.immunity_strength:.2f}"
-        ]
-        
-        for attr in ext_attrs:
-            text_surface = self.small_font.render(attr, True, self.text_color)
-            panel_surface.blit(text_surface, (right_x, y_offset))
-            y_offset += 25
-        
-        # Draw the panel on the screen
-        screen.blit(panel_surface, (self.x, self.y))
-        
-    def handle_event(self, event):
-        """Handle input events"""
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.visible = False
-            return True
-        return False
