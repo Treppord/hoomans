@@ -40,7 +40,7 @@ if __name__ == "__main__":
         else:
             print(f"DEBUG: {name} has no CNA data")
 
-    engine = SimpleGameEngine(title="Grid-Based Game", width=args.width, height=args.height, map_seed=args.seed)
+    engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
     
     # Toggle fullscreen if requested
     if args.fullscreen:
