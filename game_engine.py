@@ -93,12 +93,13 @@ if __name__ == "__main__":
     
     # Create and set up the world map (50x38 tiles for an 800x600 screen)
     world_map = WorldMap(256, 256)
+    world_map.initialize_entity_tiles()
+
     world_map.generate_realistic_map(seed=engine.map_seed)
     # Initialize entity tile manager before adding any entity tiles
-    world_map.initialize_entity_tiles()
     
     # Add a tree and print debug info
-    tree = world_map.add_tree(24, 18)
+    # tree = world_map.add_tree(24, 18)
     house = world_map.add_house(20, 10)
     
     engine.set_world_map(world_map)

@@ -275,6 +275,596 @@
           "name": "Water source"
         },
         "timestamp": 1747439636.695185
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.6625228
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.6657941
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.679523
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.681479
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.696757
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.697836
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.712619
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.7146611
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.72964
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.731921
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.746408
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.748162
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.763583
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.764705
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.780515
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.7825558
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.7968
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.798033
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.813619
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.815279
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.830623
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.832698
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.8460438
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.847243
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.863439
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.864886
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.87954
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.881257
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.89642
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.897974
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.913744
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.9150631
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.9302871
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.932121
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.946966
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.9483268
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.963867
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.965235
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.981096
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.982504
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.9979389
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443254.9992929
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.015798
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.017279
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.0316942
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.033536
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.047358
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.049155
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.063704
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.065809
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.080223
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.081725
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.0975869
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.099071
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.113833
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.116307
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.131107
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.133179
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747443255.148263
       }
     ]
   },
@@ -408,9 +998,18 @@
           "0bc80fdff344d30008"
         ],
         "discovery_time": 1747439636.678543
+      },
+      {
+        "x": 15,
+        "y": 4,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1747443254.662526
       }
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747439636.6951911
+  "last_updated": 1747443255.148278
 }

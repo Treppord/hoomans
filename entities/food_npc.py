@@ -321,11 +321,9 @@ class FoodNPC(Rectangle):
                 # Store the walking frames
                 self.walk_animation_frames = [walk_frame1, walk_frame2]
                 
-                print(f"DEBUG: Food NPC loaded walk sprite sheet with {len(self.walk_animation_frames)} frames")
             else:
                 # If walk sprite sheet doesn't exist, use idle frames for walking too
                 self.walk_animation_frames = self.animation_frames
-                print("Food walk sprite sheet not found, using idle frames for walking")
             
         except Exception as e:
             print(f"Error loading food sprite sheets: {e}")

@@ -258,6 +258,59 @@ class WorldMap:
         
         # Ensure there's at least one accessible water area
         self._ensure_accessible_water()
+        
+        # Initialize entity tiles manager if not already initialized
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+            print("Initialized entity tile manager during map generation")
+        
+        # Generate trees based on tile type and seed
+        print("Starting tree generation...")
+        self._generate_trees(seed)
+        
+        print(f"Map generation complete. Entity tiles: {len(self.entity_tile_manager.entity_tiles)}")
+    
+    def _generate_trees(self, seed):
+        """Generate trees on forest and plain tiles based on seed"""
+        # Create a random generator with the seed for deterministic generation
+        rng = random.Random(seed)
+        
+        # Count for debugging
+        trees_added = 0
+        forest_tiles = 0
+        grass_tiles = 0
+        
+        # Iterate through all tiles
+        for y in range(self.height):
+            for x in range(self.width):
+                tile = self.get_tile(x, y)
+                if not tile:
+                    continue
+                
+                # Get a deterministic random value for this position
+                # Use a hash of position and seed to ensure consistency
+                pos_seed = hash((x, y, seed)) % 100000
+                rng.seed(pos_seed)
+                chance = rng.random()
+                
+                # Forest tiles: 10% chance of tree
+                if tile.type == "forest":
+                    forest_tiles += 1
+                    if chance < 0.1:
+                        tree = self.add_tree(x, y)
+                        if tree:
+                            trees_added += 1
+                
+                # Grass/plain tiles: 10% chance of tree
+                elif tile.type == "grass":
+                    grass_tiles += 1
+                    if chance < 0.005:
+                        tree = self.add_tree(x, y)
+                        if tree:
+                            trees_added += 1
+        
+        print(f"Tree generation: Added {trees_added} trees on {forest_tiles} forest tiles and {grass_tiles} grass tiles")
+
     
     def add_path(self, start_x, start_y, end_x, end_y):
         """Add a path between two points on the map"""
