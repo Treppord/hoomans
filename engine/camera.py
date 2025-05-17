@@ -137,6 +137,8 @@ class Camera:
     
     def should_draw_grid(self):
         """Determine if grid lines should be drawn based on zoom level"""
+        if hasattr(self, 'show_grid') and not self.show_grid:
+            return False
         return self.zoom >= 0.5
 
 

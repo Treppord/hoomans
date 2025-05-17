@@ -48,6 +48,8 @@ class SimpleGameEngine:
         
         # Initialize camera
         self.camera = Camera(width, height)
+        self.show_grid = False  # Default to not showing grid
+
         
         # Game objects storage
         self.objects = []
@@ -333,6 +335,12 @@ class SimpleGameEngine:
                 self.toggle_borderless_fullscreen()
                 continue
                 
+            # Add grid toggle with G key
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_g:
+                self.show_grid = not self.show_grid
+                self.camera.show_grid = self.show_grid  # Pass to camera
+                print(f"Grid {'shown' if self.show_grid else 'hidden'}")
+                continue
                 
             # Check for spacebar to toggle pause
             if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE and not self.input_handler.chat_mode:
