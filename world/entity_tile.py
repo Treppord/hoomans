@@ -255,12 +255,13 @@ class TreeEntityTile(EntityTile):
     def __init__(self, base_x, base_y):
         """Initialize a tree entity tile"""
         super().__init__(base_x, base_y, width=1, height=2, tile_type="tree")
+        self.entities_in_trunk = []  # Track entities specifically in the trunk area
     
     def _create_component_tiles(self):
         """Create the tree components: trunk and leaves"""
         # Create a single component for the whole tree
         tree_component = TileComponent(self, 0, 0, "tree")
-        tree_component.walkable = False  # Can't walk on the tree
+        tree_component.walkable = True  # Can walk behind top of tree
         
         # Use the tree image if available
         if "tree" in IMAGES:
@@ -274,7 +275,7 @@ class TreeEntityTile(EntityTile):
         
         # Add a walkable component for the trunk (bottom part)
         trunk = TileComponent(self, 0, 1, "tree_trunk")
-        trunk.walkable = True
+        trunk.walkable = False
         # Use the same tree image for the trunk
         if "tree" in IMAGES:
             trunk.custom_texture = IMAGES["tree"]
@@ -286,18 +287,32 @@ class TreeEntityTile(EntityTile):
     
     def on_entity_enter(self, entity, component_x, component_y):
         """Called when an entity enters this tree"""
-        super().on_entity_enter(entity, component_x, component_y)
+        # Add entity to the list if not already there
+        if entity not in self.entities_inside:
+            self.entities_inside.append(entity)
         
         # If entity is behind the tree (at the trunk), make the tree semi-transparent
         if component_y == 1:  # Trunk component
-            self.opacity = 0.5
+            # Add entity to trunk tracking list
+            if entity not in self.entities_in_trunk:
+                self.entities_in_trunk.append(entity)
+                self.opacity = 0.5
+                print(f"Entity entered tree trunk, opacity set to 0.5, {len(self.entities_in_trunk)} entities in trunk")
     
-    def on_interact(self, entity):
-        """Called when an entity interacts with this tree"""
-        # Example: Tree could drop fruit or wood
-        from engine.core import SimpleGameEngine
-        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-            SimpleGameEngine.instance.ui.add_text_bubble("This is a tree!", entity, duration=2.0)
+    def on_entity_exit(self, entity):
+        """Called when an entity exits this tree"""
+        # Remove entity from the lists
+        if entity in self.entities_inside:
+            self.entities_inside.remove(entity)
+        
+        if entity in self.entities_in_trunk:
+            self.entities_in_trunk.remove(entity)
+            print(f"Entity exited tree trunk, {len(self.entities_in_trunk)} entities remain in trunk")
+            
+            # Restore opacity if no entities are in the trunk
+            if not self.entities_in_trunk:
+                self.opacity = 1.0
+                print(f"No entities in tree trunk, opacity restored to 1.0")
 
 
 class HouseEntityTile(EntityTile):
@@ -449,22 +464,69 @@ class EntityTileManager:
     
     def handle_entity_movement(self, entity):
         """Handle entity movement in relation to entity tiles"""
-        if hasattr(entity, 'grid_x') and hasattr(entity, 'grid_y'):
-            # Check if entity is entering an entity tile
-            entity_tile = self.get_entity_tile_at(entity.grid_x, entity.grid_y)
-            if entity_tile:
-                # Get the specific component being entered
-                component_x = entity.grid_x - entity_tile.base_x
-                component_y = entity.grid_y - entity_tile.base_y
-                entity_tile.on_entity_enter(entity, component_x, component_y)
+        if not hasattr(entity, 'grid_x') or not hasattr(entity, 'grid_y'):
+            return
             
-            # Check if entity is exiting an entity tile
-            # We need to track the previous position for this
-            if hasattr(entity, 'previous_grid_x') and hasattr(entity, 'previous_grid_y'):
-                prev_entity_tile = self.get_entity_tile_at(entity.previous_grid_x, entity.previous_grid_y)
-                if prev_entity_tile and prev_entity_tile != entity_tile:
-                    prev_entity_tile.on_entity_exit(entity)
-    
+        # Get current position
+        current_x, current_y = entity.grid_x, entity.grid_y
+        
+        # Get previous position (default to current if not available)
+        prev_x = getattr(entity, 'previous_grid_x', current_x)
+        prev_y = getattr(entity, 'previous_grid_y', current_y)
+        
+        # Get current and previous entity tiles
+        current_entity_tile = self.get_entity_tile_at(current_x, current_y)
+        prev_entity_tile = self.get_entity_tile_at(prev_x, prev_y)
+        
+        # If entity hasn't moved, nothing to do
+        if current_x == prev_x and current_y == prev_y:
+            return
+            
+        # Case 1: Entity has entered a new entity tile
+        if current_entity_tile and current_entity_tile != prev_entity_tile:
+            component_x = current_x - current_entity_tile.base_x
+            component_y = current_y - current_entity_tile.base_y
+            current_entity_tile.on_entity_enter(entity, component_x, component_y)
+            print(f"Entity entered new entity tile at ({current_entity_tile.base_x}, {current_entity_tile.base_y})")
+        
+        # Case 2: Entity has exited an entity tile
+        if prev_entity_tile and prev_entity_tile != current_entity_tile:
+            prev_entity_tile.on_entity_exit(entity)
+            print(f"Entity exited entity tile at ({prev_entity_tile.base_x}, {prev_entity_tile.base_y})")
+        
+        # Case 3: Entity has moved within the same entity tile
+        if current_entity_tile and prev_entity_tile and current_entity_tile == prev_entity_tile:
+            # Check if the component has changed
+            prev_component_x = prev_x - prev_entity_tile.base_x
+            prev_component_y = prev_y - prev_entity_tile.base_y
+            current_component_x = current_x - current_entity_tile.base_x
+            current_component_y = current_y - current_entity_tile.base_y
+            
+            if prev_component_x != current_component_x or prev_component_y != current_component_y:
+                # Special handling for TreeEntityTile
+                if isinstance(current_entity_tile, TreeEntityTile):
+                    # If moving from trunk to leaves or out of the tree
+                    if prev_component_y == 1 and current_component_y != 1:
+                        if entity in current_entity_tile.entities_in_trunk:
+                            current_entity_tile.entities_in_trunk.remove(entity)
+                            print(f"Entity moved from trunk to leaves, {len(current_entity_tile.entities_in_trunk)} entities remain in trunk")
+                            
+                            # Update opacity if needed
+                            if not current_entity_tile.entities_in_trunk:
+                                current_entity_tile.opacity = 1.0
+                                print(f"No entities in tree trunk, opacity restored to 1.0")
+                    
+                    # If moving from leaves to trunk
+                    elif current_component_y == 1:
+                        if entity not in current_entity_tile.entities_in_trunk:
+                            current_entity_tile.entities_in_trunk.append(entity)
+                            current_entity_tile.opacity = 0.5
+                            print(f"Entity moved from leaves to trunk, opacity set to 0.5")
+                else:
+                    # For other entity tiles, just call on_entity_enter with new component
+                    current_entity_tile.on_entity_enter(entity, current_component_x, current_component_y)
+
+                    
     def handle_entity_interaction(self, entity, target_x, target_y):
         """Handle entity interaction with entity tiles"""
         entity_tile = self.get_entity_tile_at(target_x, target_y)

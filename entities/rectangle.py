@@ -16,6 +16,8 @@ class Rectangle:
     def __init__(self, grid_x, grid_y, color=(255, 255, 255), speed=1, controllable=False):
         self.grid_x = grid_x
         self.grid_y = grid_y
+        self.previous_grid_x = grid_x  # Initialize previous position
+        self.previous_grid_y = grid_y  # Initialize previous position
         self.color = color
         self.speed = speed
         self.controllable = controllable
@@ -192,6 +194,10 @@ class Rectangle:
     
     def update(self):
         """Update entity state"""
+        # Store previous position before updating
+        self.previous_grid_x = self.grid_x
+        self.previous_grid_y = self.grid_y
+        
         # Update visual position with smooth interpolation
         self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
         self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
@@ -226,29 +232,47 @@ class Rectangle:
                     else:
                         self.is_moving = False
             else:
-                # Move towards target one tile at a time
+                # Get the next step towards the target
+                next_x = self.grid_x
+                next_y = self.grid_y
+                
                 if self.grid_x < self.target_grid_x:
-                    self.grid_x += self.speed
+                    next_x += self.speed
                 elif self.grid_x > self.target_grid_x:
-                    self.grid_x -= self.speed
+                    next_x -= self.speed
                     
                 if self.grid_y < self.target_grid_y:
-                    self.grid_y += self.speed
+                    next_y += self.speed
                 elif self.grid_y > self.target_grid_y:
-                    self.grid_y -= self.speed
+                    next_y -= self.speed
                 
+                # Check for collision with entity tiles before moving
+                from engine.core import SimpleGameEngine
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_map'):
+                    world_map = SimpleGameEngine.instance.world_map
+                    if hasattr(world_map, 'entity_tile_manager'):
+                        component = world_map.entity_tile_manager.get_component_at(next_x, next_y)
+                        if component and hasattr(component, 'is_walkable') and not component.is_walkable():
+                            # Collision detected, stop movement
+                            self.is_moving = False
+                            self.target_grid_x = self.grid_x
+                            self.target_grid_y = self.grid_y
+                            return
+                
+                # Move to the next position
+                self.grid_x = next_x
+                self.grid_y = next_y
 
         # Check if we should turn off force_walk_animation
         if hasattr(self, 'force_walk_animation') and self.force_walk_animation:
+            current_time = pygame.time.get_ticks()
             if current_time - self.walk_animation_start_time > self.walk_animation_duration:
                 self.force_walk_animation = False
                 # Only set is_moving to False if we're not actively moving
                 if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                     self.is_moving = False
-        
-        # Update visual position with smooth interpolation
-        self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
-        self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+
+
 
     
     def render(self, screen, camera):

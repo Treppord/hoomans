@@ -77,16 +77,15 @@ class WorldMap:
     def initialize_entity_tiles(self):
         """Initialize entity tiles manager"""
         from world.entity_tile import EntityTileManager, TreeEntityTile, HouseEntityTile
-        
         self.entity_tile_manager = EntityTileManager(self)
-        
-        # Example: Add some trees and houses
-        # This would typically be done based on map generation or loading from a file
-        # but here we're adding a few examples manually
+        print("Entity tile manager initialized")
     
     def add_tree(self, x, y):
         """Add a tree entity tile at the specified position"""
         from world.entity_tile import TreeEntityTile
+        
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
         
         # Check if the position is valid
         if not (0 <= x < self.width - 1 and 0 <= y < self.height - 2):
@@ -104,10 +103,7 @@ class WorldMap:
         
         # Create and add the tree
         tree = TreeEntityTile(x, y)
-        # Log the addition
-        print(f"Added tree at {x}, {y}")
-        if hasattr(self, 'entity_tile_manager'):
-            self.entity_tile_manager.add_entity_tile(tree)
+        self.entity_tile_manager.add_entity_tile(tree)
         return tree
     
     def add_house(self, x, y):

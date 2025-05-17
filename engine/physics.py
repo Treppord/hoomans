@@ -21,6 +21,12 @@ class PhysicsEngine:
         if self.world_map.is_wall(target_x, target_y):
             return True
             
+        # Check if target position has a non-walkable entity tile component
+        if hasattr(self.world_map, 'entity_tile_manager'):
+            component = self.world_map.entity_tile_manager.get_component_at(target_x, target_y)
+            if component and hasattr(component, 'is_walkable') and not component.is_walkable():
+                return True
+                
         return False
     
     def resolve_collision(self, entity, original_x, original_y):
@@ -52,9 +58,21 @@ class PhysicsEngine:
             original_grid_x = entity.grid_x
             original_grid_y = entity.grid_y
             
+            # Store previous position for entity tile exit detection
+            if not hasattr(entity, 'previous_grid_x'):
+                entity.previous_grid_x = original_grid_x
+                entity.previous_grid_y = original_grid_y
+            else:
+                entity.previous_grid_x = original_grid_x
+                entity.previous_grid_y = original_grid_y
+            
             # Let the entity update its position
             entity.update()
             
-            # Check for collision with walls
+            # Check for collision with walls and entity tiles
             if self.check_collision(entity):
                 self.resolve_collision(entity, original_grid_x, original_grid_y)
+            
+            # Handle entity tile interactions
+            if hasattr(self.world_map, 'entity_tile_manager'):
+                self.world_map.entity_tile_manager.handle_entity_movement(entity)

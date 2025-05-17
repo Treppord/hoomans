@@ -99,14 +99,7 @@ if __name__ == "__main__":
     
     # Add a tree and print debug info
     tree = world_map.add_tree(24, 18)
-    if tree:
-        print(f"Successfully added tree at (24, 18)")
-        if hasattr(tree, 'texture') and tree.texture:
-            print(f"Tree texture size: {tree.texture.get_size()}")
-        else:
-            print("Tree has no texture!")
-    else:
-        print(f"Failed to add tree at (24, 18)")
+    house = world_map.add_house(20, 10)
     
     engine.set_world_map(world_map)
     

@@ -683,6 +683,11 @@ class SimpleGameEngine:
             if hasattr(obj, 'render'):
                 obj.render(self.screen, self.camera)
         
+        # Draw entity tiles last (on top of everything)
+        if self.world_map and hasattr(self.world_map, 'entity_tile_manager'):
+            self.world_map.entity_tile_manager.render(self.screen, self.camera)
+    
+        
         # Draw UI elements last (on top)
         self.ui.render(self.screen)
         
