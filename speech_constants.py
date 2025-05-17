@@ -6,146 +6,40 @@ class SpeechConstants:
     # Exploration speeches
     EXPLORING_SPEECHES = [
         # General exploration
-        "Time to explore!",
-        "Let's see what's out there.",
-        "I wonder what I'll find over there...",
-        "Exploring is fun!",
-        "I'm going on an adventure!",
-        "What mysteries await beyond the horizon?",
-        "I love discovering new places.",
-        "The world is full of wonders to discover.",
-        "Every direction holds something new.",
-        "I feel like wandering today.",
-        "Adventure calls to me!",
-        "I'm curious what's in that direction.",
-        "New sights, new discoveries!",
-        "The journey is the reward.",
-        "I'm drawn to the unknown.",
-        "What secrets does this land hold?",
-        "Exploration feeds the soul.",
-        "There's so much world to see!",
-        "I can't wait to see what's over there.",
-        "The thrill of discovery awaits!",
+        "Explore MODE!"
         
     ]
     
     # Water-related speeches
     WATER_SEEKING_SPEECHES = [
         # Urgent thirst
-        "I know there's water nearby.",
-        "I need to find that water source.",
-        "I remember seeing water in this area.",
-        "I'm so thirsty, I need to find that water.",
-        "Water... I need water soon.",
-        "My throat is so dry, I must find water.",
-        "I can't go much longer without water.",
-        "I think I smell water in this direction.",
-        "There has to be water somewhere around here.",
-        "I'm desperate for a drink of water.",
-        "Water is my top priority right now.",
-        "I need to find a stream or a lake quickly.",
-        "I won't last long without finding water.",
-        "My body is crying out for water.",
-        "I need to quench this terrible thirst."
+        "Searching WATER"
     ]
     
     WATER_FOUND_SPEECHES = [
         # Relief at finding water
-        "Ah, refreshing water!",
-        "Finally, water!",
-        "This water is just what I needed.",
-        "So good to drink water when you're thirsty!",
-        "I found water! Just in time.",
-        "This is the best water I've ever tasted.",
-        "My thirst is finally quenched.",
-        "I feel so much better after drinking this.",
-        "I needed that water so badly.",
-        "Nothing tastes better than water when you're thirsty.",
-        "I could drink this entire lake right now.",
-        "Sweet relief! Water at last.",
-        "I'll remember this water source for next time.",
-        "This water is saving my life right now.",
-        "I should mark this water source on my mental map."
+        "Found WATER"
     ]
     
     WATER_ESCAPE_SPEECHES = [
         # Panic about being in water
-        "I need to get out of this water!",
-        "Help! I'm in water!",
-        "This water is too deep!",
-        "I can't swim!",
-        "I'm going to drown if I don't get out!",
-        "How did I end up in the water?!",
-        "Get me to dry land!",
-        "I hate being in water!",
-        "My clothes are getting soaked!",
-        "This current is too strong!",
-        "I'm not built for swimming!",
-        "The water is freezing!",
-        "I need to reach the shore!",
-        "I'm not a fish, I need land!",
-        "This was a terrible mistake!"
+        "WATER ESCAPE"
     ]
     
     # Food-related speeches
     FOOD_SEEKING_SPEECHES = [
         # Hunger and food spotting
-        "I see some food over there!",
-        "Food! Just what I needed.",
-        "I'm going to get that food.",
-        "That looks delicious!",
-        "I'm hungry and that looks good to eat.",
-        "My stomach is growling at the sight of that food.",
-        "I need to eat that before someone else does.",
-        "That food looks perfect for my hunger.",
-        "I've been looking for food like that.",
-        "I can almost taste that food from here.",
-        "That will satisfy my hunger nicely.",
-        "I'm starving, and that food is calling my name.",
-        "I need to hurry and get that food.",
-        "That's exactly the kind of food I've been craving.",
-        "I hope I can reach that food before it's gone."
+        "I see some food over there!"
     ]
     
     EATING_SPEECHES = [
         # Satisfaction from eating
-        "Mmm, delicious!",
-        "That was tasty!",
-        "Yum!",
-        "That hit the spot!",
-        "This food is so good!",
-        "I needed that meal.",
-        "Food always makes me feel better.",
-        "My hunger is satisfied at last.",
-        "I feel my strength returning after eating.",
-        "That was exactly what I needed.",
-        "I could eat this all day.",
-        "My compliments to whoever made this food.",
-        "Nothing beats a good meal when you're hungry.",
-        "I feel so much better now that I've eaten.",
-        "That was worth the search.",
-        "I should look for more food like this.",
-        "My stomach is happy now.",
         "I'll remember where I found this food."
     ]
     
     # Idle/observing speeches
     IDLE_SPEECHES = [
         # When standing still and observing
-        "It's peaceful here.",
-        "I like this spot.",
-        "The view from here is nice.",
-        "I should take a moment to rest.",
-        "Sometimes it's good to just stand still and observe.",
-        "I wonder what's happening in the world right now.",
-        "This is a good place to catch my breath.",
-        "I'm enjoying this moment of quiet.",
-        "The world looks different when you stop to really see it.",
-        "I could stay here for a while.",
-        "This seems like a safe place to rest.",
-        "I'm taking in all the details around me.",
-        "It's important to pause sometimes.",
-        "I'm listening to all the sounds around me.",
         "This is a good vantage point to plan my next move."
     ]
     

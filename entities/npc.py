@@ -482,10 +482,6 @@ class NPC(Rectangle):
                 self.is_moving = True
                 print(f"DEBUG: NPC {self.get_entity_id()} exploring {best_distance} tiles {best_direction} away from water")
                 
-                # Show a speech bubble about exploring
-                from engine.core import SimpleGameEngine
-                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
             else:
                 # No good direction found, use regular exploration
                 self.start_exploring()
@@ -1247,7 +1243,7 @@ class NPC(Rectangle):
         return summary
 
     def start_searching_for_food(self):
-        """Start searching for food when hungry"""
+        """Start searching for food when hungry with improved pathfinding that avoids water"""
         from engine.core import SimpleGameEngine
         world_map = None
         if hasattr(SimpleGameEngine, 'instance'):
@@ -1274,26 +1270,151 @@ class NPC(Rectangle):
                         food_entities.append(obj)
         
         if food_entities:
-            # Found food entities, head to the nearest one
+            # Found food entities, head to the nearest one using pathfinding
             nearest_food = min(food_entities, 
                              key=lambda food: abs(food.grid_x - current_x) + abs(food.grid_y - current_y))
             
             print(f"DEBUG: NPC {self.get_entity_id()} found food at ({nearest_food.grid_x}, {nearest_food.grid_y})")
             
-            # Set target to the food location
-            self.target_grid_x = nearest_food.grid_x
-            self.target_grid_y = nearest_food.grid_y
-            self.is_moving = True
-            self.heading_to_food = True
-            
-            # Show a speech bubble about finding food
-            from engine.core import SimpleGameEngine
-            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.FOOD_SEEKING_SPEECHES), self, duration=2.0)
-
-            return True
+            # Use pathfinding to find a safe path to the food
+            if world_map:
+                path = self._find_path_to_food(
+                    current_x, current_y, 
+                    nearest_food.grid_x, nearest_food.grid_y, 
+                    world_map
+                )
+                
+                if path and len(path) > 1:
+                    # Path found, move to the next position in the path
+                    next_pos = path[1]  # path[0] is current position
+                    
+                    print(f"DEBUG: NPC {self.get_entity_id()} moving to {next_pos} on path to food")
+                    
+                    # Set target to the next position
+                    self.target_grid_x = next_pos[0]
+                    self.target_grid_y = next_pos[1]
+                    
+                    # Store the final destination for future steps
+                    self.final_destination_x = nearest_food.grid_x
+                    self.final_destination_y = nearest_food.grid_y
+                    
+                    # Set moving state
+                    self.is_moving = True
+                    self.heading_to_food = True
+                    
+                    # Show a speech bubble about finding food
+                    from engine.core import SimpleGameEngine
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.FOOD_SEEKING_SPEECHES), self, duration=2.0)
+                    
+                    return True
+                else:
+                    print(f"DEBUG: NPC {self.get_entity_id()} couldn't find path to food, exploring instead")
+                    self.start_exploring()
+                    return False
+            else:
+                # No world map available, use direct movement
+                self.target_grid_x = nearest_food.grid_x
+                self.target_grid_y = nearest_food.grid_y
+                self.is_moving = True
+                self.heading_to_food = True
+                
+                # Show a speech bubble about finding food
+                from engine.core import SimpleGameEngine
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.FOOD_SEEKING_SPEECHES), self, duration=2.0)
+                
+                return True
         else:
             # No food found, explore randomly to look for food
             print(f"DEBUG: NPC {self.get_entity_id()} searching for food, none found in view range")
             self.start_exploring()
             return False
+    
+    def _find_path_to_food(self, start_x, start_y, end_x, end_y, world_map, max_path_length=50):
+        """Find a path to food using A* pathfinding that avoids water"""
+        # Initialize open and closed sets
+        open_set = [(start_x, start_y)]
+        closed_set = set()
+        
+        # Track path and costs
+        came_from = {}
+        g_score = {(start_x, start_y): 0}
+        f_score = {(start_x, start_y): self._heuristic(start_x, start_y, end_x, end_y)}
+        
+        while open_set:
+            # Find node with lowest f_score
+            current = min(open_set, key=lambda pos: f_score.get(pos, float('inf')))
+            
+            # If we reached the end
+            if current[0] == end_x and current[1] == end_y:
+                # Reconstruct path
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append((start_x, start_y))
+                path.reverse()
+                return path
+            
+            # Move current from open to closed
+            open_set.remove(current)
+            closed_set.add(current)
+            
+            # Check neighbors
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:  # Only cardinal directions
+                neighbor = (current[0] + dx, current[1] + dy)
+                
+                # Skip if out of bounds or in closed set
+                if (not (0 <= neighbor[0] < world_map.width and 0 <= neighbor[1] < world_map.height) or
+                    neighbor in closed_set):
+                    continue
+                
+                # Get tile type for movement cost
+                tile = world_map.get_tile(neighbor[0], neighbor[1])
+                if not tile or not tile.is_walkable():
+                    continue
+                
+                # Avoid water tiles completely
+                if tile.is_water():
+                    continue
+                
+                # Check if this position is in our water avoidance list
+                if hasattr(self, 'water_avoidance_locations') and (neighbor[0], neighbor[1]) in self.water_avoidance_locations:
+                    continue
+                
+                # Higher cost for certain terrain types
+                if tile.type == "mountain":
+                    movement_cost = 10  # Very high cost for mountains
+                elif tile.type == "forest":
+                    movement_cost = 2   # Higher cost for forest
+                elif tile.type == "sand":
+                    movement_cost = 1.5 # Slightly higher cost for sand
+                else:
+                    movement_cost = 1   # Normal cost
+                
+                # Calculate tentative g_score
+                tentative_g = g_score.get(current, float('inf')) + movement_cost
+                
+                # Skip if path is too long
+                if tentative_g > max_path_length:
+                    continue
+                
+                # Add to open set if not there
+                if neighbor not in open_set:
+                    open_set.append(neighbor)
+                # Skip if this path is worse
+                elif tentative_g >= g_score.get(neighbor, float('inf')):
+                    continue
+                
+                # This is the best path so far
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g
+                f_score[neighbor] = tentative_g + self._heuristic(neighbor[0], neighbor[1], end_x, end_y)
+        
+        # No path found
+        return None
+    
+    def _heuristic(self, x1, y1, x2, y2):
+        """Calculate Manhattan distance heuristic"""
+        return abs(x1 - x2) + abs(y1 - y2)
