@@ -174,8 +174,8 @@ def is_memory_query(message: str) -> Tuple[bool, Optional[str]]:
     """
     message = message.lower()
     
-    # Check for water-specific queries first
-    if ("water" in message or "drink" in message) and any(word in message for word in ["where", "location", "know", "remember", "nearby"]):
+    # Check for water-specific queries first - make this more comprehensive
+    if any(water_term in message for water_term in ["water", "drink", "thirsty", "hydrate", "river", "lake", "pond"]) and any(query_term in message for query_term in ["where", "location", "know", "remember", "nearby", "find", "seen"]):
         logger.info(f"DEBUG: Detected water-specific memory query")
         return True, "water"
     

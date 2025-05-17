@@ -21,6 +21,11 @@ class SpeechConstants:
         "Found WATER"
     ]
     
+    WATER_DRINKING_SPEECHES = [
+        # Relief at finding water
+        "Drinking WATER"
+    ]
+    
     WATER_ESCAPE_SPEECHES = [
         # Panic about being in water
         "WATER ESCAPE"

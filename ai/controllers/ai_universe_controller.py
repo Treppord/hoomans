@@ -842,6 +842,13 @@ class AIUniverseController:
                     # Skip agents that are waiting for chat responses
                     if hasattr(agent, 'is_responding_to_chat') and agent.is_responding_to_chat:
                         continue
+                    
+                    # Skip agents that are currently drinking water
+                    if (hasattr(agent, 'thirst') and agent.thirst < 5 and 
+                        hasattr(agent, 'is_adjacent_to_water') and agent.is_adjacent_to_water):
+                        # Skip processing - let the NPC continue drinking
+                        continue
+                        
                     agents_to_process.append(agent)
                     self.last_processed[agent_id] = current_time
         

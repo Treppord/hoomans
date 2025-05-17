@@ -15,12 +15,12 @@ class NPC(Rectangle):
         self.ai_controller = ai_controller
         
         # Add thirst attribute (0-10 scale)
-        self.thirst = GameBalanceConstants.STARTING_THIRST // 2  # Start with half thirst
+        self.thirst = GameBalanceConstants.STARTING_THIRST // 4  # Start with quarter thirst
         self.last_thirst_update = 0
         self.last_drink_time = 0
 
         # Add hunger attribute (0-10 scale)
-        self.hunger = GameBalanceConstants.STARTING_HUNGER // 2  # Start with half hunger
+        self.hunger = GameBalanceConstants.STARTING_HUNGER  # Start with hunger
         self.last_hunger_update = 0
         self.last_eat_time = 0
         
@@ -88,9 +88,78 @@ class NPC(Rectangle):
         # Update animation (from Rectangle class)
         self.update_animation()
         
-        # Check if we're critically thirsty and should seek water from world cache
-        if hasattr(self, 'thirst') and self.thirst <= 2 and not self.is_moving:
+        # PRIORITY 1: Check if we're adjacent to water and thirsty - this takes precedence over most actions
+        from engine.core import SimpleGameEngine
+        world_map = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        if (world_map and hasattr(self, 'thirst') and self.thirst < 5 and 
+            world_map.is_adjacent_to_water(self.grid_x, self.grid_y)):
             
+            # We're adjacent to water and thirsty - drink!
+            # Calculate time since last drink
+            drink_cooldown = 1000  # 1 second between drinks
+            can_drink = not hasattr(self, 'last_drink_time') or (current_time - self.last_drink_time >= drink_cooldown)
+            
+            if can_drink:
+                # Increase thirst by 1 (one per second)
+                old_thirst = self.thirst
+                self.thirst = min(10, self.thirst + 1)
+                
+                # Set the last drink time
+                self.last_drink_time = current_time
+                
+                # Record water location in world cache
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                    # Find the adjacent water tile
+                    water_x, water_y = None, None
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nx, ny = self.grid_x + dx, self.grid_y + dy
+                        if (0 <= nx < world_map.width and 0 <= ny < world_map.height):
+                            tile = world_map.get_tile(nx, ny)
+                            if tile and tile.is_water():
+                                water_x, water_y = nx, ny
+                                break
+                    
+                    if water_x is not None and water_y is not None:
+                        SimpleGameEngine.instance.world_cache.add_location_discovery(
+                            self.get_entity_id(),
+                            'water',
+                            water_x,
+                            water_y,
+                            "Water source"
+                        )
+                
+                # Show message if this is the first drink or if we're now fully hydrated
+                if old_thirst == self.thirst - 1 or self.thirst == 10:
+                    print(f"NPC {self.get_entity_id()} drinking from adjacent water, thirst increased to {self.thirst}")
+                    
+                    # Show a speech bubble about drinking, but only occasionally
+                    if self.thirst == 10 or (old_thirst < 3 and self.thirst > old_thirst):
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            if self.thirst == 10:
+                                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SATISFIED_SPEECHES), self, duration=2.0)
+                            else:
+                                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_DRINKING_SPEECHES), self, duration=1.5)
+            
+            # If we're fully hydrated now, we can continue with other activities
+            if self.thirst >= 10:
+                # Reset heading to water flag if it was set
+                if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+                    self.heading_to_known_water = False
+            else:
+                # If still thirsty, prioritize staying by the water to drink more
+                # Cancel any movement to stay by the water
+                if self.is_moving:
+                    self.is_moving = False
+                    print(f"DEBUG: NPC {self.get_entity_id()} stopped moving to continue drinking")
+                
+                # Skip the rest of the update to stay and drink
+                return
+        
+        # PRIORITY 2: Check if we're critically thirsty and should seek water from world cache
+        if hasattr(self, 'thirst') and self.thirst <= 2 and not self.is_moving:
             # Try to find water from world cache
             from engine.core import SimpleGameEngine
             if (hasattr(SimpleGameEngine, 'instance') and 
@@ -159,7 +228,7 @@ class NPC(Rectangle):
                         
                         # Show a speech bubble about going to water
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_FOUND_SPEECHES), self, duration=2.0)
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SEEKING_SPEECHES), self, duration=2.0)
         # Check if we're critically hungry and should seek food
         if hasattr(self, 'hunger') and self.hunger <= 3 and not self.is_moving:
             # Try to find food nearby
@@ -277,6 +346,81 @@ class NPC(Rectangle):
                     # Show a speech bubble about escaping water
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_ESCAPE_SPEECHES), self, duration=1.5)
+        
+        # Check if we're adjacent to water but not on it - this is good for drinking!
+        elif world_map and world_map.is_adjacent_to_water(self.grid_x, self.grid_y):
+            # We're adjacent to water, which is perfect for drinking
+            # Save this water location to the world cache
+            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                # Find the adjacent water tile
+                water_x, water_y = None, None
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = self.grid_x + dx, self.grid_y + dy
+                    if (0 <= nx < world_map.width and 0 <= ny < world_map.height):
+                        tile = world_map.get_tile(nx, ny)
+                        if tile and tile.is_water():
+                            water_x, water_y = nx, ny
+                            break
+                
+                if water_x is not None and water_y is not None:
+                    SimpleGameEngine.instance.world_cache.add_location_discovery(
+                        self.get_entity_id(),
+                        'water',
+                        water_x,
+                        water_y,
+                        "Water source"
+                    )
+                    print(f"DEBUG: NPC {self.get_entity_id()} recorded adjacent water location at ({water_x}, {water_y})")
+            
+            # If we were heading to known water, we've reached it
+            if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+                # We've reached water, drink it until thirst is 10
+                while self.thirst < 10:
+                    self.thirst = min(10, self.thirst + 2)
+                    print(f"NPC {self.get_entity_id()} drinking from adjacent water source, thirst increased to {self.thirst}")
+                
+                # Set the last drink time
+                self.last_drink_time = pygame.time.get_ticks()
+                
+                # Show a speech bubble about finding water
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                    water_speeches = [
+                        "Ah, refreshing water!",
+                        "Finally, water!",
+                        "This water is just what I needed.",
+                        "So good to drink water when you're thirsty!"
+                    ]
+                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
+                
+                # After drinking, start exploring
+                self.start_exploring()
+                
+                # Reset heading to water flag
+                self.heading_to_known_water = False
+                
+                # Don't start exploring away from water immediately
+                return
+            
+            # If we're thirsty (but not actively seeking water), drink
+            elif hasattr(self, 'thirst') and self.thirst < 8 and not self.is_moving:
+                # Drink until thirst is 10
+                old_thirst = self.thirst
+                while self.thirst < 10:
+                    self.thirst = min(10, self.thirst + 2)
+                
+                # Only show message and bubble if thirst actually increased
+                if self.thirst > old_thirst:
+                    print(f"NPC {self.get_entity_id()} drinking from adjacent water source, thirst increased to {self.thirst}")
+                    
+                    # Set the last drink time
+                    self.last_drink_time = pygame.time.get_ticks()
+                    
+                    # Show a speech bubble about drinking
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_FOUND_SPEECHES), self, duration=1.5)
+                    # Don't start exploring immediately after drinking
+                    return
+        
         # Handle movement with timing control (1 tile per second)
         if self.is_moving:
             # Only move if enough time has passed (1000ms = 1 second)
@@ -371,15 +515,23 @@ class NPC(Rectangle):
                             can_walk = tile.is_walkable()
                             
                             # Also check if this is a water tile we should avoid
-                            if can_walk and hasattr(tile, 'is_water') and tile.is_water() and not self.heading_to_known_water:
-                                # Don't walk into water unless we're specifically looking for it
-                                can_walk = False
-                                print(f"DEBUG: NPC {self.get_entity_id()} avoiding walking into water at ({next_x}, {next_y})")
+                            if can_walk and hasattr(tile, 'is_water') and tile.is_water():
+                                # Allow walking into water if we're specifically looking for it
+                                if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+                                    can_walk = True
+                                else:
+                                    # Don't walk into water unless we're specifically looking for it
+                                    can_walk = False
+                                    print(f"DEBUG: NPC {self.get_entity_id()} avoiding walking into water at ({next_x}, {next_y})")
                     
                     # Also check if this position is in our water avoidance list
                     if can_walk and hasattr(self, 'water_avoidance_locations') and (next_x, next_y) in self.water_avoidance_locations:
-                        can_walk = False
-                        print(f"DEBUG: NPC {self.get_entity_id()} avoiding known water location at ({next_x}, {next_y})")
+                        # Allow walking to avoided water if we're specifically looking for it
+                        if hasattr(self, 'heading_to_known_water') and self.heading_to_known_water:
+                            can_walk = True
+                        else:
+                            can_walk = False
+                            print(f"DEBUG: NPC {self.get_entity_id()} avoiding known water location at ({next_x}, {next_y})")
                     
                     if can_walk:
                         # Move to the next position
@@ -426,6 +578,7 @@ class NPC(Rectangle):
                 self.hunger -= 1
                 print(f"NPC {self.get_entity_id()} hunger decreased to {self.hunger}")
             self.last_hunger_update = current_time
+
 
 
     def start_exploring_away_from_water(self):
