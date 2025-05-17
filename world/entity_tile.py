@@ -327,43 +327,51 @@ class HouseEntityTile(EntityTile):
     
     def _create_component_tiles(self):
         """Create the house components: walls, roof, door"""
-        # Main house structure
-        house_component = TileComponent(self, 0, 0, "house")
-        house_component.walkable = False
-        
         # Use the house image if available
-        if "house" in IMAGES:
-            house_component.custom_texture = IMAGES["house"]
-        else:
-            # Fallback to colors if image not available
-            house_component.custom_color = (139, 69, 19)  # Brown
+        house_texture = IMAGES.get("house")
         
-        # Door component (bottom right)
+        # Top-left component (main house structure)
+        top_left = TileComponent(self, 0, 0, "house_top_left")
+        top_left.walkable = True
+        if house_texture:
+            top_left.custom_texture = house_texture
+        else:
+            top_left.custom_color = (139, 69, 19)  # Brown
+        
+        # Top-right component
+        top_right = TileComponent(self, 1, 0, "house_top_right")
+        top_right.walkable = True
+        if house_texture:
+            top_right.custom_texture = house_texture
+        else:
+            top_right.custom_color = (139, 69, 19)  # Brown
+        
+        # Bottom-left component (wall)
+        bottom_left = TileComponent(self, 0, 1, "house_bottom_left")
+        bottom_left.walkable = False
+        if house_texture:
+            bottom_left.custom_texture = house_texture
+        else:
+            bottom_left.custom_color = (139, 69, 19)  # Brown
+        
+        # Bottom-right component (door)
         door = TileComponent(self, 1, 1, "house_door")
-        door.walkable = True  # Can walk through the door
+        door.walkable = False 
         
-        # Use door images if available
-        if "house_door_closed" in IMAGES:
-            door.custom_texture = IMAGES["house_door_closed"]
+        # For the door, we'll use the house texture for rendering the structure
+        # but we'll overlay the door texture when the door is open/closed
+        if house_texture:
+            door.custom_texture = house_texture
         else:
-            # Fallback to colors if image not available
-            door.custom_color = (120, 81, 45)  # Dark brown
+            door.custom_color = (139, 69, 19)  # Brown
         
-        # Add components to the tile dictionary
-        self.tiles[(0, 0)] = house_component
-        
-        # Add invisible components for collision
-        wall1 = TileComponent(self, 1, 0, "house_wall")
-        wall1.walkable = False
-        wall1.custom_color = None  # No visible color, just for collision
-        
-        wall2 = TileComponent(self, 0, 1, "house_wall")
-        wall2.walkable = False
-        wall2.custom_color = None  # No visible color, just for collision
-        
-        self.tiles[(1, 0)] = wall1
-        self.tiles[(0, 1)] = wall2
+        # Add all components to the tile dictionary
+        self.tiles[(0, 0)] = top_left
+        self.tiles[(1, 0)] = top_right
+        self.tiles[(0, 1)] = bottom_left
         self.tiles[(1, 1)] = door
+
+
     
     def on_entity_enter(self, entity, component_x, component_y):
         """Called when an entity enters this house"""
@@ -410,16 +418,26 @@ class HouseEntityTile(EntityTile):
         # Update door appearance based on open/closed state
         door = self.tiles.get((1, 1))
         if door:
-            if self.is_door_open and "house_door_open" in IMAGES:
-                door.custom_texture = IMAGES["house_door_open"]
-            elif not self.is_door_open and "house_door_closed" in IMAGES:
-                door.custom_texture = IMAGES["house_door_closed"]
-            else:
-                # Fallback to colors if images not available
-                if self.is_door_open:
-                    door.custom_color = (160, 120, 80)  # Lighter brown for open door
+            # First, ensure the door component uses the house texture for the structure
+            if "house" in IMAGES:
+                door.custom_texture = IMAGES["house"]
+            
+            # Then, handle the door state (open/closed) with a separate overlay or color change
+            if self.is_door_open:
+                if "house_door_open" in IMAGES:
+                    # We could overlay the door texture here if needed
+                    pass
                 else:
+                    # Use a lighter color to indicate open door
+                    door.custom_color = (160, 120, 80)  # Lighter brown for open door
+            else:
+                if "house_door_closed" in IMAGES:
+                    # We could overlay the door texture here if needed
+                    pass
+                else:
+                    # Use a darker color to indicate closed door
                     door.custom_color = (120, 81, 45)  # Dark brown for closed door
+
 
 
 class EntityTileManager:
