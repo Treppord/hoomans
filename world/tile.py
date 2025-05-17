@@ -12,9 +12,16 @@ class Tile:
     TEXTURE_VARIATIONS = {}
     # Flag to track if we've attempted to load textures
     TEXTURES_LOADED = False
-    # Tileset for forest floor
+    
+    # Tilesets for different terrain types
     FOREST_TILESET = None
     FOREST_TILES = []
+    MOUNTAIN_TILESET = None
+    MOUNTAIN_TILES = []
+    SAND_TILESET = None
+    SAND_TILES = []
+    ROCK_TILESET = None
+    ROCK_TILES = []
     
     @classmethod
     def load_tileset(cls, filename, tile_width=16, tile_height=16):
@@ -47,7 +54,8 @@ class Tile:
                     tiles.append(tile)
             
             return tileset, tiles
-        except Exception:
+        except Exception as e:
+            print(f"Error loading tileset {filename}: {e}")
             return None, []
     
     @classmethod
@@ -67,8 +75,11 @@ class Tile:
         if not os.path.exists(tile_assets_path):
             return
         
-        # Load forest tileset (64x64 with 16x16 tiles)
+        # Load tilesets for different terrain types (64x64 with 16x16 tiles)
         cls.FOREST_TILESET, cls.FOREST_TILES = cls.load_tileset("forest_sheet.png", 16, 16)
+        cls.MOUNTAIN_TILESET, cls.MOUNTAIN_TILES = cls.load_tileset("mountain_sheet.png", 16, 16)
+        cls.SAND_TILESET, cls.SAND_TILES = cls.load_tileset("sand_sheet.png", 16, 16)
+        cls.ROCK_TILESET, cls.ROCK_TILES = cls.load_tileset("rock_sheet.png", 16, 16)
         
         # Define tile types to look for
         tile_types = [
@@ -133,14 +144,25 @@ class Tile:
         # Randomly select a texture variation (10% chance for each variation)
         self.selected_texture = None
         
-        # For forest tiles, use the tileset if available
+        # Use tilesets for specific terrain types if available
         if self.type == "forest" and Tile.FOREST_TILES:
-            # Select a random tile from the forest tileset
-            # Use a deterministic approach based on the variation value
+            # Select a tile from the forest tileset based on variation
             tile_index = self.variation % len(Tile.FOREST_TILES)
             self.selected_texture = Tile.FOREST_TILES[tile_index]
+        elif self.type == "mountain" and Tile.MOUNTAIN_TILES:
+            # Select a tile from the mountain tileset based on variation
+            tile_index = self.variation % len(Tile.MOUNTAIN_TILES)
+            self.selected_texture = Tile.MOUNTAIN_TILES[tile_index]
+        elif self.type == "sand" and Tile.SAND_TILES:
+            # Select a tile from the sand tileset based on variation
+            tile_index = self.variation % len(Tile.SAND_TILES)
+            self.selected_texture = Tile.SAND_TILES[tile_index]
+        elif self.type == "rock" and Tile.ROCK_TILES:
+            # Select a tile from the rock tileset based on variation
+            tile_index = self.variation % len(Tile.ROCK_TILES)
+            self.selected_texture = Tile.ROCK_TILES[tile_index]
         elif self.type in Tile.TEXTURES:
-            # Start with the base texture
+            # Start with the base texture for other tile types
             self.selected_texture = Tile.TEXTURES[self.type]
             
             # Check if there are variations available
