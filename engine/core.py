@@ -13,6 +13,7 @@ from engine.ui.panels.stats_panel import StatsPanel
 from engine.ui.elements.chat_input import ChatInputBox
 from engine.camera import Camera
 import random
+import os
 
 class SimpleGameEngine:
     def setup_world_cache(self):
@@ -37,6 +38,25 @@ class SimpleGameEngine:
         self.fullscreen = False
         self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
         pygame.display.set_caption(title)
+        
+        # Load and set the window icon
+        try:
+            # Get the path to the logo
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            logo_path = os.path.join(project_root, "assets", "logo.png")
+        
+            if os.path.exists(logo_path):
+                logo = pygame.image.load(logo_path)
+                pygame.display.set_icon(logo)
+                print(f"Set window icon from: {logo_path}")
+            else:
+                print(f"Logo file not found at: {logo_path}")
+                # Create a simple icon if the logo doesn't exist
+                self._create_default_icon()
+        except Exception as e:
+            print(f"Error setting window icon: {e}")
+            # Create a simple icon if there was an error
+            self._create_default_icon()
         
         # Store instance reference
         SimpleGameEngine.instance = self
@@ -718,3 +738,22 @@ class SimpleGameEngine:
             
         pygame.quit()
         sys.exit()
+        
+        
+    def _create_default_icon(self):
+        """Create a simple default icon if the logo file is not found"""
+        try:
+            # Create a simple 32x32 icon
+            icon = pygame.Surface((32, 32))
+            icon.fill((30, 60, 90))  # Dark blue background
+        
+        # Draw a simple H
+            pygame.draw.rect(icon, (200, 230, 255), (8, 6, 4, 20))  # Left vertical line
+            pygame.draw.rect(icon, (200, 230, 255), (20, 6, 4, 20))  # Right vertical line
+            pygame.draw.rect(icon, (200, 230, 255), (8, 14, 16, 4))  # Horizontal line
+        
+            # Set as icon
+            pygame.display.set_icon(icon)
+            print("Created and set default icon")
+        except Exception as e:
+            print(f"Error creating default icon: {e}")

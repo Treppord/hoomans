@@ -26,21 +26,21 @@
         "type": "location_discovery",
         "data": {
           "location_type": "water",
-          "x": 39,
-          "y": 16,
-          "name": "Water source"
-        },
-        "timestamp": 1747524466.670489
-      },
-      {
-        "type": "location_discovery",
-        "data": {
-          "location_type": "water",
           "x": 16,
           "y": 5,
           "name": "Water source"
         },
         "timestamp": 1747524558.255258
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 39,
+          "y": 16,
+          "name": "Water source"
+        },
+        "timestamp": 1747524466.670489
       }
     ],
     "0bc80fdff344d30008": [
@@ -117,5 +117,5 @@
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747524561.816739
+  "last_updated": 1747525578.8965492
 }
