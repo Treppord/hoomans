@@ -36,6 +36,9 @@ class WorldCache:
         
         # Try to load cached data for this seed
         self._load_cache()
+        
+        # Clean up any duplicate location discoveries
+        self.cleanup_duplicates()
     
     def add_entity_memory(self, entity_id, memory_type, data):
         """Add a memory for an entity"""
@@ -75,41 +78,58 @@ class WorldCache:
             self.discovered_locations[location_type] = []
         
         # Check if location already exists
+        location_exists = False
         for loc in self.discovered_locations[location_type]:
             if loc["x"] == x and loc["y"] == y:
                 # Update discovery info
                 if entity_id not in loc["discovered_by"]:
                     loc["discovered_by"].append(entity_id)
-                return True
+                location_exists = True
+                
+                # Use this location's name for the memory to ensure consistency
+                name = loc["name"]
+                break
         
-        # Create new location entry
-        location = {
-            "x": x,
-            "y": y,
-            "name": name or f"{location_type.capitalize()} at {x},{y}",
-            "discovered_by": [entity_id],
-            "discovery_time": time.time()
-        }
-        
-        # Add to locations
-        self.discovered_locations[location_type].append(location)
-        
-        # Add memory for the entity
-        self.add_entity_memory(
-            entity_id, 
-            "location_discovery",
-            {
-                "location_type": location_type,
+        # Create new location entry if it doesn't exist
+        if not location_exists:
+            location = {
                 "x": x,
                 "y": y,
-                "name": location["name"]
+                "name": name or f"{location_type.capitalize()} at {x},{y}",
+                "discovered_by": [entity_id],
+                "discovery_time": time.time()
             }
-        )
+            
+            # Add to locations
+            self.discovered_locations[location_type].append(location)
+        
+        # Add memory for the entity - check for duplicates first
+        has_duplicate = False
+        for memory in self.entity_memories.get(entity_id, []):
+            if (memory["type"] == "location_discovery" and
+                memory["data"]["location_type"] == location_type and
+                memory["data"]["x"] == x and
+                memory["data"]["y"] == y):
+                has_duplicate = True
+                break
+        
+        if not has_duplicate:
+            self.add_entity_memory(
+                entity_id, 
+                "location_discovery",
+                {
+                    "location_type": location_type,
+                    "x": x,
+                    "y": y,
+                    "name": name or f"{location_type.capitalize()} at {x},{y}"
+                }
+            )
         
         # Save cache
         self._auto_save()
         
         return True
+
     
     def update_entity_relationship(self, entity_id, other_entity_id, relationship_type, data=None):
         """Update relationship between entities"""
@@ -168,20 +188,32 @@ class WorldCache:
         if entity_id not in self.entity_memories:
             self.entity_memories[entity_id] = []
         
-        # Create the memory entry
-        memory = {
-            "type": "location_discovery",
-            "data": {
-                "location_type": location_type,
-                "x": x,
-                "y": y,
-                "name": name or f"{location_type.capitalize()} source"
-            },
-            "timestamp": time.time()
-        }
+        # Check if this entity already has this exact location discovery
+        has_duplicate = False
+        for memory in self.entity_memories[entity_id]:
+            if (memory["type"] == "location_discovery" and 
+                memory["data"]["location_type"] == location_type and
+                memory["data"]["x"] == x and 
+                memory["data"]["y"] == y):
+                has_duplicate = True
+                break
         
-        # Add to entity memories
-        self.entity_memories[entity_id].append(memory)
+        # Only add to entity memories if it's not a duplicate
+        if not has_duplicate:
+            # Create the memory entry
+            memory = {
+                "type": "location_discovery",
+                "data": {
+                    "location_type": location_type,
+                    "x": x,
+                    "y": y,
+                    "name": name or f"{location_type.capitalize()} source"
+                },
+                "timestamp": time.time()
+            }
+            
+            # Add to entity memories
+            self.entity_memories[entity_id].append(memory)
         
         # Also record in discovered locations
         if location_type not in self.discovered_locations:
@@ -210,13 +242,134 @@ class WorldCache:
             })
         
         # Save the cache
-        self._save_cache()  # Changed from self.save_cache() to self._save_cache()
+        self._save_cache()
         
         # Get the cache file path for the current seed
         cache_file = os.path.join(self.cache_dir, f"world_{self.current_seed}.json") if self.current_seed else "No cache file (no seed set)"
         
         print(f"DEBUG: Saved world cache to {cache_file}")
         print(f"DEBUG: Cache contains {len(self.entity_memories)} entity memories and {len(self.discovered_locations)} location types")
+
+    def cleanup_duplicates(self):
+        """Clean up duplicate location discoveries in entity memories and consolidate across entities"""
+        if not self.current_seed:
+            return
+        
+        print(f"DEBUG: Starting aggressive duplicate cleanup for seed {self.current_seed}")
+        
+        # STEP 1: First consolidate all discovered locations by coordinates
+        consolidated_locations = {}
+        for location_type, locations in self.discovered_locations.items():
+            if location_type not in consolidated_locations:
+                consolidated_locations[location_type] = {}
+                
+            for loc in locations:
+                # Use coordinates as key
+                coord_key = (loc["x"], loc["y"])
+                
+                if coord_key not in consolidated_locations[location_type]:
+                    # First time seeing this location
+                    consolidated_locations[location_type][coord_key] = {
+                        "x": loc["x"],
+                        "y": loc["y"],
+                        "name": loc["name"],
+                        "discovered_by": loc.get("discovered_by", []),
+                        "discovery_time": loc.get("discovery_time", time.time())
+                    }
+                else:
+                    # Merge with existing location
+                    existing = consolidated_locations[location_type][coord_key]
+                    
+                    # Merge discoverers
+                    for entity_id in loc.get("discovered_by", []):
+                        if entity_id not in existing["discovered_by"]:
+                            existing["discovered_by"].append(entity_id)
+                    
+                    # Keep earliest discovery time
+                    if "discovery_time" in loc:
+                        existing["discovery_time"] = min(
+                            existing["discovery_time"],
+                            loc["discovery_time"]
+                        )
+        
+        # STEP 2: Rebuild the discovered_locations structure
+        self.discovered_locations = {}
+        for location_type, locations in consolidated_locations.items():
+            self.discovered_locations[location_type] = list(locations.values())
+            print(f"DEBUG: Consolidated {len(locations)} unique {location_type} locations")
+        
+        # STEP 3: Create a canonical mapping of locations to their names
+        canonical_names = {}
+        for location_type, locations in self.discovered_locations.items():
+            for loc in locations:
+                canonical_names[(location_type, loc["x"], loc["y"])] = loc["name"]
+        
+        # STEP 4: Rebuild entity memories to eliminate duplicates
+        for entity_id in list(self.entity_memories.keys()):
+            memories = self.entity_memories[entity_id]
+            new_memories = []
+            seen_locations = set()
+            
+            # First, keep all non-location memories
+            for memory in memories:
+                if memory["type"] != "location_discovery":
+                    new_memories.append(memory)
+            
+            # Then add exactly one memory per discovered location
+            for location_type, locations in self.discovered_locations.items():
+                for loc in locations:
+                    if entity_id in loc["discovered_by"]:
+                        loc_key = (location_type, loc["x"], loc["y"])
+                        
+                        # Skip if we've already added this location
+                        if loc_key in seen_locations:
+                            continue
+                        
+                        seen_locations.add(loc_key)
+                        
+                        # Find the original memory for this location if it exists
+                        original_memory = None
+                        original_timestamp = None
+                        
+                        for memory in memories:
+                            if (memory["type"] == "location_discovery" and
+                                memory["data"]["location_type"] == location_type and
+                                memory["data"]["x"] == loc["x"] and
+                                memory["data"]["y"] == loc["y"]):
+                                if original_timestamp is None or memory["timestamp"] < original_timestamp:
+                                    original_memory = memory
+                                    original_timestamp = memory["timestamp"]
+                        
+                        # Create a new memory or use the original
+                        if original_memory:
+                            # Use original but update the name to be consistent
+                            memory_copy = dict(original_memory)
+                            memory_copy["data"]["name"] = canonical_names[loc_key]
+                            new_memories.append(memory_copy)
+                        else:
+                            # Create a new memory
+                            new_memories.append({
+                                "type": "location_discovery",
+                                "data": {
+                                    "location_type": location_type,
+                                    "x": loc["x"],
+                                    "y": loc["y"],
+                                    "name": canonical_names[loc_key]
+                                },
+                                "timestamp": loc["discovery_time"]
+                            })
+            
+            # Replace with cleaned memories
+            self.entity_memories[entity_id] = new_memories
+            print(f"DEBUG: Cleaned entity {entity_id}: {len(new_memories)} memories ({len(seen_locations)} locations)")
+        
+        # STEP 5: Save the completely rebuilt cache
+        self._save_cache()
+        print(f"DEBUG: Completed aggressive duplicate cleanup for seed {self.current_seed}")
+
+
+
+
         
     def get_entity_memories(self, entity_id):
         """Get all memories for a specific entity"""

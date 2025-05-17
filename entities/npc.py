@@ -808,70 +808,7 @@ class NPC(Rectangle):
         # Otherwise use the base class implementation
         return super().get_entity_id()
     
-    def start_exploring(self):
-        """Start exploring in a random direction"""
-        from engine.core import SimpleGameEngine
-        world_map = None
-        if hasattr(SimpleGameEngine, 'instance'):
-            world_map = SimpleGameEngine.instance.world_map
-        
-        # Choose a random direction and distance
-        import random
-        directions = ["right", "left", "up", "down"]
-        
-        # Try up to 4 times to find a direction that doesn't lead to known water
-        for _ in range(4):
-            direction = random.choice(directions)
-            distance = random.randint(5, 15)  # Explore 5-15 tiles in a random direction
-            
-            # Calculate target position based on direction
-            target_x = self.grid_x
-            target_y = self.grid_y
-            
-            if direction == "right":
-                target_x = min(self.grid_x + distance, world_map.width - 1 if world_map else 100)
-            elif direction == "left":
-                target_x = max(self.grid_x - distance, 0)
-            elif direction == "up":
-                target_y = max(self.grid_y - distance, 0)
-            elif direction == "down":
-                target_y = min(self.grid_y + distance, world_map.height - 1 if world_map else 100)
-            
-            # Check if this target is in our water avoidance list
-            if hasattr(self, 'water_avoidance_locations') and (target_x, target_y) in self.water_avoidance_locations:
-                # This direction leads to water, try another one
-                continue
-            
-            # Set target position
-            self.target_grid_x = target_x
-            self.target_grid_y = target_y
-            break
-        else:
-            # If all directions lead to water, just move one step in a random direction
-            direction = random.choice(directions)
-            if direction == "right":
-                self.target_grid_x = min(self.grid_x + 1, world_map.width - 1 if world_map else 100)
-                self.target_grid_y = self.grid_y
-            elif direction == "left":
-                self.target_grid_x = max(self.grid_x - 1, 0)
-                self.target_grid_y = self.grid_y
-            elif direction == "up":
-                self.target_grid_x = self.grid_x
-                self.target_grid_y = max(self.grid_y - 1, 0)
-            elif direction == "down":
-                self.target_grid_x = self.grid_x
-                self.target_grid_y = min(self.grid_y + 1, world_map.height - 1 if world_map else 100)
-        
-        # Set the NPC to moving state
-        self.is_moving = True
-        print(f"DEBUG: NPC {self.get_entity_id()} exploring {distance if 'distance' in locals() else 1} tiles {direction}")
-        
-        # Show a speech bubble about exploring
-        from engine.core import SimpleGameEngine
-        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
-
-
+    
 
     def render(self, screen, camera):
         """Render the NPC with camera transformations"""
