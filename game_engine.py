@@ -12,6 +12,11 @@ from ai.controllers.ai_universe_controller import AIUniverseController, WorldSta
 import argparse
 from engine.constants import GameBalanceConstants
 
+# RENDER ORDER
+# 1. Terrain tiles
+# 2. Entities
+# 3. Entity tiles
+
 
 if __name__ == "__main__":
     # Create the game engine
@@ -89,7 +94,22 @@ if __name__ == "__main__":
     # Create and set up the world map (50x38 tiles for an 800x600 screen)
     world_map = WorldMap(256, 256)
     world_map.generate_realistic_map(seed=engine.map_seed)
+    # Initialize entity tile manager before adding any entity tiles
+    world_map.initialize_entity_tiles()
+    
+    # Add a tree and print debug info
+    tree = world_map.add_tree(24, 18)
+    if tree:
+        print(f"Successfully added tree at (24, 18)")
+        if hasattr(tree, 'texture') and tree.texture:
+            print(f"Tree texture size: {tree.texture.get_size()}")
+        else:
+            print("Tree has no texture!")
+    else:
+        print(f"Failed to add tree at (24, 18)")
+    
     engine.set_world_map(world_map)
+    
     
     
     # Initialize world cache with the same seed
@@ -153,6 +173,10 @@ if __name__ == "__main__":
     print("Spawning food NPCs in the world...")
     for _ in range(30):  # Spawn 10 food NPCs
         food_npc = engine.spawn_food_npc()
+
+
+
+
 
 
     # Initialize exploration attributes for NPCs

@@ -67,6 +67,76 @@ class WorldMap:
                 grid_x, grid_y, _, _ = camera.apply(start_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 grid_right, _, _, _ = camera.apply(end_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 pygame.draw.line(screen, grid_color, (grid_x, grid_y), (grid_right, grid_y), 1)
+                
+
+        
+        # Render entity tiles if we have an entity tile manager
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.render(screen, camera)
+    
+    def initialize_entity_tiles(self):
+        """Initialize entity tiles manager"""
+        from world.entity_tile import EntityTileManager, TreeEntityTile, HouseEntityTile
+        
+        self.entity_tile_manager = EntityTileManager(self)
+        
+        # Example: Add some trees and houses
+        # This would typically be done based on map generation or loading from a file
+        # but here we're adding a few examples manually
+    
+    def add_tree(self, x, y):
+        """Add a tree entity tile at the specified position"""
+        from world.entity_tile import TreeEntityTile
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 1 and 0 <= y < self.height - 2):
+            return None
+            
+        # Check if the tiles are available (not water, mountain, or occupied by another entity tile)
+        if (self.get_tile(x, y).is_water() or self.get_tile(x, y).type == "mountain" or
+            self.get_tile(x, y+1).is_water() or self.get_tile(x, y+1).type == "mountain"):
+            return None
+            
+        # Check if there's already an entity tile here
+        if hasattr(self, 'entity_tile_manager'):
+            if self.entity_tile_manager.get_entity_tile_at(x, y) or self.entity_tile_manager.get_entity_tile_at(x, y+1):
+                return None
+        
+        # Create and add the tree
+        tree = TreeEntityTile(x, y)
+        # Log the addition
+        print(f"Added tree at {x}, {y}")
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.add_entity_tile(tree)
+        return tree
+    
+    def add_house(self, x, y):
+        """Add a house entity tile at the specified position"""
+        from world.entity_tile import HouseEntityTile
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 2 and 0 <= y < self.height - 2):
+            return None
+            
+        # Check if the tiles are available
+        for dx in range(2):
+            for dy in range(2):
+                tile = self.get_tile(x + dx, y + dy)
+                if tile.is_water() or tile.type == "mountain":
+                    return None
+                    
+        # Check if there's already an entity tile here
+        if hasattr(self, 'entity_tile_manager'):
+            for dx in range(2):
+                for dy in range(2):
+                    if self.entity_tile_manager.get_entity_tile_at(x + dx, y + dy):
+                        return None
+        
+        # Create and add the house
+        house = HouseEntityTile(x, y)
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.add_entity_tile(house)
+        return house
     
     def is_wall(self, x, y):
         """Check if the tile at the specified position is a wall"""
