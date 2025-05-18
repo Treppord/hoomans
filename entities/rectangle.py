@@ -2,6 +2,9 @@ import pygame
 import os
 import math
 
+from entities.inventory import Inventory
+from entities.items.item_factory import ItemFactory
+
 class Rectangle:
     """Base class for all rectangular entities in the game"""
     
@@ -56,8 +59,20 @@ class Rectangle:
         self.width = 16
         self.height = 16
         
+        # Add inventory
+        self.inventory = Inventory(16)  # 16 slots by default
+        
+        # Add facing direction for item use
+        self.facing = 'down'  # Default facing direction
+        
+        self.starter_items_added = False
+
+        
         # Generate a persistent ID
         self.entity_id = self.generate_persistent_id()
+        
+        self.item_use_cooldown = 0
+        self.item_use_cooldown_duration = 500
         
     
     def generate_persistent_id(self):
@@ -194,6 +209,13 @@ class Rectangle:
     
     def update(self):
         """Update entity state"""
+        
+    
+        if not self.starter_items_added and pygame.get_init():
+            print(f"DEBUG: Adding starter items for entity {self.get_entity_id()}, controllable={self.controllable}")
+            self._add_starter_items()
+            self.starter_items_added = True
+            print(f"DEBUG: Starter items added: {self.starter_items_added}")
         # Store previous position before updating
         self.previous_grid_x = self.grid_x
         self.previous_grid_y = self.grid_y
@@ -217,6 +239,12 @@ class Rectangle:
                     self.hunger -= 1
                     print(f"NPC {self.get_entity_id()} hunger decreased to {self.hunger}")
                 self.last_hunger_update = current_time
+        
+        # Update item use cooldown
+        if self.item_use_cooldown > 0:
+            current_time = pygame.time.get_ticks()
+            if current_time >= self.item_use_cooldown:
+                self.item_use_cooldown = 0
                 
         # Handle movement towards target
         if self.is_moving:
@@ -238,13 +266,17 @@ class Rectangle:
                 
                 if self.grid_x < self.target_grid_x:
                     next_x += self.speed
+                    self.facing = 'right'
                 elif self.grid_x > self.target_grid_x:
                     next_x -= self.speed
+                    self.facing = 'left'
                     
                 if self.grid_y < self.target_grid_y:
                     next_y += self.speed
+                    self.facing = 'down'
                 elif self.grid_y > self.target_grid_y:
                     next_y -= self.speed
+                    self.facing = 'up'
                 
                 # Check for collision with entity tiles before moving
                 from engine.core import SimpleGameEngine
@@ -271,8 +303,53 @@ class Rectangle:
                 # Only set is_moving to False if we're not actively moving
                 if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                     self.is_moving = False
-
-
+    
+    def use_selected_item(self):
+        """Use the currently selected item"""
+        # Check cooldown
+        current_time = pygame.time.get_ticks()
+        if self.item_use_cooldown > 0 and current_time < self.item_use_cooldown:
+            return False
+        
+        # Get the selected item
+        selected_item = self.inventory.get_selected_item()
+        if not selected_item:
+            return False
+        
+        # Get the world from the game engine
+        from engine.core import SimpleGameEngine
+        world = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world = SimpleGameEngine.instance.world_map
+        
+        # Use the item
+        if selected_item.use(self, world):
+            # Set cooldown
+            self.item_use_cooldown = current_time + self.item_use_cooldown_duration
+            
+            # If the item quantity is now 0, remove it from inventory
+            if selected_item.quantity <= 0:
+                slot = self.inventory.get_selected_slot()
+                slot.item = None
+            
+            return True
+        
+        return False
+    
+    def add_item(self, item_id, quantity=1):
+        """Add an item to the inventory"""
+        item = ItemFactory.create_item(item_id, quantity)
+        if item:
+            return self.inventory.add_item(item)
+        return False
+    
+    def has_item(self, item_id, quantity=1):
+        """Check if the entity has a specific item"""
+        return self.inventory.has_item(item_id, quantity)
+    
+    def remove_item(self, item_id, quantity=1):
+        """Remove an item from the inventory"""
+        return self.inventory.remove_item(item_id, quantity)
 
     
     def render(self, screen, camera):
@@ -349,3 +426,50 @@ class Rectangle:
                         SimpleGameEngine.instance.ui.add_text_bubble("Ahh, my thirst is quenched!", self, duration=2.0)
                     else:
                         SimpleGameEngine.instance.ui.add_text_bubble("*drinks water*", self, duration=1.0)
+    # Modify the _add_starter_items method in the Rectangle class
+
+    def _add_starter_items(self):
+        """Add some starter items to the inventory"""
+        # Only add items to player-controlled entities
+        if self.controllable:
+            print(f"DEBUG: Adding starter items to player inventory (ID: {self.get_entity_id()})")
+            
+            try:
+                # Add a water bottle
+                print("DEBUG: Attempting to create water bottle item...")
+                water_bottle = ItemFactory.create_item("water_bottle", 3)
+                if water_bottle:
+                    print(f"DEBUG: Water bottle created successfully with quantity {water_bottle.quantity}")
+                    result = self.inventory.add_item(water_bottle)
+                    print(f"DEBUG: Water bottle added to inventory: {result}")
+                else:
+                    print("DEBUG: Failed to create water bottle item")
+                
+                # Add some food
+                print("DEBUG: Attempting to create food item...")
+                food = ItemFactory.create_item("food_generic", 5)
+                if food:
+                    print(f"DEBUG: Food created successfully with quantity {food.quantity}")
+                    result = self.inventory.add_item(food)
+                    print(f"DEBUG: Food added to inventory: {result}")
+                else:
+                    print("DEBUG: Failed to create food item")
+                
+                # Add an axe
+                print("DEBUG: Attempting to create axe item...")
+                axe = ItemFactory.create_item("axe")
+                if axe:
+                    print(f"DEBUG: Axe created successfully")
+                    result = self.inventory.add_item(axe)
+                    print(f"DEBUG: Axe added to inventory: {result}")
+                else:
+                    print("DEBUG: Failed to create axe item")
+                    
+                for i, slot in enumerate(self.inventory.slots):
+                    if slot.item:
+                        print(f"DEBUG: Slot {i}: {slot.item.name} x{slot.item.quantity}")
+                        
+            except Exception as e:
+                print(f"ERROR: Exception while adding starter items: {e}")
+                import traceback
+                traceback.print_exc()

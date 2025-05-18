@@ -1,16 +1,16 @@
-"""Character info panel UI element"""
+"""Character info panel UI element with integrated inventory display"""
 import pygame
 from engine.ui.elements.base import UIElement
 from engine.ui.constants.colors import DARK_PANEL_BG, BORDER_COLOR, TEXT_COLOR, TITLE_COLOR
 
 class CharacterInfoPanel(UIElement):
-    """Panel that displays character information from CNA data"""
+    """Panel that displays character information and inventory from entity data"""
     def __init__(self, x, y, width, height):
         super().__init__(x, y, width, height)
         self.entity = None
-        self.background_color = DARK_PANEL_BG  # Using color constant
-        self.text_color = TEXT_COLOR  # Using color constant
-        self.title_color = TITLE_COLOR  # Using color constant
+        self.background_color = DARK_PANEL_BG
+        self.text_color = TEXT_COLOR
+        self.title_color = TITLE_COLOR
         self.font = pygame.font.Font("assets/font/CandC_LAN.ttf", 24)
         self.title_font = pygame.font.SysFont(None, 28)
         self.small_font = pygame.font.SysFont(None, 20)
@@ -18,12 +18,25 @@ class CharacterInfoPanel(UIElement):
         self.visible = False
         self.animation_timer = 0
         self.current_frame = 0
-        self.animation_speed = 0.5  # Slower animation for the info 
+        self.animation_speed = 0.5
+        
+        # Inventory display settings
+        self.show_inventory = True
+        self.inventory_slot_size = 40
+        self.inventory_padding = 4
+        self.inventory_slots_per_row = 4
+        self.dragging_item = None
+        self.dragging_from_slot = -1
+        self.hover_slot = -1
         
     def set_entity(self, entity):
         """Set the entity to display information for"""
         self.entity = entity
         self.visible = (entity is not None and entity.cna_data is not None)
+        # Reset inventory interaction state when changing entities
+        self.dragging_item = None
+        self.dragging_from_slot = -1
+        self.hover_slot = -1
         
     def update_animation(self, delta_time=1/60):
         """Update the animation frame"""
@@ -32,6 +45,129 @@ class CharacterInfoPanel(UIElement):
             self.animation_timer = 0
             if hasattr(self.entity, 'animation_frames') and self.entity.animation_frames:
                 self.current_frame = (self.current_frame + 1) % len(self.entity.animation_frames)
+    
+    def get_slot_at_position(self, x, y):
+        """Get the inventory slot at the given screen position"""
+        if not self.entity or not hasattr(self.entity, 'inventory'):
+            return -1
+            
+        # Calculate inventory section position
+        inventory_x = self.x + self.padding
+        inventory_y = self.y + self.height - 220  # Position inventory at bottom of panel
+        
+        # Convert to inventory-relative coordinates
+        rel_x = x - inventory_x
+        rel_y = y - inventory_y
+        
+        if rel_x < 0 or rel_y < 0:
+            return -1
+            
+        # Calculate row and column
+        col = rel_x // (self.inventory_slot_size + self.inventory_padding)
+        row = rel_y // (self.inventory_slot_size + self.inventory_padding)
+        
+        # Check if within valid range
+        if col >= self.inventory_slots_per_row:
+            return -1
+            
+        # Calculate slot index
+        slot_index = row * self.inventory_slots_per_row + col
+        
+        if slot_index >= self.entity.inventory.size:
+            return -1
+            
+        return slot_index
+    
+    def update_hover_slot(self, mouse_x, mouse_y):
+        """Update which slot the mouse is hovering over"""
+        self.hover_slot = self.get_slot_at_position(mouse_x, mouse_y)
+        
+    def handle_event(self, event):
+        """Handle input events"""
+        if not self.visible:
+            return False
+            
+        # Close panel on Escape
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.visible = False
+            return True
+            
+        # Handle inventory interaction if entity has inventory
+        if self.entity and hasattr(self.entity, 'inventory') and self.show_inventory:
+            # Handle mouse movement for hover effects
+            if event.type == pygame.MOUSEMOTION:
+                self.update_hover_slot(event.pos[0], event.pos[1])
+                
+            # Handle mouse clicks for item selection and dragging
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
+                slot_index = self.get_slot_at_position(event.pos[0], event.pos[1])
+                if slot_index >= 0 and slot_index < self.entity.inventory.size:
+                    # Select the slot
+                    self.entity.inventory.select_slot(slot_index)
+                    
+                    # Start dragging if the slot has an item
+                    slot = self.entity.inventory.slots[slot_index]
+                    if not slot.is_empty():
+                        # If shift is held, split the stack
+                        if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                            half_quantity = slot.item.quantity // 2
+                            if half_quantity > 0:
+                                self.dragging_item = slot.item.split(half_quantity)
+                        else:
+                            # Take the whole stack
+                            self.dragging_item = slot.remove_item(slot.item.quantity)
+                        
+                        self.dragging_from_slot = slot_index
+                
+                return True
+                
+            # Handle mouse release for dropping items
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:  # Left click release
+                if self.dragging_item:
+                    slot_index = self.get_slot_at_position(event.pos[0], event.pos[1])
+                    if slot_index >= 0 and slot_index < self.entity.inventory.size:
+                        # Try to place the item in this slot
+                        target_slot = self.entity.inventory.slots[slot_index]
+                        
+                        # If the slot is empty or can stack with our item
+                        if target_slot.is_empty() or target_slot.can_accept(self.dragging_item):
+                            # Add the item to the slot
+                            remaining = target_slot.add_item(self.dragging_item)
+                            
+                            # If there are remaining items, keep them in hand
+                            if remaining > 0:
+                                self.dragging_item.quantity = remaining
+                            else:
+                                self.dragging_item = None
+                        else:
+                            # Swap items
+                            temp_item = target_slot.item
+                            target_slot.item = self.dragging_item
+                            self.dragging_item = temp_item
+                    else:
+                        # Drop the item back in the original slot if we're not over a valid slot
+                        if 0 <= self.dragging_from_slot < self.entity.inventory.size:
+                            self.entity.inventory.slots[self.dragging_from_slot].add_item(self.dragging_item)
+                        
+                        self.dragging_item = None
+                    
+                    self.dragging_from_slot = -1
+                
+                return True
+                
+            # Handle right-click for splitting stacks
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # Right click
+                slot_index = self.get_slot_at_position(event.pos[0], event.pos[1])
+                if slot_index >= 0 and slot_index < self.entity.inventory.size:
+                    slot = self.entity.inventory.slots[slot_index]
+                    if not slot.is_empty() and slot.item.quantity > 1:
+                        # Take one item
+                        self.dragging_item = slot.remove_item(1)
+                        self.dragging_from_slot = slot_index
+                
+                return True
+                
+        return False
         
     def render(self, screen):
         if not self.visible or not self.entity or not self.entity.cna_data:
@@ -93,7 +229,6 @@ class CharacterInfoPanel(UIElement):
                 # Scale and draw the sprite
                 scaled_frame = pygame.transform.scale(current_frame, (scaled_width, scaled_height))
                 panel_surface.blit(scaled_frame, (sprite_x, sprite_y))
-                
                 
             else:
                 # Fallback: draw a colored rectangle
@@ -195,12 +330,68 @@ class CharacterInfoPanel(UIElement):
             panel_surface.blit(text_surface, (right_x, y_offset))
             y_offset += 25
         
+        # Draw inventory section if entity has inventory
+        if hasattr(self.entity, 'inventory') and self.show_inventory:
+            # Draw inventory title
+            inventory_title_y = self.height - 250
+            inventory_title = self.font.render("Inventory", True, self.title_color)
+            panel_surface.blit(inventory_title, (self.padding, inventory_title_y))
+            
+            # Draw inventory background
+            inventory_bg_rect = pygame.Rect(
+                self.padding, 
+                self.height - 220,
+                self.width - (self.padding * 2), 
+                200
+            )
+            pygame.draw.rect(panel_surface, (30, 30, 30, 180), inventory_bg_rect, border_radius=5)
+            pygame.draw.rect(panel_surface, (80, 80, 80, 180), inventory_bg_rect, width=2, border_radius=5)
+            
+            # Draw inventory slots
+            inventory = self.entity.inventory
+            slots_to_show = min(inventory.size, 16)  # Limit to 16 slots (4x4 grid)
+            
+            for i in range(slots_to_show):
+                row = i // self.inventory_slots_per_row
+                col = i % self.inventory_slots_per_row
+                
+                slot_x = self.padding + 10 + col * (self.inventory_slot_size + self.inventory_padding)
+                slot_y = (self.height - 220) + 10 + row * (self.inventory_slot_size + self.inventory_padding)
+                
+                # Draw slot background
+                slot_rect = pygame.Rect(slot_x, slot_y, self.inventory_slot_size, self.inventory_slot_size)
+                
+                # Different background for hover and selected slots
+                if i == self.hover_slot:
+                    pygame.draw.rect(panel_surface, (70, 70, 70), slot_rect)
+                else:
+                    pygame.draw.rect(panel_surface, (50, 50, 50), slot_rect)
+                
+                # Highlight selected slot
+                if i == inventory.selected_slot_index:
+                    pygame.draw.rect(panel_surface, (200, 200, 0), slot_rect, 2)
+                else:
+                    pygame.draw.rect(panel_surface, (100, 100, 100), slot_rect, 1)
+                
+                # Draw item if slot is not empty and not being dragged
+                slot = inventory.slots[i]
+                if not slot.is_empty() and (self.dragging_from_slot != i or self.dragging_item is None):
+                    # Calculate item position (centered in slot)
+                    item_size = self.inventory_slot_size - 8
+                    item_x = slot_x + (self.inventory_slot_size - item_size) // 2
+                    item_y = slot_y + (self.inventory_slot_size - item_size) // 2
+                    
+                    # Render item
+                    slot.item.render(panel_surface, item_x, item_y, item_size, item_size)
+        
         # Draw the panel on the screen
         screen.blit(panel_surface, (self.x, self.y))
         
-    def handle_event(self, event):
-        """Handle input events"""
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.visible = False
-            return True
-        return False
+        # Draw item being dragged (on top of everything)
+        if self.dragging_item:
+            mouse_pos = pygame.mouse.get_pos()
+            item_size = self.inventory_slot_size - 8
+            item_x = mouse_pos[0] - item_size // 2
+            item_y = mouse_pos[1] - item_size // 2
+            
+            self.dragging_item.render(screen, item_x, item_y, item_size, item_size)

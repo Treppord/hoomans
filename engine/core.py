@@ -16,6 +16,25 @@ import random
 import os
 
 class SimpleGameEngine:
+
+# Add this method to the SimpleGameEngine class
+
+    def load_item_icons(self):
+        """Load all item icons after pygame is initialized"""
+        from entities.items.item_factory import ItemFactory
+        
+        # Ensure item assets exist
+        ItemFactory.ensure_item_assets_exist()
+        
+        # Make sure templates are registered
+        if not hasattr(ItemFactory, '_templates') or not ItemFactory._templates:
+            ItemFactory.register_item_templates()
+        
+        # Load icons for all registered item templates
+        for item_id, template in ItemFactory._templates.items():
+            template.ensure_icon_loaded()
+            print(f"Loaded icon for item: {item_id}")
+
     def setup_world_cache(self):
         """Set up the world cache for persistent memory"""
         from world.world_cache import WorldCache
@@ -91,6 +110,9 @@ class SimpleGameEngine:
         
         # Initialize UI
         self.ui = UIManager(width, height)
+        self.load_item_icons()
+
+
         
         # Create chat input box BEFORE adding it to UI
         chat_input_width = 400
@@ -277,11 +299,18 @@ class SimpleGameEngine:
         
         # If this is a player-controlled object, store a reference
         if hasattr(obj, 'controllable') and obj.controllable:
+            print(f"DEBUG: Player object added with ID {obj.get_entity_id()}")
             self.player = obj
             self.camera.set_follow_target(obj)
-
             
+            # Debug inventory
+            if hasattr(obj, 'inventory'):
+                print(f"DEBUG: Player has inventory with {len(obj.inventory.slots)} slots")
+            else:
+                print("DEBUG: Player does not have inventory attribute")
+                
         return obj
+
         
     def spawn_food_npc(self, x=None, y=None, food_type=None):
         """Spawn a food NPC at the specified position or a random valid position"""
@@ -557,6 +586,8 @@ class SimpleGameEngine:
         """Update game logic"""
         if self.paused:
             return
+        
+        
             
         self.camera.update()
 

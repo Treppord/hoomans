@@ -42,6 +42,13 @@ if __name__ == "__main__":
 
     engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
     
+    # Initialize item factory after pygame is initialized
+    from entities.items.item_factory import ItemFactory
+    engine.load_item_icons()
+    ItemFactory.ensure_item_assets_exist()
+    ItemFactory.register_item_templates()
+
+    
     # Toggle fullscreen if requested
     if args.fullscreen:
         engine.toggle_fullscreen()

@@ -110,9 +110,15 @@ class UIManager:
         
     def handle_event(self, event):
         """Handle UI events"""
+        # First check if character info panel is visible and should handle the event
+        if self.char_info_panel.visible and self.char_info_panel.handle_event(event):
+            return True
+            
+        # Then check other UI elements
         for element in self.elements:
             if hasattr(element, 'handle_event') and element.handle_event(event):
                 return True
+                
         return False
         
     def render(self, screen):
