@@ -91,3 +91,8 @@ class UIElement:
         
         # Draw the panel on the screen
         screen.blit(panel_surface, (self.x, self.y))
+
+    def resize(self, width, height):
+        """Resize the UI element"""
+        self.width = width
+        self.height = height

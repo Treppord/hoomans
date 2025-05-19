@@ -92,6 +92,19 @@ class NPC(Rectangle):
         # Update animation (from Rectangle class)
         self.update_animation()
         
+        # Handle temporary leaving house state
+        if hasattr(self, '_leaving_house') and self._leaving_house:
+            # Clear the leaving house flag after a short delay
+            if not hasattr(self, '_leaving_house_time'):
+                self._leaving_house_time = current_time
+            elif current_time - self._leaving_house_time > 1000:  # 1 second delay
+                self._leaving_house = False
+                del self._leaving_house_time
+                # Start exploring now that we're safely outside
+                self.start_exploring()
+                print(f"DEBUG: NPC {self.get_entity_id()} has safely left the house, starting exploration")
+            return  # Skip the rest of the update while leaving house
+        
         # Check if we're inside a house - this should happen before other checks
         if self._is_inside_house():
             # If we're not already resting, start resting
@@ -147,6 +160,8 @@ class NPC(Rectangle):
             # If we're resting, don't do other activities
             if self.is_resting:
                 return
+        
+        
         
         # PRIORITY 1: Check if we're adjacent to water and thirsty - this takes precedence over most actions
         from engine.core import SimpleGameEngine
@@ -1793,6 +1808,10 @@ class NPC(Rectangle):
 
     def _is_inside_house(self):
         """Check if the NPC is currently inside a house"""
+        # If we're in the process of leaving a house, return False
+        if hasattr(self, '_leaving_house') and self._leaving_house:
+            return False
+            
         from engine.core import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
             # Check if we have an entity tile manager
@@ -2036,11 +2055,26 @@ class NPC(Rectangle):
                     # Set target position
                     self.target_grid_x = outside_x
                     self.target_grid_y = outside_y
-                    self.is_moving = True
                     
-                    print(f"DEBUG: NPC {self.get_entity_id()} leaving house, moving to ({outside_x}, {outside_y})")
+                    # Important: Temporarily disable house resting checks
+                    self._leaving_house = True
+                    
+                    # Move directly to the outside position to avoid getting stuck
+                    self.grid_x = outside_x
+                    self.grid_y = outside_y
+                    
+                    # Update visual position
+                    self.visual_x = float(self.grid_x)
+                    self.visual_y = float(self.grid_y)
+                    
+                    # Reset resting state
+                    self.is_resting = False
+                    
+                    print(f"DEBUG: NPC {self.get_entity_id()} teleported outside house to ({outside_x}, {outside_y})")
+                    
+                    # Start exploring after a short delay
+                    self.last_exploration_time = pygame.time.get_ticks() + 2000  # 2 second delay
                     return
         
         # If we couldn't find the house or door, just start exploring
         self.start_exploring()
-

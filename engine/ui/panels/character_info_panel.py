@@ -25,6 +25,16 @@ class CharacterInfoPanel(UIElement):
         self.inventory_padding = 4
         self.inventory_slots_per_row = 4
         
+        # Configurable inventory position
+        self.inventory_y_offset = 250  # Distance from top of panel to inventory section
+        self.inventory_height = 200    # Height of inventory section
+        
+        # Scrolling
+        self.scroll_offset = 0
+        self.max_scroll = 0
+        self.scrolling = False
+        self.scroll_speed = 20
+        
         # Pre-render common UI elements
         self._cached_surfaces = {}
         self._panel_surface = None
@@ -61,13 +71,80 @@ class CharacterInfoPanel(UIElement):
         pygame.draw.rect(self._panel_surface, BORDER_COLOR, 
                         (0, 0, self.width, self.height), 
                         width=2, border_radius=8)
+    
+    def resize(self, width, height):
+        """Resize the panel and adjust layout"""
+        self.width = width
+        self.height = height
         
+        # Recalculate inventory position based on new size
+        self._adjust_layout()
+        
+        # Recreate background
+        self._panel_surface = None
+        self._create_panel_background()
+        
+        # Clear cached surfaces
+        self._cached_surfaces = {}
+    
+    def _adjust_layout(self):
+        """Adjust layout based on panel size"""
+        # Adjust inventory slots per row based on width
+        available_width = self.width - (self.padding * 2) - 20  # 20px extra padding
+        self.inventory_slots_per_row = max(2, min(4, available_width // (self.inventory_slot_size + self.inventory_padding)))
+        
+        # Calculate minimum space needed for character info
+        min_char_info_height = 300  # Minimum height for character info
+        
+        # Calculate space needed for inventory
+        inventory_rows = (16 + self.inventory_slots_per_row - 1) // self.inventory_slots_per_row
+        inventory_min_height = inventory_rows * (self.inventory_slot_size + self.inventory_padding) + 40  # 40px for title and padding
+        
+        # Determine if we need to scroll
+        total_content_height = min_char_info_height + inventory_min_height
+        
+        if total_content_height > self.height - 40:  # 40px for padding and title
+            # Content doesn't fit, enable scrolling
+            self.max_scroll = total_content_height - (self.height - 40)
+            
+            # Position inventory at bottom of visible area
+            self.inventory_y_offset = self.height - inventory_min_height - 20  # 20px padding at bottom
+            self.inventory_height = inventory_min_height
+        else:
+            # Content fits, disable scrolling
+            self.max_scroll = 0
+            self.scroll_offset = 0
+            
+            # Position inventory below character info with some spacing
+            self.inventory_y_offset = min_char_info_height + 20  # 20px spacing
+            self.inventory_height = inventory_min_height
+        
+    def set_inventory_position(self, y_offset, height=None):
+        """
+        Set the vertical position of the inventory section
+        
+        Args:
+            y_offset: Distance from top of panel to inventory section
+            height: Height of inventory section (optional)
+        """
+        self.inventory_y_offset = y_offset
+        if height is not None:
+            self.inventory_height = height
+        
+        # Clear cached inventory background when position changes
+        if 'inventory_bg' in self._cached_surfaces:
+            del self._cached_surfaces['inventory_bg']
+    
     def set_entity(self, entity):
         """Set the entity to display information for"""
         self.entity = entity
         self.visible = (entity is not None and entity.cna_data is not None)
         # Clear cached surfaces when entity changes
         self._cached_surfaces = {}
+        # Reset scroll position
+        self.scroll_offset = 0
+        # Adjust layout for new entity
+        self._adjust_layout()
         
     def update_animation(self, delta_time=1/60):
         """Update the animation frame"""
@@ -90,6 +167,12 @@ class CharacterInfoPanel(UIElement):
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.visible = False
             return True
+        
+        # Handle scrolling with mouse wheel
+        if event.type == pygame.MOUSEWHEEL and self.max_scroll > 0:
+            if self.contains_point(pygame.mouse.get_pos()[0], pygame.mouse.get_pos()[1]):
+                self.scroll_offset = max(0, min(self.max_scroll, self.scroll_offset - event.y * self.scroll_speed))
+                return True
             
         # Handle inventory interaction if entity has inventory
         if self.entity and hasattr(self.entity, 'inventory') and self.show_inventory:
@@ -99,15 +182,15 @@ class CharacterInfoPanel(UIElement):
     
     def _handle_inventory_interaction(self, event):
         """Handle inventory-related mouse events"""
-        # Define inventory section position
+        # Define inventory section position - use configurable Y offset
         inventory_x = self.x + self.padding
-        inventory_y = self.y + self.height - 220
+        inventory_y = self.y + self.inventory_y_offset - self.scroll_offset
         
         # Handle mouse movement for hover effects
         if event.type == pygame.MOUSEMOTION:
             # Check if mouse is in the inventory section
             if (inventory_x <= event.pos[0] <= inventory_x + self.width - (self.padding * 2) and
-                inventory_y <= event.pos[1] <= inventory_y + 200):
+                inventory_y <= event.pos[1] <= inventory_y + self.inventory_height):
                 # Update hover slot - adjust Y position upward by half a slot height
                 adjusted_y = event.pos[1] - (self.inventory_slot_size - 64)  # Move hover area up by half slot height
                 self.entity.inventory.update_hover_slot(
@@ -190,6 +273,11 @@ class CharacterInfoPanel(UIElement):
         # Draw panel background using pre-rendered surface
         screen.blit(self._panel_surface, (self.x, self.y))
         
+        # Create a clipping rect to prevent drawing outside the panel
+        original_clip = screen.get_clip()
+        clip_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+        screen.set_clip(clip_rect)
+        
         # Draw divider line down the middle with a subtle gradient
         self._render_divider(screen)
         
@@ -199,22 +287,62 @@ class CharacterInfoPanel(UIElement):
         # Draw title with a subtle shadow effect
         self._render_title(screen, f"{cna.first_name} {cna.last_name}")
         
+        # Apply scroll offset to all content below the title
+        scroll_y_offset = self.scroll_offset
+        
         # Render entity visualization (left side)
-        self._render_entity_visualization(screen)
+        self._render_entity_visualization(screen, scroll_y_offset)
         
         # Render entity stats below visualization
-        stats_y = self._render_entity_stats(screen)
+        stats_y = self._render_entity_stats(screen, scroll_y_offset)
         
         # Render CNA attributes (right side)
-        self._render_cna_attributes(screen, cna)
+        self._render_cna_attributes(screen, cna, scroll_y_offset)
         
         # Render inventory if available
         if hasattr(self.entity, 'inventory') and self.show_inventory:
             self._render_inventory(screen)
         
-        # Draw item being dragged (on top of everything)
+        # Render scroll indicators if scrolling is enabled
+        if self.max_scroll > 0:
+            self._render_scroll_indicators(screen)
+        
+        # Restore original clipping rect
+        screen.set_clip(original_clip)
+        
+        # Draw item being dragged (on top of everything, outside clipping)
         if hasattr(self.entity, 'inventory') and self.entity.inventory.dragging_item:
             self._render_dragged_item(screen)
+    
+    def _render_scroll_indicators(self, screen):
+        """Render scroll indicators if content is scrollable"""
+        # Only show up indicator if scrolled down
+        if self.scroll_offset > 0:
+            # Draw up arrow at top center
+            arrow_x = self.x + self.width // 2
+            arrow_y = self.y + 10
+            
+            points = [
+                (arrow_x, arrow_y),
+                (arrow_x - 10, arrow_y + 10),
+                (arrow_x + 10, arrow_y + 10)
+            ]
+            
+            pygame.draw.polygon(screen, (200, 200, 200, 150), points)
+        
+        # Only show down indicator if not at bottom
+        if self.scroll_offset < self.max_scroll:
+            # Draw down arrow at bottom center
+            arrow_x = self.x + self.width // 2
+            arrow_y = self.y + self.height - 20
+            
+            points = [
+                (arrow_x, arrow_y + 10),
+                (arrow_x - 10, arrow_y),
+                (arrow_x + 10, arrow_y)
+            ]
+            
+            pygame.draw.polygon(screen, (200, 200, 200, 150), points)
     
     def _render_divider(self, screen):
         """Render the divider line with a subtle gradient effect"""
@@ -261,12 +389,12 @@ class CharacterInfoPanel(UIElement):
         # Draw the cached title
         screen.blit(self._cached_surfaces['title'], (self.x + self.padding, self.y + self.padding))
     
-    def _render_entity_visualization(self, screen):
+    def _render_entity_visualization(self, screen, scroll_y_offset):
         """Render the entity visualization (sprite or colored rectangle)"""
         # Calculate position and size for the sprite display
         sprite_rect = pygame.Rect(
             self.x + self.padding, 
-            self.y + self.padding + 40, 
+            self.y + self.padding + 40 - scroll_y_offset, 
             (self.width // 2) - (self.padding * 2), 
             100
         )
@@ -308,9 +436,9 @@ class CharacterInfoPanel(UIElement):
             # Fallback: draw a colored rectangle
             pygame.draw.rect(screen, self.entity.color, sprite_rect)
     
-    def _render_entity_stats(self, screen):
+    def _render_entity_stats(self, screen, scroll_y_offset):
         """Render entity stats below the visualization"""
-        stats_y = self.y + self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
+        stats_y = self.y + self.padding + 40 + 100 + 20 - scroll_y_offset  # Below the entity rectangle with some spacing
         
         # Display entity stats if available
         if (hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or 
@@ -410,10 +538,10 @@ class CharacterInfoPanel(UIElement):
                             (bar_x, bar_y, fill_width, highlight_height), 
                             border_radius=3)
     
-    def _render_cna_attributes(self, screen, cna):
+    def _render_cna_attributes(self, screen, cna, scroll_y_offset):
         """Render CNA attributes on the right side of the panel"""
         right_x = self.x + (self.width // 2) + self.padding
-        y_offset = self.y + self.padding
+        y_offset = self.y + self.padding - scroll_y_offset
         
         # Basic info section
         y_offset += 10
@@ -491,8 +619,8 @@ class CharacterInfoPanel(UIElement):
     
     def _render_inventory(self, screen):
         """Render the inventory section with a clean, modern style"""
-        # Draw inventory title
-        inventory_title_y = self.y + self.height - 250
+        # Use configurable inventory position
+        inventory_title_y = self.y + self.inventory_y_offset - 30  # Title appears above inventory
         inventory_title = self.font.render("Inventory", True, self.title_color)
         screen.blit(inventory_title, (self.x + self.padding, inventory_title_y))
         
@@ -505,9 +633,9 @@ class CharacterInfoPanel(UIElement):
         # Draw inventory background with a subtle gradient
         inventory_bg_rect = pygame.Rect(
             self.x + self.padding, 
-            self.y + self.height - 220,
+            self.y + self.inventory_y_offset,
             self.width - (self.padding * 2), 
-            200
+            self.inventory_height
         )
         
         # Create a gradient background surface if not cached
@@ -517,7 +645,7 @@ class CharacterInfoPanel(UIElement):
             # Draw gradient background
             for y in range(inventory_bg_rect.height):
                 # Calculate gradient color (darker at top, slightly lighter at bottom)
-                alpha = 180
+                alpha = 0
                 darkness = 30 - int(y / inventory_bg_rect.height * 5)  # 30 at top, 25 at bottom
                 color = (darkness, darkness, darkness + 3, alpha)
                 
@@ -525,7 +653,7 @@ class CharacterInfoPanel(UIElement):
                 pygame.draw.line(bg_surface, color, (0, y), (inventory_bg_rect.width, y))
             
             # Add a subtle border
-            pygame.draw.rect(bg_surface, (80, 80, 80, 180), 
+            pygame.draw.rect(bg_surface, (80, 80, 80, 0), 
                             (0, 0, inventory_bg_rect.width, inventory_bg_rect.height), 
                             width=2, border_radius=5)
             
@@ -543,7 +671,7 @@ class CharacterInfoPanel(UIElement):
             col = i % self.inventory_slots_per_row
             
             slot_x = self.x + self.padding + 10 + col * (self.inventory_slot_size + self.inventory_padding)
-            slot_y = (self.y + self.height - 220) + 10 + row * (self.inventory_slot_size + self.inventory_padding)
+            slot_y = self.y + self.inventory_y_offset + 10 + row * (self.inventory_slot_size + self.inventory_padding)
             
             # Draw slot background with a subtle inset effect
             self._render_inventory_slot(screen, slot_x, slot_y, i, inventory)

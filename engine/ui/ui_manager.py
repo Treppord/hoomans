@@ -20,39 +20,21 @@ class UIManager:
         self.entity_info_time = 0
         self.entity_info_duration = 3.0  # How long to show entity info
         
-        # Create character info panel
-        panel_width = 600
-        panel_height = 500
+        # Create character info panel with responsive size
+        panel_width = min(600, screen_width - 40)  # Max width 600, min margin 20px each side
+        panel_height = min(500, screen_height - 40)  # Max height 500, min margin 20px top/bottom
         panel_x = (screen_width - panel_width) // 2
         panel_y = (screen_height - panel_height) // 2
         self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
         self.elements.append(self.char_info_panel)
         
+        # Create inventory panel
+        inv_panel_width = min(400, screen_width - 40)
+        inv_panel_height = min(300, screen_height - 40)
+        inv_panel_x = (screen_width - inv_panel_width) // 2
+        inv_panel_y = (screen_height - inv_panel_height) // 2
         self.inventory_panel = None  # Will be set when player is added
     
-    def update_screen_size(self, screen_width, screen_height):
-        """Update UI elements when screen size changes"""
-        self.screen_width = screen_width
-        self.screen_height = screen_height
-        
-        # Reposition UI elements based on new screen size
-        for element in self.elements:
-            if isinstance(element, StatsPanel):
-                # Keep stats panel in top right corner
-                element.x = self.screen_width - element.width - 10
-                element.y = 10
-            elif isinstance(element, ChatInputBox):
-                # Keep chat input in bottom right corner
-                element.x = self.screen_width - element.width - 10
-                element.y = self.screen_height - element.height - 10
-            elif isinstance(element, CharacterInfoPanel):
-                # Center character info panel
-                element.x = (self.screen_width - element.width) // 2
-                element.y = (self.screen_height - element.height) // 2
-            elif isinstance(element, InventoryPanel):
-                # Center inventory panel
-                element.x = (self.screen_width - element.width) // 2
-                element.y = (self.screen_height - element.height) // 2
 
     def set_player_inventory(self, player):
         """Set up the inventory panel for the player"""
@@ -196,3 +178,30 @@ class UIManager:
             else:
                 bubble.render(screen)
 
+
+    def update_screen_size(self, screen_width, screen_height):
+        """Update UI elements when screen size changes"""
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        
+        # Reposition UI elements based on new screen size
+        for element in self.elements:
+            if isinstance(element, StatsPanel):
+                # Keep stats panel in top right corner
+                element.x = self.screen_width - element.width - 10
+                element.y = 10
+            elif isinstance(element, ChatInputBox):
+                # Keep chat input in bottom right corner
+                element.x = self.screen_width - element.width - 10
+                element.y = self.screen_height - element.height - 10
+            elif isinstance(element, CharacterInfoPanel):
+                # Center character info panel and adjust size
+                panel_width = min(600, self.screen_width - 40)  # Max width 600, min margin 20px each side
+                panel_height = min(500, self.screen_height - 40)  # Max height 500, min margin 20px top/bottom
+                element.x = (self.screen_width - panel_width) // 2
+                element.y = (self.screen_height - panel_height) // 2
+                element.resize(panel_width, panel_height)
+            elif isinstance(element, InventoryPanel):
+                # Center inventory panel
+                element.x = (self.screen_width - element.width) // 2
+                element.y = (self.screen_height - element.height) // 2
