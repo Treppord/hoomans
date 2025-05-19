@@ -143,6 +143,16 @@
           "name": "Water source"
         },
         "timestamp": 1747592554.570802
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 15,
+          "y": 4,
+          "name": "Water source"
+        },
+        "timestamp": 1747667305.455261
       }
     ]
   },
@@ -249,9 +259,18 @@
           "0bc80fdff344d30008"
         ],
         "discovery_time": 1747592554.570834
+      },
+      {
+        "x": 15,
+        "y": 4,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1747667305.455262
       }
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747665652.593492
+  "last_updated": 1747667308.2765
 }

@@ -434,42 +434,38 @@ class Rectangle:
         if self.controllable:
             print(f"DEBUG: Adding starter items to player inventory (ID: {self.get_entity_id()})")
             
-            try:
-                # Add a water bottle
-                print("DEBUG: Attempting to create water bottle item...")
-                water_bottle = ItemFactory.create_item("water_bottle", 3)
-                if water_bottle:
-                    print(f"DEBUG: Water bottle created successfully with quantity {water_bottle.quantity}")
-                    result = self.inventory.add_item(water_bottle)
-                    print(f"DEBUG: Water bottle added to inventory: {result}")
-                else:
-                    print("DEBUG: Failed to create water bottle item")
+            # Define starter items as a list of dictionaries
+            # Each dictionary contains:
+            #   - item_id: The ID of the item to add
+            #   - quantity: The quantity to add (default: 1)
+            starter_items = [
+                {"item_id": "water_bottle", "quantity": 3},
+                {"item_id": "apple", "quantity": 5},
+                {"item_id": "stone_axe", "quantity": 1},
+                {"item_id": "stone", "quantity": 10},
+                {"item_id": "branch", "quantity": 10},
+            ]
+            
+            # Add each item to the inventory
+            for item_info in starter_items:
+                item_id = item_info["item_id"]
+                quantity = item_info.get("quantity", 1)
                 
-                # Add some food
-                print("DEBUG: Attempting to create food item...")
-                food = ItemFactory.create_item("food_generic", 5)
-                if food:
-                    print(f"DEBUG: Food created successfully with quantity {food.quantity}")
-                    result = self.inventory.add_item(food)
-                    print(f"DEBUG: Food added to inventory: {result}")
-                else:
-                    print("DEBUG: Failed to create food item")
-                
-                # Add an axe
-                print("DEBUG: Attempting to create axe item...")
-                axe = ItemFactory.create_item("axe")
-                if axe:
-                    print(f"DEBUG: Axe created successfully")
-                    result = self.inventory.add_item(axe)
-                    print(f"DEBUG: Axe added to inventory: {result}")
-                else:
-                    print("DEBUG: Failed to create axe item")
-                    
-                for i, slot in enumerate(self.inventory.slots):
-                    if slot.item:
-                        print(f"DEBUG: Slot {i}: {slot.item.name} x{slot.item.quantity}")
-                        
-            except Exception as e:
-                print(f"ERROR: Exception while adding starter items: {e}")
-                import traceback
-                traceback.print_exc()
+                try:
+                    print(f"DEBUG: Attempting to create {item_id} item...")
+                    item = ItemFactory.create_item(item_id, quantity)
+                    if item:
+                        print(f"DEBUG: {item_id} created successfully with quantity {item.quantity}")
+                        result = self.inventory.add_item(item)
+                        print(f"DEBUG: {item_id} added to inventory: {result}")
+                    else:
+                        print(f"DEBUG: Failed to create {item_id} item")
+                except Exception as e:
+                    print(f"ERROR: Exception while adding {item_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Print inventory contents for debugging
+            for i, slot in enumerate(self.inventory.slots):
+                if slot.item:
+                    print(f"DEBUG: Slot {i}: {slot.item.name} x{slot.item.quantity}")
