@@ -13,6 +13,7 @@ import argparse
 from engine.constants import GameBalanceConstants
 
 from entities.items.item_manager import ItemManager, initialize_item_system
+from engine.core import GameState
 
 
 # RENDER ORDER
@@ -32,6 +33,7 @@ if __name__ == "__main__":
     arg_parser.add_argument('--borderless', action='store_true', help='Start in borderless fullscreen mode')
     arg_parser.add_argument('--width', type=int, default=800, help='Window width (default: 800)')
     arg_parser.add_argument('--height', type=int, default=600, help='Window height (default: 600)')
+    arg_parser.add_argument('--skip-menu', action='store_true', help='Skip main menu and start game directly')
     args = arg_parser.parse_args()
 
     def debug_cna_data(self, entity, name):
@@ -45,6 +47,19 @@ if __name__ == "__main__":
 
     engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
     
+    # Skip menu if requested (only if the --skip-menu flag is provided)
+    if args.skip_menu:
+        engine.game_state = GameState.RUNNING
+        engine.load_item_icons()
+    else:
+        # Ensure we're in menu state (this should be the default)
+        engine.game_state = GameState.MAIN_MENU
+    
+    # Toggle fullscreen if requested
+    if args.fullscreen:
+        engine.toggle_fullscreen()
+    elif args.borderless:
+        engine.toggle_borderless_fullscreen()
 
     # Initialize item manager and register default items
     print("Initializing item management system...")

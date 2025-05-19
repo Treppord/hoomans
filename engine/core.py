@@ -14,6 +14,16 @@ from engine.ui.elements.chat_input import ChatInputBox
 from engine.camera import Camera
 import random
 import os
+from engine.ui.main_menu import MainMenu
+
+# Add these constants near the top of the file
+class GameState:
+    """Game state constants"""
+    MAIN_MENU = 0
+    RUNNING = 1
+    PAUSED = 2
+    GAME_OVER = 3
+
 
 class SimpleGameEngine:
 
@@ -56,6 +66,8 @@ class SimpleGameEngine:
         # Store default dimensions
         self.default_width = width
         self.default_height = height
+        
+        self.game_state = GameState.MAIN_MENU
         
         # Set up the display
         self.width = width
@@ -157,6 +169,14 @@ class SimpleGameEngine:
         
         self.item_manager = None  # Will be set after initialization
 
+        # Create main menu - make sure this happens AFTER pygame is initialized
+        self.main_menu = MainMenu(
+            width, 
+            height, 
+            start_game_callback=self._start_game_from_menu,
+            quit_callback=self._quit_game
+        )
+        print(f"DEBUG: Main menu initialized with dimensions {width}x{height}")
 
         
         # Game state
@@ -379,7 +399,24 @@ class SimpleGameEngine:
             elif event.type == pygame.VIDEORESIZE:
                 if not self.fullscreen:
                     self.handle_resize(event.w, event.h)
+                    
+                    # Update main menu if it exists
+                    if hasattr(self, 'main_menu'):
+                        self.main_menu.update_screen_size(self.width, self.height)
+            
+            # If in main menu, let it handle events
+            if self.game_state == GameState.MAIN_MENU:
+                if hasattr(self, 'main_menu') and self.main_menu.handle_event(event):
+                    continue
                 
+                # Check for Escape key to quit from menu
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.running = False
+                    return
+                    
+                # Skip other event handling in menu mode
+                continue
+            
             # Let UI handle events first (for active chat input)
             if self.ui.handle_event(event):
                 continue
@@ -594,6 +631,10 @@ class SimpleGameEngine:
     
     def update(self):
         """Update game logic"""
+        
+        if self.game_state == GameState.MAIN_MENU:
+            return
+            
         if self.paused:
             return
         
@@ -743,6 +784,17 @@ class SimpleGameEngine:
         # Clear the screen
         self.screen.fill((0, 0, 0))
         
+        
+        # If in main menu, render it and return
+        if self.game_state == GameState.MAIN_MENU:
+            if hasattr(self, 'main_menu'):
+                self.main_menu.render(self.screen)
+            else:
+                print("ERROR: Main menu not initialized")
+            pygame.display.flip()
+            return
+        
+        
         # Draw the world map first
         if self.world_map:
             self.world_map.render(self.screen, self.camera)
@@ -798,3 +850,18 @@ class SimpleGameEngine:
             print("Created and set default icon")
         except Exception as e:
             print(f"Error creating default icon: {e}")
+            
+            
+    # Add these methods to the SimpleGameEngine class
+    def _start_game_from_menu(self):
+        """Start the game from the main menu"""
+        print("Starting game from menu")
+        self.game_state = GameState.RUNNING
+        
+        # Load item icons after pygame is initialized
+        self.load_item_icons()
+
+    def _quit_game(self):
+        """Quit the game from the main menu"""
+        print("Quitting game from menu")
+        self.running = False
