@@ -4,6 +4,8 @@ from engine.ui.panels.stats_panel import StatsPanel
 from engine.ui.elements.text_bubble import TextBubble
 from engine.ui.elements.chat_input import ChatInputBox
 from engine.ui.panels.character_info_panel import CharacterInfoPanel
+from engine.ui.panels.inventory_panel import InventoryPanel
+import pygame
 
 class UIManager:
     """Manages all UI elements"""
@@ -24,6 +26,13 @@ class UIManager:
         panel_y = (screen_height - panel_height) // 2
         self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
         self.elements.append(self.char_info_panel)
+        
+        # Create inventory panel
+        inv_panel_width = 400
+        inv_panel_height = 300
+        inv_panel_x = (screen_width - inv_panel_width) // 2
+        inv_panel_y = (screen_height - inv_panel_height) // 2
+        self.inventory_panel = None  # Will be set when player is added
     
     def update_screen_size(self, screen_width, screen_height):
         """Update UI elements when screen size changes"""
@@ -44,6 +53,37 @@ class UIManager:
                 # Center character info panel
                 element.x = (self.screen_width - element.width) // 2
                 element.y = (self.screen_height - element.height) // 2
+            elif isinstance(element, InventoryPanel):
+                # Center inventory panel
+                element.x = (self.screen_width - element.width) // 2
+                element.y = (self.screen_height - element.height) // 2
+
+    def set_player_inventory(self, player):
+        """Set up the inventory panel for the player"""
+        if player and hasattr(player, 'inventory'):
+            inv_panel_width = 400
+            inv_panel_height = 300
+            inv_panel_x = (self.screen_width - inv_panel_width) // 2
+            inv_panel_y = (self.screen_height - inv_panel_height) // 2
+            
+            self.inventory_panel = InventoryPanel(
+                inv_panel_x, inv_panel_y, inv_panel_width, inv_panel_height, player.inventory
+            )
+            self.elements.append(self.inventory_panel)
+            
+            # Make the panel draggable
+            self.inventory_panel.draggable = True
+            
+            print(f"DEBUG: Inventory panel created for player with {player.inventory.size} slots")
+            return self.inventory_panel
+        return None
+
+    def toggle_inventory(self):
+        """Toggle the visibility of the inventory panel"""
+        if self.inventory_panel:
+            self.inventory_panel.toggle_visibility()
+            return True
+        return False
 
     def show_entity_info(self, entity):
         """Show the character info panel for an entity"""
@@ -104,13 +144,14 @@ class UIManager:
                 print(f"DEBUG: Skipping duplicate chat log entry for {entity_name}")
         
         return bubble
-
-
-        
         
     def handle_event(self, event):
         """Handle UI events"""
-        # First check if character info panel is visible and should handle the event
+        # First check if inventory panel is visible and should handle the event
+        if self.inventory_panel and self.inventory_panel.visible and self.inventory_panel.handle_event(event):
+            return True
+            
+        # Then check if character info panel is visible and should handle the event
         if self.char_info_panel.visible and self.char_info_panel.handle_event(event):
             return True
             
@@ -118,6 +159,11 @@ class UIManager:
         for element in self.elements:
             if hasattr(element, 'handle_event') and element.handle_event(event):
                 return True
+                
+        # Check for inventory toggle key (I)
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_i:
+            self.toggle_inventory()
+            return True
                 
         return False
         

@@ -114,23 +114,8 @@ class Item(ABC):
         
         return True
     
-    def stack_with(self, other: 'Item') -> int:
-        """
-        Stack this item with another item of the same type
-        
-        Returns:
-            int: Number of items that couldn't be stacked (overflow)
-        """
-        if not self.can_stack_with(other):
-            return other.quantity
-        
-        total = self.quantity + other.quantity
-        if total <= self.max_stack:
-            self.quantity = total
-            return 0
-        else:
-            self.quantity = self.max_stack
-            return total - self.max_stack
+
+
     
     def split(self, amount: int) -> Optional['Item']:
         """
@@ -138,10 +123,11 @@ class Item(ABC):
         
         Args:
             amount: Number of items to take from this stack
-            
+                
         Returns:
             Item: A new item with the specified quantity, or None if not enough items
         """
+        # Validate the amount
         if amount <= 0 or amount >= self.quantity:
             return None
             
@@ -154,8 +140,37 @@ class Item(ABC):
         if self.durability is not None:
             new_item.durability = self.durability
             
+        # Ensure icon is loaded
+        if new_item.icon is None:
+            new_item._load_icon()
+            
+        print(f"DEBUG: Split {amount} from stack, original now has {self.quantity}, new item has {new_item.quantity}")
         return new_item
-    
+        
+    def stack_with(self, other: 'Item') -> int:
+        """
+        Stack this item with another item of the same type
+        
+        Returns:
+            int: Number of items that couldn't be stacked (overflow)
+        """
+        if not self.can_stack_with(other):
+            print(f"DEBUG: Cannot stack {self.item_id} with {other.item_id}")
+            return other.quantity
+        
+        # Calculate how many can be added
+        space_available = self.max_stack - self.quantity
+        amount_to_add = min(other.quantity, space_available)
+        
+        # Add items
+        self.quantity += amount_to_add
+        
+        # Calculate overflow
+        overflow = other.quantity - amount_to_add
+        
+        print(f"DEBUG: Stacked {amount_to_add} items, {overflow} overflow")
+        return overflow
+
     def create_instance(self) -> 'Item':
         """Create a new instance of this item type"""
         # This will be overridden by subclasses to create proper instances
