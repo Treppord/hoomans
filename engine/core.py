@@ -11,6 +11,7 @@ from engine.data_manager import DataManager
 from engine.ui.ui_manager import UIManager
 from engine.ui.panels.stats_panel import StatsPanel
 from engine.ui.elements.chat_input import ChatInputBox
+from engine.ui.theme_manager import ThemeManager
 from engine.camera import Camera
 import random
 import os
@@ -67,6 +68,8 @@ class SimpleGameEngine:
         self.default_width = width
         self.default_height = height
         
+        self.last_update_time = 0
+        
         self.game_state = GameState.MAIN_MENU
         
         # Set up the display
@@ -75,6 +78,7 @@ class SimpleGameEngine:
         self.fullscreen = False
         self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
         pygame.display.set_caption(title)
+        self.theme_manager = ThemeManager()
         
         # Load and set the window icon
         try:
@@ -431,6 +435,24 @@ class SimpleGameEngine:
                 self.toggle_borderless_fullscreen()
                 continue
                 
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F1:
+                    # Toggle ambient effects
+                    self.theme_manager.toggle_ambient_effects()
+                    print(f"Ambient effects: {'ON' if self.theme_manager.use_ambient_effects else 'OFF'}")
+                elif event.key == pygame.K_F2:
+                    # Toggle particles
+                    self.theme_manager.toggle_particles()
+                    print(f"Particles: {'ON' if self.theme_manager.use_particles else 'OFF'}")
+                elif event.key == pygame.K_F3:
+                    # Toggle decorative elements
+                    self.theme_manager.toggle_decorative_elements()
+                    print(f"Decorative elements: {'ON' if self.theme_manager.use_decorative_elements else 'OFF'}")
+                elif event.key == pygame.K_F4:
+                    # Toggle lighting effects
+                    self.theme_manager.toggle_lighting()
+                    print(f"Lighting effects: {'ON' if self.theme_manager.use_lighting else 'OFF'}")
+                
             # Add grid toggle with G key
             if event.type == pygame.KEYDOWN and event.key == pygame.K_g:
                 self.show_grid = not self.show_grid
@@ -638,6 +660,16 @@ class SimpleGameEngine:
         if self.paused:
             return
         
+        # Calculate delta time
+        current_time = pygame.time.get_ticks()
+        delta_time = (current_time - self.last_update_time) / 1000.0  # Convert to seconds
+        self.last_update_time = current_time
+        
+        # Update theme manager
+        self.theme_manager.update(delta_time)
+        
+        # Add ambient particles
+        self.theme_manager.add_ambient_particles(self.camera, count=1)
         
             
         self.camera.update()
@@ -794,6 +826,8 @@ class SimpleGameEngine:
             pygame.display.flip()
             return
         
+        self.theme_manager.render_background(self.screen, self.camera)
+        
         
         # Draw the world map first
         if self.world_map:
@@ -808,6 +842,9 @@ class SimpleGameEngine:
         if self.world_map and hasattr(self.world_map, 'entity_tile_manager'):
             self.world_map.entity_tile_manager.render(self.screen, self.camera)
     
+        
+        self.theme_manager.render_foreground(self.screen, self.camera)
+
         
         # Draw UI elements last (on top)
         self.ui.render(self.screen)
@@ -828,6 +865,10 @@ class SimpleGameEngine:
         # Clean up
         if hasattr(self, 'ai_universe'):
             self.ai_universe.stop()
+            
+        self.theme_manager.render_background(self.screen, self.camera)
+        self.theme_manager.render_foreground(self.screen, self.camera)
+        
             
         pygame.quit()
         sys.exit()

@@ -137,7 +137,7 @@ if __name__ == "__main__":
     
     engine.set_world_map(world_map)
     
-    
+
     
     # Initialize world cache with the same seed
     world_cache = WorldCache()

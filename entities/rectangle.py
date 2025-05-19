@@ -220,6 +220,7 @@ class Rectangle:
         self.previous_grid_x = self.grid_x
         self.previous_grid_y = self.grid_y
         
+        
         # Update visual position with smooth interpolation
         self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
         self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
@@ -248,6 +249,7 @@ class Rectangle:
                 
         # Handle movement towards target
         if self.is_moving:
+            self.add_footstep_particles()
             # Check if we've reached the target
             if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                 # Only set is_moving to False if we're not a player or if no movement keys are pressed
@@ -469,3 +471,146 @@ class Rectangle:
             for i, slot in enumerate(self.inventory.slots):
                 if slot.item:
                     print(f"DEBUG: Slot {i}: {slot.item.name} x{slot.item.quantity}")
+
+    def add_footstep_particles(self):
+        """Add subtle footstep particles that form a trail from previous position to current position"""
+        import random
+        # Skip if not moving
+        if not self.is_moving:
+            return
+            
+        # Get the game engine instance
+        from engine.core import SimpleGameEngine
+        if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
+            return
+                
+        # Calculate world coordinates for previous and current positions
+        prev_world_x = self.previous_grid_x * 16 + 8
+        prev_world_y = self.previous_grid_y * 16 + 14
+        curr_world_x = self.grid_x * 16 + 8
+        curr_world_y = self.grid_y * 16 + 14
+        
+        # Calculate direction and distance
+        dx = curr_world_x - prev_world_x
+        dy = curr_world_y - prev_world_y
+        distance = max(1, (dx*dx + dy*dy) ** 0.5)  # Avoid division by zero
+        
+        # Skip if no movement
+        if distance < 0.1:
+            return
+        
+        # Number of particles based on distance
+        num_particles = min(5, max(1, int(distance / 4)))
+        
+        # Get world map to access tile colors
+        world_map = None
+        if hasattr(SimpleGameEngine.instance, 'world_map'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        # Create particles along the path
+        for i in range(num_particles):
+            # Position along the path
+            fraction = i / max(1, num_particles - 1)
+            x = prev_world_x + dx * fraction
+            y = prev_world_y + dy * fraction
+            
+            # Add small random offset
+            x += random.uniform(-2, 2)
+            y += random.uniform(-2, 2)
+            
+            # Get the tile at this position
+            tile_x = int(x // 16)
+            tile_y = int(y // 16)
+            
+            # Get tile color from the world map
+            particle_color = self._get_tile_color(world_map, tile_x, tile_y)
+            
+            # Create smaller, shorter-lived particles
+            SimpleGameEngine.instance.theme_manager.add_impact_particles(
+                x, y, 
+                count=3,  # Just one particle per point
+                color=particle_color,
+                size_range=(0.1, 0.3),  # Smaller size
+                lifetime_range=(0.2, 0.5),  # Shorter lifetime
+                velocity_range=(0.1, 0.3)  # Slower movement
+            )
+
+    def _get_tile_color(self, world_map, tile_x, tile_y):
+        import random
+        """Get the color of a tile at the specified position"""
+        # Default color with low alpha
+        default_color = (150, 150, 150, 60)
+        
+        # If no world map, return default color
+        if not world_map:
+            return default_color
+        
+        # Get the tile at this position
+        tile = world_map.get_tile(tile_x, tile_y)
+        if not tile:
+            return default_color
+        
+        # Get base color for the tile type
+        if hasattr(tile, 'colors') and tile.type in tile.colors:
+            base_color = tile.colors[tile.type]
+        else:
+            # Try to get color from the tile's texture if available
+            if hasattr(tile, 'selected_texture') and tile.selected_texture:
+                # Sample the center pixel of the texture
+                texture = tile.selected_texture
+                try:
+                    # Get the center pixel color
+                    width, height = texture.get_size()
+                    center_x, center_y = width // 2, height // 2
+                    base_color = texture.get_at((center_x, center_y))[:3]  # Ignore alpha
+                except:
+                    # Fallback to default color
+                    base_color = default_color[:3]
+            else:
+                # Fallback to default color
+                base_color = default_color[:3]
+        
+        # Add variation based on tile type
+        if tile.type == "grass":
+            # Grass particles (green/brown)
+            r = min(255, base_color[0] + random.randint(-10, 10))
+            g = min(255, base_color[1] + random.randint(-10, 10))
+            b = min(255, base_color[2] + random.randint(-10, 10))
+            alpha = 70  # Slightly higher alpha for grass
+        elif tile.type == "sand":
+            # Sand particles (tan/yellow)
+            r = min(255, base_color[0] + random.randint(-5, 5))
+            g = min(255, base_color[1] + random.randint(-5, 5))
+            b = min(255, base_color[2] + random.randint(-5, 5))
+            alpha = 80  # Higher alpha for sand (more visible)
+        elif tile.type in ["path", "dirt"]:
+            # Dirt particles (brown)
+            r = min(255, base_color[0] + random.randint(-10, 10))
+            g = min(255, base_color[1] + random.randint(-10, 10))
+            b = min(255, base_color[2] + random.randint(-10, 10))
+            alpha = 90  # Higher alpha for dirt (more visible)
+        elif tile.type in ["snow"]:
+            # Snow particles (white)
+            r = min(255, base_color[0] + random.randint(-5, 5))
+            g = min(255, base_color[1] + random.randint(-5, 5))
+            b = min(255, base_color[2] + random.randint(-5, 5))
+            alpha = 100  # Higher alpha for snow (more visible)
+        elif tile.is_water():
+            # Water splash particles (blue)
+            r = min(255, base_color[0] + random.randint(-10, 10))
+            g = min(255, base_color[1] + random.randint(-10, 10))
+            b = min(255, base_color[2] + random.randint(-10, 10))
+            alpha = 120  # Higher alpha for water (more visible)
+        else:
+            # Default particles
+            r = min(255, base_color[0] + random.randint(-10, 10))
+            g = min(255, base_color[1] + random.randint(-10, 10))
+            b = min(255, base_color[2] + random.randint(-10, 10))
+            alpha = 60  # Default alpha
+        
+        # Ensure valid RGB values
+        r = max(0, min(255, r))
+        g = max(0, min(255, g))
+        b = max(0, min(255, b))
+        
+        return (r, g, b, alpha)
