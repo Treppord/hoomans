@@ -208,7 +208,7 @@ class CharacterInfoPanel(UIElement):
         stats_y = self.y + self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
         
         # Display entity stats if available
-        if hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or hasattr(self.entity, 'health'):
+        if hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or hasattr(self.entity, 'health') or hasattr(self.entity, 'comfort'):
             stats_title = self.font.render("Entity Stats", True, self.title_color)
             screen.blit(stats_title, (self.x + self.padding, stats_y))
             stats_y += 30
@@ -232,6 +232,13 @@ class CharacterInfoPanel(UIElement):
                 health_text = f"Health: {self.entity.health}/20"
                 health_surface = self.small_font.render(health_text, True, self.text_color)
                 screen.blit(health_surface, (self.x + self.padding, stats_y))
+                stats_y += 25
+                
+            # Display comfort if available
+            if hasattr(self.entity, 'comfort'):
+                comfort_text = f"Comfort: {self.entity.comfort}/20"
+                comfort_surface = self.small_font.render(comfort_text, True, self.text_color)
+                screen.blit(comfort_surface, (self.x + self.padding, stats_y))
                 stats_y += 25
         
         # Right side - CNA attributes

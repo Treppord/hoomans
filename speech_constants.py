@@ -10,6 +10,21 @@ class SpeechConstants:
         
     ]
     
+    COMFORT_SEEKING_SPEECHES = [
+        # Urgent thirst
+        "Searching COMFORT"
+    ]
+    
+    COMFORT_RESTING_SPEECHES = [
+        # Urgent thirst
+        "Resting COMFORT"
+    ]
+    
+    COMFORT_SATISFIED_SPEECHES = [
+        # Urgent thirst
+        "COMFORT SATISFIED"
+    ]
+    
     # Water-related speeches
     WATER_SEEKING_SPEECHES = [
         # Urgent thirst

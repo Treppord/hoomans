@@ -6,7 +6,6 @@ import os
 from engine.constants import TimeConstants, GameBalanceConstants
 from speech_constants import SpeechConstants
 
-
 class NPC(Rectangle):
     """An NPC entity controlled by AI"""
     
@@ -53,6 +52,11 @@ class NPC(Rectangle):
         
         self.heading_to_known_water = False  # Add this line to fix the error
         self.heading_to_food = False  # Also initialize food-seeking attribute
+        
+        self.comfort = GameBalanceConstants.STARTING_COMFORT  # Start with hunger
+        self.last_comfort_update = 0
+        self.heading_to_comfort = False  # Also initialize food-seeking attribute
+    
 
         
         # If an AI controller was provided, set this entity as its target
@@ -139,8 +143,10 @@ class NPC(Rectangle):
                     if self.thirst == 10 or (old_thirst < 3 and self.thirst > old_thirst):
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
                             if self.thirst == 10:
+                                import random
                                 SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SATISFIED_SPEECHES), self, duration=2.0)
                             else:
+                                import random
                                 SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_DRINKING_SPEECHES), self, duration=1.5)
             
             # If we're fully hydrated now, we can continue with other activities
@@ -228,7 +234,9 @@ class NPC(Rectangle):
                         
                         # Show a speech bubble about going to water
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            import random
                             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SEEKING_SPEECHES), self, duration=2.0)
+                            
         # Check if we're critically hungry and should seek food
         if hasattr(self, 'hunger') and self.hunger <= 3 and not self.is_moving:
             # Try to find food nearby
@@ -238,6 +246,69 @@ class NPC(Rectangle):
             if hasattr(self, 'heading_to_food') and self.heading_to_food:
                 return
         
+        # Check if we're critically hungry and should seek food
+        if hasattr(self, 'comfort') and self.comfort <= 3 and not self.is_moving:
+            # Try to find food nearby
+            self.start_searching_for_comfort()
+            
+            # If we're heading to food, override other actions
+            if hasattr(self, 'heading_to_comfort') and self.heading_to_comfort:
+                return
+            
+        if hasattr(self, 'is_resting') and self.is_resting:
+            # Increase comfort while resting
+            if current_time - self.last_comfort_update > TimeConstants.COMFORT_INCREASE_INTERVAL:
+                old_comfort = self.comfort
+                self.comfort = min(GameBalanceConstants.MAX_COMFORT, self.comfort + 1)
+                self.last_comfort_update = current_time
+                
+                # Show message if comfort increased
+                if self.comfort > old_comfort:
+                    print(f"NPC {self.get_entity_id()} comfort increased to {self.comfort} while resting")
+                    
+                    # Show a speech bubble occasionally
+                    if self.comfort % 5 == 0:  # Every 5 comfort points
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            comfort_speeches = [
+                                "This rest is doing me good.",
+                                "I'm feeling more comfortable.",
+                                "Resting is improving my comfort.",
+                                "I needed this rest."
+                            ]
+                            import random
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(comfort_speeches), self, duration=2.0)
+                
+                # Check if we've reached maximum comfort
+                if self.comfort >= GameBalanceConstants.MAX_COMFORT:
+                    # We're fully rested, stop resting and leave the house
+                    self.is_resting = False
+                    self.heading_to_comfort = False
+                    
+                    print(f"NPC {self.get_entity_id()} is fully rested, leaving the house")
+                    
+                    # Show a speech bubble about leaving
+                    from engine.core import SimpleGameEngine
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        leave_speeches = [
+                            "I'm fully rested now.",
+                            "Time to get back outside.",
+                            "That was a good rest.",
+                            "I feel much better now."
+                        ]
+                        import random
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(leave_speeches), self, duration=2.0)
+                    
+                    # Move outside the house
+                    self._leave_house()
+            
+            # Only update visual position while resting
+            self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
+            self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
+            
+            # Update animation (from Rectangle class)
+            self.update_animation()
+            
         # Check if we're standing on water (emergency situation)
         from engine.core import SimpleGameEngine
         world_map = None
@@ -279,6 +350,7 @@ class NPC(Rectangle):
                             "This water is just what I needed.",
                             "So good to drink water when you're thirsty!"
                         ]
+                        import random
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
                     
                     # After drinking, start exploring
@@ -345,6 +417,7 @@ class NPC(Rectangle):
                     
                     # Show a speech bubble about escaping water
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        import random
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_ESCAPE_SPEECHES), self, duration=1.5)
         
         # Check if we're adjacent to water but not on it - this is good for drinking!
@@ -390,6 +463,7 @@ class NPC(Rectangle):
                         "This water is just what I needed.",
                         "So good to drink water when you're thirsty!"
                     ]
+                    import random
                     SimpleGameEngine.instance.ui.add_text_bubble(random.choice(water_speeches), self, duration=2.0)
                 
                 # After drinking, start exploring
@@ -417,6 +491,7 @@ class NPC(Rectangle):
                     
                     # Show a speech bubble about drinking
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        import random
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_FOUND_SPEECHES), self, duration=1.5)
                     # Don't start exploring immediately after drinking
                     return
@@ -476,6 +551,7 @@ class NPC(Rectangle):
                                 
                                 # Show a speech bubble about finding water
                                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                                    import random
                                     SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SEEKING_SPEECHES), self, duration=2.0)
                                 # After drinking, start exploring
                                 self.start_exploring()
@@ -558,7 +634,7 @@ class NPC(Rectangle):
                         self.start_exploring()
         
         # Check if we're fully hydrated but not moving - start exploring
-        if hasattr(self, 'thirst') and self.thirst >= 9 and not self.is_moving:
+        if hasattr(self, 'thirst') and self.thirst >= 7 and not self.is_moving:
             # If we've been idle for more than 3 seconds after drinking, start exploring
             if (hasattr(self, 'last_drink_time') and 
                 current_time - self.last_drink_time > 3000):
@@ -578,6 +654,13 @@ class NPC(Rectangle):
                 self.hunger -= 1
                 print(f"NPC {self.get_entity_id()} hunger decreased to {self.hunger}")
             self.last_hunger_update = current_time
+            
+        # Decrease comfort every 10 seconds 
+        if current_time - self.last_comfort_update > TimeConstants.COMFORT_DECREASE_INTERVAL:
+            if self.comfort > 0:
+                self.comfort -= 1
+                print(f"NPC {self.get_entity_id()} comfort decreased to {self.comfort}")
+            self.last_comfort_update = current_time
 
 
 
@@ -837,6 +920,7 @@ class NPC(Rectangle):
         # Show a speech bubble about exploring
         from engine.core import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+            import random
             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
 
 
@@ -871,6 +955,7 @@ class NPC(Rectangle):
                     "Time to explore the forest.",
                     "The forest should be this way."
                 ]
+                import random
                 SimpleGameEngine.instance.ui.add_text_bubble(random.choice(forest_speeches), self, duration=2.0)
             
             return
@@ -936,6 +1021,7 @@ class NPC(Rectangle):
                         "I should check out that forest.",
                         "A forest! Let's explore it."
                     ]
+                    import random
                     SimpleGameEngine.instance.ui.add_text_bubble(random.choice(forest_speeches), self, duration=2.0)
                 
                 return
@@ -1070,6 +1156,7 @@ class NPC(Rectangle):
             # Just display the speech bubble and don't change any other state
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                import random
                 SimpleGameEngine.instance.ui.add_text_bubble(decision.speech, self, duration=4.0)
                 print(f"DEBUG: NPC {self.get_entity_id()} responding to chat: '{decision.speech}'")
             
@@ -1140,6 +1227,7 @@ class NPC(Rectangle):
             # Show a speech bubble about escaping water
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                import random
                 SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_ESCAPE_SPEECHES), self, duration=1.5)
             return
         if hasattr(decision, 'is_heading_to_known_water') and decision.is_heading_to_known_water:
@@ -1234,6 +1322,7 @@ class NPC(Rectangle):
                         # Show a speech bubble about going to water
                         from engine.core import SimpleGameEngine
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            import random
                             SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_SEEKING_SPEECHES), self, duration=2.0)
                     # Override the AI decision
                     return
@@ -1256,14 +1345,8 @@ class NPC(Rectangle):
                         # Show a speech bubble about drinking
                         from engine.core import SimpleGameEngine
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            drinking_speeches = [
-                                "Ah, refreshing water!",
-                                "Finally, water!",
-                                "This water tastes so good when you're thirsty.",
-                                "I'm glad I remembered this water source.",
-                                "Water, sweet water!"
-                            ]
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(drinking_speeches), self, duration=2.0)
+                            import random
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.WATER_DRINKING_SPEECHES), self, duration=2.0)
                         
                         # After drinking, start exploring for forest
                         self.start_exploring_for_forest()
@@ -1339,6 +1422,7 @@ class NPC(Rectangle):
                     # Show a speech bubble about exploring
                     from engine.core import SimpleGameEngine
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        import random
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EXPLORING_SPEECHES), self, duration=2.0)
 
         elif decision.action == "eat" and self.hunger < 5:
@@ -1352,6 +1436,7 @@ class NPC(Rectangle):
             # Show a speech bubble about eating
             from engine.core import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                import random
                 SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.EATING_SPEECHES), self, duration=2.0)
 
 
@@ -1394,6 +1479,354 @@ class NPC(Rectangle):
             summary["interesting_locations"][location_type] = len(locations)
         
         return summary
+    
+    def start_searching_for_comfort(self):
+        """Start searching for a house to rest in when uncomfortable"""
+        from engine.core import SimpleGameEngine
+        world_map = None
+        if hasattr(SimpleGameEngine, 'instance'):
+            world_map = SimpleGameEngine.instance.world_map
+        
+        # Get current position
+        current_x = self.grid_x
+        current_y = self.grid_y
+        
+        # Set flag that we're looking for comfort
+        self.heading_to_comfort = True
+        
+        # Check if we're already inside a house
+        if self._is_inside_house():
+            # We're already in a house, start resting
+            self._start_resting_in_house()
+            return True
+        
+        # First, check if we know about any houses
+        if hasattr(self, 'interesting_locations') and 'house' in self.interesting_locations and self.interesting_locations['house']:
+            # We know about houses, head to the nearest one
+            nearest_house = min(self.interesting_locations['house'], 
+                            key=lambda loc: abs(loc[0] - current_x) + abs(loc[1] - current_y))
+            house_x, house_y = nearest_house
+            
+            print(f"DEBUG: NPC {self.get_entity_id()} heading to known house at ({house_x}, {house_y})")
+            
+            # Use pathfinding to find a safe path to the house
+            if world_map:
+                path = self._find_safe_path(
+                    current_x, current_y, 
+                    house_x, house_y, 
+                    world_map
+                )
+                
+                if path and len(path) > 1:
+                    # Path found, move to the next position in the path
+                    next_pos = path[1]  # path[0] is current position
+                    
+                    print(f"DEBUG: NPC {self.get_entity_id()} moving to {next_pos} on path to house")
+                    
+                    # Set target to the next position
+                    self.target_grid_x = next_pos[0]
+                    self.target_grid_y = next_pos[1]
+                    
+                    # Store the final destination for future steps
+                    self.final_destination_x = house_x
+                    self.final_destination_y = house_y
+                    
+                    # Set moving state
+                    self.is_moving = True
+                    
+                    # Show a speech bubble about heading to house
+                    from engine.core import SimpleGameEngine
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        house_speeches = [
+                            "I need to rest in a house.",
+                            "I'll head to that house to rest.",
+                            "Time to get some rest.",
+                            "I need to improve my comfort level."
+                        ]
+                        import random
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(house_speeches), self, duration=2.0)
+                    
+                    return True
+                else:
+                    print(f"DEBUG: NPC {self.get_entity_id()} couldn't find path to house, exploring instead")
+                    self.start_exploring()
+                    return False
+            else:
+                # No world map available, use direct movement
+                self.target_grid_x = house_x
+                self.target_grid_y = house_y
+                self.is_moving = True
+                
+                # Show a speech bubble about heading to house
+                from engine.core import SimpleGameEngine
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                    house_speeches = [
+                        "I need to rest in a house.",
+                        "I'll head to that house to rest.",
+                        "Time to get some rest.",
+                        "I need to improve my comfort level."
+                    ]
+                    import random
+                    SimpleGameEngine.instance.ui.add_text_bubble(random.choice(house_speeches), self, duration=2.0)
+                
+                return True
+        
+        # If we don't know any houses, search in the world
+        if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
+            # Check if we have an entity tile manager
+            if hasattr(SimpleGameEngine.instance, 'world_map') and hasattr(SimpleGameEngine.instance.world_map, 'entity_tile_manager'):
+                entity_tile_manager = SimpleGameEngine.instance.world_map.entity_tile_manager
+                
+                # Look for house entities in a radius
+                house_positions = []
+                search_radius = GameBalanceConstants.NPC_HOUSE_VIEW_RANGE
+                
+                # Iterate through all entity tiles
+                for entity_tile in entity_tile_manager.entity_tiles:
+                    # Check if this is a house (without importing HouseEntityTile)
+                    if entity_tile.__class__.__name__ == 'HouseEntityTile':
+                        # Calculate distance to house
+                        house_x, house_y = entity_tile.base_x, entity_tile.base_y
+                        dx = abs(house_x - current_x)
+                        dy = abs(house_y - current_y)
+                        
+                        # Check if house is within view range
+                        if dx <= search_radius and dy <= search_radius:
+                            # Find the door position (usually bottom-left)
+                            door_x, door_y = house_x, house_y + 1
+                            if hasattr(entity_tile, 'door_position'):
+                                door_x, door_y = entity_tile.door_position
+                            
+                            house_positions.append((door_x, door_y, entity_tile))
+                
+                if house_positions:
+                    # Found houses, head to the nearest one
+                    nearest_house = min(house_positions, 
+                                    key=lambda pos: abs(pos[0] - current_x) + abs(pos[1] - current_y))
+                    door_x, door_y, house_entity = nearest_house
+                    
+                    print(f"DEBUG: NPC {self.get_entity_id()} discovered house at ({door_x}, {door_y})")
+                    
+                    # Add to interesting locations
+                    if not hasattr(self, 'interesting_locations'):
+                        self.interesting_locations = {}
+                    if 'house' not in self.interesting_locations:
+                        self.interesting_locations['house'] = []
+                    
+                    # Check if we already have this location
+                    location_exists = False
+                    for loc in self.interesting_locations.get('house', []):
+                        if loc[0] == door_x and loc[1] == door_y:
+                            location_exists = True
+                            break
+                    
+                    if not location_exists:
+                        self.interesting_locations['house'].append((door_x, door_y))
+                        
+                        # Record in world cache if available
+                        from engine.core import SimpleGameEngine
+                        if (hasattr(SimpleGameEngine, 'instance') and 
+                            hasattr(SimpleGameEngine.instance, 'world_cache')):
+                            SimpleGameEngine.instance.world_cache.add_location_discovery(
+                                self.get_entity_id(),
+                                'house',
+                                door_x,
+                                door_y,
+                                "House"
+                            )
+                    
+                    # Use pathfinding to find a safe path to the house
+                    if world_map:
+                        path = self._find_safe_path(
+                            current_x, current_y, 
+                            door_x, door_y, 
+                            world_map
+                        )
+                        
+                        if path and len(path) > 1:
+                            # Path found, move to the next position in the path
+                            next_pos = path[1]  # path[0] is current position
+                            
+                            print(f"DEBUG: NPC {self.get_entity_id()} moving to {next_pos} on path to house")
+                            
+                            # Set target to the next position
+                            self.target_grid_x = next_pos[0]
+                            self.target_grid_y = next_pos[1]
+                            
+                            # Store the final destination for future steps
+                            self.final_destination_x = door_x
+                            self.final_destination_y = door_y
+                            
+                            # Set moving state
+                            self.is_moving = True
+                            
+                            # Show a speech bubble about finding house
+                            from engine.core import SimpleGameEngine
+                            if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                                house_speeches = [
+                                    "I see a house where I can rest!",
+                                    "There's a house over there.",
+                                    "I should rest in that house.",
+                                    "A house! I can improve my comfort there."
+                                ]
+                                import random
+                                SimpleGameEngine.instance.ui.add_text_bubble(random.choice(house_speeches), self, duration=2.0)
+                            
+                            return True
+                        else:
+                            print(f"DEBUG: NPC {self.get_entity_id()} couldn't find path to house, exploring instead")
+                            self.start_exploring()
+                            return False
+                    else:
+                        # No world map available, use direct movement
+                        self.target_grid_x = door_x
+                        self.target_grid_y = door_y
+                        self.is_moving = True
+                        
+                        # Show a speech bubble about finding house
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            house_speeches = [
+                                "I see a house where I can rest!",
+                                "There's a house over there.",
+                                "I should rest in that house.",
+                                "A house! I can improve my comfort there."
+                            ]
+                            import random
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(house_speeches), self, duration=2.0)
+                        
+                        return True
+        
+        # If no house found, just explore randomly
+        print(f"DEBUG: NPC {self.get_entity_id()} couldn't find a house, exploring instead")
+        self.start_exploring()
+        return False
+
+    def _find_safe_path(self, start_x, start_y, end_x, end_y, world_map, max_path_length=50):
+        """Find a path to a destination using A* pathfinding that avoids water"""
+        # Initialize open and closed sets
+        open_set = [(start_x, start_y)]
+        closed_set = set()
+        
+        # Track path and costs
+        came_from = {}
+        g_score = {(start_x, start_y): 0}
+        f_score = {(start_x, start_y): self._heuristic(start_x, start_y, end_x, end_y)}
+        
+        while open_set:
+            # Find node with lowest f_score
+            current = min(open_set, key=lambda pos: f_score.get(pos, float('inf')))
+            
+            # If we reached the end
+            if current[0] == end_x and current[1] == end_y:
+                # Reconstruct path
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append((start_x, start_y))
+                path.reverse()
+                return path
+            
+            # Move current from open to closed
+            open_set.remove(current)
+            closed_set.add(current)
+            
+            # Check neighbors
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:  # Only cardinal directions
+                neighbor = (current[0] + dx, current[1] + dy)
+                
+                # Skip if out of bounds or in closed set
+                if (not (0 <= neighbor[0] < world_map.width and 0 <= neighbor[1] < world_map.height) or
+                    neighbor in closed_set):
+                    continue
+                
+                # Get tile type for movement cost
+                tile = world_map.get_tile(neighbor[0], neighbor[1])
+                if not tile or not tile.is_walkable():
+                    continue
+                
+                # Avoid water tiles completely
+                if tile.is_water():
+                    continue
+                
+                # Check if this position is in our water avoidance list
+                if hasattr(self, 'water_avoidance_locations') and (neighbor[0], neighbor[1]) in self.water_avoidance_locations:
+                    continue
+                
+                # Higher cost for certain terrain types
+                if tile.type == "mountain":
+                    movement_cost = 10  # Very high cost for mountains
+                elif tile.type == "forest":
+                    movement_cost = 2   # Higher cost for forest
+                elif tile.type == "sand":
+                    movement_cost = 1.5 # Slightly higher cost for sand
+                else:
+                    movement_cost = 1   # Normal cost
+                
+                # Calculate tentative g_score
+                tentative_g = g_score.get(current, float('inf')) + movement_cost
+                
+                # Skip if path is too long
+                if tentative_g > max_path_length:
+                    continue
+                
+                # Add to open set if not there
+                if neighbor not in open_set:
+                    open_set.append(neighbor)
+                # Skip if this path is worse
+                elif tentative_g >= g_score.get(neighbor, float('inf')):
+                    continue
+                
+                # This is the best path so far
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g
+                f_score[neighbor] = tentative_g + self._heuristic(neighbor[0], neighbor[1], end_x, end_y)
+        
+        # No path found
+        return None
+
+
+    def _is_inside_house(self):
+        """Check if the NPC is currently inside a house"""
+        from engine.core import SimpleGameEngine
+        if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
+            # Check if we have an entity tile manager
+            if hasattr(SimpleGameEngine.instance, 'world_map') and hasattr(SimpleGameEngine.instance.world_map, 'entity_tile_manager'):
+                entity_tile_manager = SimpleGameEngine.instance.world_map.entity_tile_manager
+                
+                # Get the entity tile at our position
+                entity_tile = entity_tile_manager.get_entity_tile_at(self.grid_x, self.grid_y)
+                
+                # Check if this is a house
+                if entity_tile and entity_tile.__class__.__name__ == 'HouseEntityTile':
+                    return True
+        
+        return False
+
+    def _start_resting_in_house(self):
+        """Start resting in a house to improve comfort"""
+        # Set state for resting
+        self.is_resting = True
+        self.rest_start_time = pygame.time.get_ticks()
+        self.is_moving = False
+        
+        print(f"DEBUG: NPC {self.get_entity_id()} is resting in a house")
+        
+        # Show a speech bubble about resting
+        from engine.core import SimpleGameEngine
+        import random  # Add import here if needed
+        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+            rest_speeches = [
+                "Time to get some rest.",
+                "This house is comfortable.",
+                "I'll rest here for a while.",
+                "Ah, a nice place to rest."
+            ]
+            import random
+            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(rest_speeches), self, duration=2.0)
+
+        
 
     def start_searching_for_food(self):
         """Start searching for food when hungry with improved pathfinding that avoids water"""
@@ -1458,6 +1891,7 @@ class NPC(Rectangle):
                     # Show a speech bubble about finding food
                     from engine.core import SimpleGameEngine
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        import random
                         SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.FOOD_SEEKING_SPEECHES), self, duration=2.0)
                     
                     return True
@@ -1475,6 +1909,7 @@ class NPC(Rectangle):
                 # Show a speech bubble about finding food
                 from engine.core import SimpleGameEngine
                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                    import random
                     SimpleGameEngine.instance.ui.add_text_bubble(random.choice(SpeechConstants.FOOD_SEEKING_SPEECHES), self, duration=2.0)
                 
                 return True
@@ -1571,3 +2006,37 @@ class NPC(Rectangle):
     def _heuristic(self, x1, y1, x2, y2):
         """Calculate Manhattan distance heuristic"""
         return abs(x1 - x2) + abs(y1 - y2)
+
+    def _leave_house(self):
+        """Leave the house after resting"""
+        from engine.core import SimpleGameEngine
+        if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
+            # Check if we have an entity tile manager
+            if hasattr(SimpleGameEngine.instance, 'world_map') and hasattr(SimpleGameEngine.instance.world_map, 'entity_tile_manager'):
+                entity_tile_manager = SimpleGameEngine.instance.world_map.entity_tile_manager
+                
+                # Get the entity tile at our position
+                entity_tile = entity_tile_manager.get_entity_tile_at(self.grid_x, self.grid_y)
+                
+                # Check if this is a house
+                if entity_tile and entity_tile.__class__.__name__ == 'HouseEntityTile':
+                    # Find the door position
+                    door_x, door_y = entity_tile.base_x, entity_tile.base_y + 1
+                    if hasattr(entity_tile, 'door_position'):
+                        door_x, door_y = entity_tile.door_position
+                    
+                    # Move to a position outside the door
+                    outside_x = door_x
+                    outside_y = door_y + 1  # One tile below the door
+                    
+                    # Set target position
+                    self.target_grid_x = outside_x
+                    self.target_grid_y = outside_y
+                    self.is_moving = True
+                    
+                    print(f"DEBUG: NPC {self.get_entity_id()} leaving house, moving to ({outside_x}, {outside_y})")
+                    return
+        
+        # If we couldn't find the house or door, just start exploring
+        self.start_exploring()
+

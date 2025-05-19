@@ -10,8 +10,11 @@ class TimeConstants:
     FOOD_MOVE_COOLDOWN = 1500   # Time between food movements (slower than NPCs)
     
     # Need decay rates
-    THIRST_DECREASE_INTERVAL = 10000  # Thirst decreases every 10 seconds
-    HUNGER_DECREASE_INTERVAL = 15000  # Hunger decreases every 15 seconds
+    THIRST_DECREASE_INTERVAL = 30000  # Thirst decreases every 30 seconds
+    HUNGER_DECREASE_INTERVAL = 30000  # Hunger decreases every 30 seconds
+
+    COMFORT_DECREASE_INTERVAL = 10000  # Comfort decreases every 10 seconds
+    COMFORT_INCREASE_INTERVAL = 1000   # Comfort increases every 1 
     
     # Replenishment rates
     THIRST_REPLENISH_COOLDOWN = 2000  # Time between drinking water (2 seconds)
@@ -36,11 +39,14 @@ class GameBalanceConstants:
     MAX_THIRST = 10
     MAX_HUNGER = 10
     MAX_HEALTH = 20
+    MAX_COMFORT = 20
     
     # Starting values
     STARTING_THIRST = 10
     STARTING_HUNGER = 10
     STARTING_HEALTH = 20
+    STARTING_COMFORT = 1
+
     
     # Consumption values
     FOOD_NUTRITION_VALUE = 5  # How much hunger is restored when food is consumed
@@ -49,7 +55,10 @@ class GameBalanceConstants:
     # View ranges
     NPC_FOOD_VIEW_RANGE = 8  # Tiles around NPC to search for food
     NPC_WATER_VIEW_RANGE = 8  # Tiles around NPC to search for water
-    NPC_PLAYER_VIEW_RANGE = 8  # Tiles around NPC to detect player
+    NPC_PLAYER_VIEW_RANGE = 15  # Tiles around NPC to detect player
+    NPC_HOUSE_VIEW_RANGE = 15  # Tiles around NPC to search for houses
+
+
 
 # Movement and animation constants
 class MovementConstants:

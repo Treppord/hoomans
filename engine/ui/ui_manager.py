@@ -27,11 +27,6 @@ class UIManager:
         self.char_info_panel = CharacterInfoPanel(panel_x, panel_y, panel_width, panel_height)
         self.elements.append(self.char_info_panel)
         
-        # Create inventory panel
-        inv_panel_width = 400
-        inv_panel_height = 300
-        inv_panel_x = (screen_width - inv_panel_width) // 2
-        inv_panel_y = (screen_height - inv_panel_height) // 2
         self.inventory_panel = None  # Will be set when player is added
     
     def update_screen_size(self, screen_width, screen_height):

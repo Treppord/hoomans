@@ -101,6 +101,16 @@
           "name": "Water source"
         },
         "timestamp": 1747592547.6429682
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 45,
+          "y": 23,
+          "name": "Water source"
+        },
+        "timestamp": 1747668665.491765
       }
     ],
     "0bc80fdff344d30008": [
@@ -153,6 +163,16 @@
           "name": "Water source"
         },
         "timestamp": 1747667305.455261
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "house",
+          "x": 20,
+          "y": 11,
+          "name": "House"
+        },
+        "timestamp": 1747670210.1494431
       }
     ]
   },
@@ -268,9 +288,29 @@
           "0bc80fdff344d30008"
         ],
         "discovery_time": 1747667305.455262
+      },
+      {
+        "x": 45,
+        "y": 23,
+        "name": "Water source",
+        "discovered_by": [
+          "0becaffe083b41b291"
+        ],
+        "discovery_time": 1747668665.4917738
+      }
+    ],
+    "house": [
+      {
+        "x": 20,
+        "y": 11,
+        "name": "House",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1747670210.14945
       }
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747667308.2765
+  "last_updated": 1747670420.680765
 }
