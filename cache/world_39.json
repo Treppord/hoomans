@@ -167,6 +167,16 @@
       {
         "type": "location_discovery",
         "data": {
+          "location_type": "water",
+          "x": 25,
+          "y": 12,
+          "name": "Water source"
+        },
+        "timestamp": 1747670899.089582
+      },
+      {
+        "type": "location_discovery",
+        "data": {
           "location_type": "house",
           "x": 20,
           "y": 11,
@@ -297,6 +307,15 @@
           "0becaffe083b41b291"
         ],
         "discovery_time": 1747668665.4917738
+      },
+      {
+        "x": 25,
+        "y": 12,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1747670899.089588
       }
     ],
     "house": [
@@ -312,5 +331,5 @@
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747670420.680765
+  "last_updated": 1747671471.5656152
 }

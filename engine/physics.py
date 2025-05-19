@@ -25,10 +25,21 @@ class PhysicsEngine:
         if hasattr(self.world_map, 'entity_tile_manager'):
             component = self.world_map.entity_tile_manager.get_component_at(target_x, target_y)
             if component and hasattr(component, 'is_walkable') and not component.is_walkable():
+                # Special case: Allow NPCs to enter houses
+                if (not hasattr(entity, 'controllable') or not entity.controllable) and \
+                component.parent.__class__.__name__ == 'HouseEntityTile':
+                    # NPCs can enter houses
+                    return False
+                
+                # Block tree trunks for all entities
+                if component.parent.__class__.__name__ == 'TreeEntityTile' and \
+                component.y_offset == 1:  # This is the trunk component
+                    return True
+                    
                 return True
                 
         return False
-    
+
     def resolve_collision(self, entity, original_x, original_y):
         """Reset entity position after collision"""
         entity.grid_x = original_x

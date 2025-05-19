@@ -208,38 +208,57 @@ class CharacterInfoPanel(UIElement):
         stats_y = self.y + self.padding + 40 + 100 + 20  # Below the entity rectangle with some spacing
         
         # Display entity stats if available
-        if hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or hasattr(self.entity, 'health') or hasattr(self.entity, 'comfort'):
+        if (hasattr(self.entity, 'thirst') or hasattr(self.entity, 'hunger') or 
+            hasattr(self.entity, 'health') or hasattr(self.entity, 'comfort')):
             stats_title = self.font.render("Entity Stats", True, self.title_color)
             screen.blit(stats_title, (self.x + self.padding, stats_y))
             stats_y += 30
             
-            # Display thirst if available
-            if hasattr(self.entity, 'thirst'):
-                thirst_text = f"Thirst: {self.entity.thirst}/10"
-                thirst_surface = self.small_font.render(thirst_text, True, self.text_color)
-                screen.blit(thirst_surface, (self.x + self.padding, stats_y))
-                stats_y += 25
+            # Collect all available stats
+            available_stats = []
             
-            # Display hunger if available
-            if hasattr(self.entity, 'hunger'):
-                hunger_text = f"Hunger: {self.entity.hunger}/10"
-                hunger_surface = self.small_font.render(hunger_text, True, self.text_color)
-                screen.blit(hunger_surface, (self.x + self.padding, stats_y))
-                stats_y += 25
+            # Define all possible stats with their labels and max values
+            all_stats = [
+                ('Thirst', 'thirst', 10),
+                ('Hunger', 'hunger', 10),
+                ('Health', 'health', 20),
+                ('Comfort', 'comfort', 20)
+            ]
             
-            # Display health if available
-            if hasattr(self.entity, 'health'):
-                health_text = f"Health: {self.entity.health}/20"
-                health_surface = self.small_font.render(health_text, True, self.text_color)
-                screen.blit(health_surface, (self.x + self.padding, stats_y))
-                stats_y += 25
+            # Filter to only include stats the entity has
+            for label, attr, max_val in all_stats:
+                if hasattr(self.entity, attr):
+                    value = getattr(self.entity, attr)
+                    available_stats.append((label, value, max_val))
+            
+            # Define grid layout
+            cols_per_row = 2
+            rows = (len(available_stats) + cols_per_row - 1) // cols_per_row
+            
+            # Calculate column width
+            col_width = 120  # Fixed width for each stat column
+            col_spacing = 20  # Small gap between columns
+            
+            # Render stats in grid layout
+            for i, (label, value, max_val) in enumerate(available_stats):
+                # Calculate row and column
+                row = i // cols_per_row
+                col = i % cols_per_row
                 
-            # Display comfort if available
-            if hasattr(self.entity, 'comfort'):
-                comfort_text = f"Comfort: {self.entity.comfort}/20"
-                comfort_surface = self.small_font.render(comfort_text, True, self.text_color)
-                screen.blit(comfort_surface, (self.x + self.padding, stats_y))
-                stats_y += 25
+                # Calculate position
+                stat_x = self.x + self.padding + (col * (col_width + col_spacing))
+                stat_y = stats_y + (row * 25)
+                
+                # Render stat
+                stat_text = f"{label}: {value}/{max_val}"
+                stat_surface = self.small_font.render(stat_text, True, self.text_color)
+                screen.blit(stat_surface, (stat_x, stat_y))
+            
+            # Update stats_y for next section
+            stats_y += rows * 25 + 10
+
+
+
         
         # Right side - CNA attributes
         right_x = self.x + (self.width // 2) + self.padding

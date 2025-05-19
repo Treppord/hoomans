@@ -92,6 +92,62 @@ class NPC(Rectangle):
         # Update animation (from Rectangle class)
         self.update_animation()
         
+        # Check if we're inside a house - this should happen before other checks
+        if self._is_inside_house():
+            # If we're not already resting, start resting
+            if not hasattr(self, 'is_resting') or not self.is_resting:
+                self._start_resting_in_house()
+            
+            # Increase comfort while in the house
+            if current_time - self.last_comfort_update > TimeConstants.COMFORT_INCREASE_INTERVAL:
+                old_comfort = self.comfort
+                self.comfort = min(GameBalanceConstants.MAX_COMFORT, self.comfort + 1)
+                self.last_comfort_update = current_time
+                
+                # Show message if comfort increased
+                if self.comfort > old_comfort:
+                    print(f"NPC {self.get_entity_id()} comfort increased to {self.comfort} while resting in house")
+                    
+                    # Show a speech bubble occasionally
+                    if self.comfort % 5 == 0:  # Every 5 comfort points
+                        from engine.core import SimpleGameEngine
+                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                            comfort_speeches = [
+                                "This rest is doing me good.",
+                                "I'm feeling more comfortable.",
+                                "Resting is improving my comfort.",
+                                "I needed this rest."
+                            ]
+                            import random
+                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(comfort_speeches), self, duration=2.0)
+                
+                # Check if we've reached maximum comfort
+                if self.comfort >= GameBalanceConstants.MAX_COMFORT:
+                    # We're fully rested, stop resting and leave the house
+                    self.is_resting = False
+                    self.heading_to_comfort = False
+                    
+                    print(f"NPC {self.get_entity_id()} is fully rested, leaving the house")
+                    
+                    # Show a speech bubble about leaving
+                    from engine.core import SimpleGameEngine
+                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
+                        leave_speeches = [
+                            "I'm fully rested now.",
+                            "Time to get back outside.",
+                            "That was a good rest.",
+                            "I feel much better now."
+                        ]
+                        import random
+                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(leave_speeches), self, duration=2.0)
+                    
+                    # Move outside the house
+                    self._leave_house()
+            
+            # If we're resting, don't do other activities
+            if self.is_resting:
+                return
+        
         # PRIORITY 1: Check if we're adjacent to water and thirsty - this takes precedence over most actions
         from engine.core import SimpleGameEngine
         world_map = None
@@ -254,60 +310,8 @@ class NPC(Rectangle):
             # If we're heading to food, override other actions
             if hasattr(self, 'heading_to_comfort') and self.heading_to_comfort:
                 return
-            
-        if hasattr(self, 'is_resting') and self.is_resting:
-            # Increase comfort while resting
-            if current_time - self.last_comfort_update > TimeConstants.COMFORT_INCREASE_INTERVAL:
-                old_comfort = self.comfort
-                self.comfort = min(GameBalanceConstants.MAX_COMFORT, self.comfort + 1)
-                self.last_comfort_update = current_time
-                
-                # Show message if comfort increased
-                if self.comfort > old_comfort:
-                    print(f"NPC {self.get_entity_id()} comfort increased to {self.comfort} while resting")
-                    
-                    # Show a speech bubble occasionally
-                    if self.comfort % 5 == 0:  # Every 5 comfort points
-                        from engine.core import SimpleGameEngine
-                        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                            comfort_speeches = [
-                                "This rest is doing me good.",
-                                "I'm feeling more comfortable.",
-                                "Resting is improving my comfort.",
-                                "I needed this rest."
-                            ]
-                            import random
-                            SimpleGameEngine.instance.ui.add_text_bubble(random.choice(comfort_speeches), self, duration=2.0)
-                
-                # Check if we've reached maximum comfort
-                if self.comfort >= GameBalanceConstants.MAX_COMFORT:
-                    # We're fully rested, stop resting and leave the house
-                    self.is_resting = False
-                    self.heading_to_comfort = False
-                    
-                    print(f"NPC {self.get_entity_id()} is fully rested, leaving the house")
-                    
-                    # Show a speech bubble about leaving
-                    from engine.core import SimpleGameEngine
-                    if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
-                        leave_speeches = [
-                            "I'm fully rested now.",
-                            "Time to get back outside.",
-                            "That was a good rest.",
-                            "I feel much better now."
-                        ]
-                        import random
-                        SimpleGameEngine.instance.ui.add_text_bubble(random.choice(leave_speeches), self, duration=2.0)
-                    
-                    # Move outside the house
-                    self._leave_house()
-            
-            # Only update visual position while resting
-            self.visual_x += (self.grid_x - self.visual_x) * self.move_lerp_factor
-            self.visual_y += (self.grid_y - self.visual_y) * self.move_lerp_factor
-            
-            # Update animation (from Rectangle class)
-            self.update_animation()
+        
+
             
         # Check if we're standing on water (emergency situation)
         from engine.core import SimpleGameEngine
