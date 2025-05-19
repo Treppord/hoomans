@@ -18,7 +18,6 @@ import os
 class SimpleGameEngine:
 
 # Add this method to the SimpleGameEngine class
-
     def load_item_icons(self):
         """Load all item icons after pygame is initialized"""
         from entities.items.item_factory import ItemFactory
@@ -34,6 +33,13 @@ class SimpleGameEngine:
         for item_id, template in ItemFactory._templates.items():
             template.ensure_icon_loaded()
             print(f"Loaded icon for item: {item_id}")
+            
+        # If item manager exists, ensure all its items have icons loaded
+        if hasattr(self, 'item_manager') and self.item_manager:
+            for item_def in self.item_manager.get_all_items():
+                # Find the template in ItemFactory
+                if item_def.item_id in ItemFactory._templates:
+                    ItemFactory._templates[item_def.item_id].ensure_icon_loaded()
 
     def setup_world_cache(self):
         """Set up the world cache for persistent memory"""
@@ -148,6 +154,10 @@ class SimpleGameEngine:
         
         # Set up UI elements
         self.setup_ui()
+        
+        self.item_manager = None  # Will be set after initialization
+
+
         
         # Game state
         self.running = False

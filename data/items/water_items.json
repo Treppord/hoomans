@@ -1,0 +1,20 @@
+[
+  {
+    "id": "water_bottle",
+    "name": "Water Bottle",
+    "description": "A bottle of fresh water",
+    "type": "water",
+    "icon": "items/water_bottle.png",
+    "max_stack": 16,
+    "thirst_value": 2
+  },
+  {
+    "id": "canteen",
+    "name": "Canteen",
+    "description": "A large container for water",
+    "type": "water",
+    "icon": "items/canteen.png",
+    "max_stack": 4,
+    "thirst_value": 4
+  }
+]

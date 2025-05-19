@@ -1,0 +1,26 @@
+[
+  {
+    "id": "stone",
+    "name": "Stone",
+    "description": "A common building material",
+    "type": "resource",
+    "icon": "items/stone.png",
+    "max_stack": 64
+  },
+  {
+    "id": "branch",
+    "name": "Branch",
+    "description": "Collected from trees, useful for crafting",
+    "type": "resource",
+    "icon": "items/branch.png",
+    "max_stack": 64
+  },
+  {
+    "id": "fiber",
+    "name": "Plant Fiber",
+    "description": "Used for crafting basic items",
+    "type": "resource",
+    "icon": "items/fiber.png",
+    "max_stack": 64
+  }
+]

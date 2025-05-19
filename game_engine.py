@@ -12,6 +12,9 @@ from ai.controllers.ai_universe_controller import AIUniverseController, WorldSta
 import argparse
 from engine.constants import GameBalanceConstants
 
+from entities.items.item_manager import ItemManager, initialize_item_system
+
+
 # RENDER ORDER
 # 1. Terrain tiles
 # 2. Entities
@@ -41,6 +44,12 @@ if __name__ == "__main__":
             print(f"DEBUG: {name} has no CNA data")
 
     engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
+    
+
+    # Initialize item manager and register default items
+    print("Initializing item management system...")
+    item_manager = initialize_item_system()
+    engine.item_manager = item_manager
     
     # Initialize item factory after pygame is initialized
     from entities.items.item_factory import ItemFactory

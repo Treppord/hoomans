@@ -122,7 +122,7 @@ class AxeItem(ToolItem):
     @classmethod
     def create_template(cls):
         """Create a template instance of this axe item"""
-        return cls("axe", "Axe", "A tool for chopping trees", "items/axe.png", 100, 1.0)
+        return cls("axe", "Axe", "A tool for chopping trees", "items/stone_axe.png", 100, 1.0)
 
 
 class PickaxeItem(ToolItem):
@@ -179,4 +179,4 @@ class PickaxeItem(ToolItem):
     @classmethod
     def create_template(cls):
         """Create a template instance of this pickaxe item"""
-        return cls("pickaxe", "Pickaxe", "A tool for mining rocks", "items/pickaxe.png", 100, 1.0)
+        return cls("pickaxe", "Pickaxe", "A tool for mining rocks", "items/stone_pickaxe.png", 100, 1.0)

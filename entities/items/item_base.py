@@ -115,6 +115,18 @@ class Item(ABC):
         return True
     
 
+    @classmethod
+    def create_template(cls):
+        """Default implementation for creating a template instance"""
+        # This is a fallback for basic Item class
+        # Subclasses should override this with their specific implementation
+        return cls(
+            item_id="generic_item",
+            name="Generic Item",
+            description="A generic item",
+            icon_path=None,
+            max_stack=64
+        )
 
     
     def split(self, amount: int) -> Optional['Item']:

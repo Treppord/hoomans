@@ -6,6 +6,7 @@ from entities.items.item_base import Item
 from entities.items.consumable import FoodItem, WaterBottleItem
 from entities.items.tool import AxeItem, PickaxeItem
 import pygame
+import importlib.util
 
 class ItemFactory:
     """Factory for creating game items"""
@@ -26,6 +27,9 @@ class ItemFactory:
         
         # Load custom items from JSON if available
         cls.load_custom_items()
+        
+        # Try to sync with item manager if available
+        cls.sync_with_item_manager()
     
     @classmethod
     def register_template(cls, item):
@@ -141,7 +145,7 @@ class ItemFactory:
                 item_id=item_id,
                 name=item_data.get("name", "Unknown Axe"),
                 description=item_data.get("description", ""),
-                icon_path=icon_path or "items/axe.png",
+                icon_path=icon_path or "items/stone_axe.png",
                 durability=item_data.get("durability", 100),
                 effectiveness=item_data.get("effectiveness", 1.0)
             )
@@ -152,7 +156,7 @@ class ItemFactory:
                 item_id=item_id,
                 name=item_data.get("name", "Unknown Pickaxe"),
                 description=item_data.get("description", ""),
-                icon_path=icon_path or "items/pickaxe.png",
+                icon_path=icon_path or "items/stone_pickaxe.png",
                 durability=item_data.get("durability", 100),
                 effectiveness=item_data.get("effectiveness", 1.0)
             )
@@ -160,6 +164,33 @@ class ItemFactory:
             
         else:
             print(f"Warning: Unknown item type '{item_type}' in definition")
+    
+    @classmethod
+    def sync_with_item_manager(cls, item_manager=None):
+        """Synchronize templates with the item manager if available"""
+        # If no item manager provided, try to import and initialize it
+        if item_manager is None:
+            try:
+                # Check if item_manager module exists
+                if importlib.util.find_spec("entities.items.item_manager") is not None:
+                    from entities.items.item_manager import initialize_item_system
+                    item_manager = initialize_item_system()
+                else:
+                    return
+            except ImportError:
+                print("ItemManager not available, using default templates only")
+                return
+        
+        # Register all items from the item manager
+        for item_def in item_manager.get_all_items():
+            # Skip if already registered
+            if item_def.item_id in cls._templates:
+                continue
+            
+            # Register with the factory
+            item_manager._register_with_factory(item_def)
+            
+        print(f"Synchronized {len(cls._templates)} item templates with item manager")
     
     @classmethod
     def _create_sample_item_definition(cls, items_path):
@@ -217,8 +248,8 @@ class ItemFactory:
         basic_items = {
             "food_generic.png": (255, 200, 100),  # Orange/brown for food
             "water_bottle.png": (100, 200, 255),  # Blue for water
-            "axe.png": (150, 150, 150),           # Gray for axe
-            "pickaxe.png": (180, 180, 180)        # Light gray for pickaxe
+            "stone_axe.png": (150, 150, 150),           # Gray for axe
+            "stone_pickaxe.png": (180, 180, 180)        # Light gray for pickaxe
         }
         
         # Create placeholder assets if they don't exist
