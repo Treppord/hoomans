@@ -5,6 +5,7 @@ from engine.ui.elements.text_bubble import TextBubble
 from engine.ui.elements.chat_input import ChatInputBox
 from engine.ui.panels.character_info_panel import CharacterInfoPanel
 from engine.ui.panels.inventory_panel import InventoryPanel
+from engine.ui.elements.button import Button
 import pygame
 
 class UIManager:
@@ -161,6 +162,25 @@ class UIManager:
             return True
                 
         return False
+    
+
+    # Add this method to the UIManager class
+    def add_button(self, x, y, width, height, text, callback=None):
+        """Add a button to the UI
+        
+        Args:
+            x, y: Position of the button
+            width, height: Size of the button
+            text: Text to display on the button
+            callback: Function to call when button is clicked
+            
+        Returns:
+            The created button
+        """
+        button = Button(x, y, width, height, text, callback)
+        self.add_element(button)
+        return button
+
         
     def render(self, screen):
         """Render all UI elements"""
@@ -175,3 +195,4 @@ class UIManager:
                 self.text_bubbles.remove(bubble)
             else:
                 bubble.render(screen)
+
