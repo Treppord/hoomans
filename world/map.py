@@ -184,91 +184,130 @@ class WorldMap:
     
     def generate_realistic_map(self, scale=100.0, octaves=6, persistence=0.5, lacunarity=2.0, seed=None):
         """Generate a realistic world map using Perlin noise"""
-        if seed is None:
-            seed = random.randint(0, 1000)
-        
-        print(f"Generating realistic map with seed: {seed}")
-        
-        # Generate height map using Perlin noise
-        height_map = []
-        for y in range(self.height):
-            row = []
-            for x in range(self.width):
-                # Get noise value at this position
-                nx = x / scale
-                ny = y / scale
-                # Use multiple octaves for more natural terrain
-                value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
-                                    lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=seed)
-                # Normalize to 0-1 range
-                value = (value + 1) / 2
-                row.append(value)
-            height_map.append(row)
-        
-        # Generate moisture map using different seed
-        moisture_map = []
-        moisture_seed = seed + 1000
-        for y in range(self.height):
-            row = []
-            for x in range(self.width):
-                nx = x / scale
-                ny = y / scale
-                value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
-                                    lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=moisture_seed)
-                value = (value + 1) / 2
-                row.append(value)
-            moisture_map.append(row)
-        
-        # Set tiles based on height and moisture
-        for y in range(self.height):
-            for x in range(self.width):
-                height = height_map[y][x]
-                moisture = moisture_map[y][x]
+        try:
+            if seed is None:
+                seed = random.randint(0, 1000)
                 
-                # Deep water
-                if height < 0.3:
-                    self.set_tile(x, y, "deep_water")
+            print(f"Generating realistic map with seed: {seed}")
+            
+            # Ensure seed is an integer
+            seed = int(seed)
+            
+            # Set a fixed random seed for deterministic generation
+            random.seed(seed)
+            
+            # Create a simpler map generation approach that doesn't rely on noise library
+            # which might be causing the bus error
+            
+            # First, fill the map with grass as a base
+            for y in range(self.height):
+                for x in range(self.width):
+                    self.set_tile(x, y, "grass")
+            
+            # Add water bodies
+            num_water_bodies = self.width * self.height // 1000
+            for _ in range(num_water_bodies):
+                center_x = random.randint(10, self.width - 10)
+                center_y = random.randint(10, self.height - 10)
+                size = random.randint(5, 15)
                 
-                # Shallow water
-                elif height < 0.4:
-                    self.set_tile(x, y, "shallow_water")
+                # Create an irregular water body
+                for y in range(center_y - size, center_y + size):
+                    for x in range(center_x - size, center_x + size):
+                        if 0 <= x < self.width and 0 <= y < self.height:
+                            # Calculate distance from center with some randomness
+                            dist = ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
+                            dist += random.uniform(-2, 2)  # Add some noise
+                            
+                            if dist < size * 0.7:
+                                self.set_tile(x, y, "deep_water")
+                            elif dist < size * 0.9:
+                                self.set_tile(x, y, "shallow_water")
+                            elif dist < size:
+                                self.set_tile(x, y, "sand")
+            
+            # Add forest patches
+            num_forests = self.width * self.height // 800
+            for _ in range(num_forests):
+                center_x = random.randint(5, self.width - 5)
+                center_y = random.randint(5, self.height - 5)
+                size = random.randint(3, 8)
                 
-                # Beach/sand
-                elif height < 0.45:
-                    self.set_tile(x, y, "sand")
+                for y in range(center_y - size, center_y + size):
+                    for x in range(center_x - size, center_x + size):
+                        if 0 <= x < self.width and 0 <= y < self.height:
+                            # Only place forest on grass
+                            if self.get_tile(x, y).type == "grass":
+                                dist = ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
+                                dist += random.uniform(-1, 1)  # Add some noise
+                                
+                                if dist < size * 0.8:
+                                    self.set_tile(x, y, "forest")
+            
+            # Add mountain ranges
+            num_mountains = self.width * self.height // 1500
+            for _ in range(num_mountains):
+                center_x = random.randint(5, self.width - 5)
+                center_y = random.randint(5, self.height - 5)
+                size = random.randint(3, 6)
                 
-                # Grassland/plains
-                elif height < 0.7:
-                    if moisture > 0.6:
-                        self.set_tile(x, y, "forest")
-                    else:
-                        self.set_tile(x, y, "grass")
+                for y in range(center_y - size, center_y + size):
+                    for x in range(center_x - size, center_x + size):
+                        if 0 <= x < self.width and 0 <= y < self.height:
+                            # Don't place mountains on water
+                            if not self.get_tile(x, y).is_water():
+                                dist = ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
+                                dist += random.uniform(-1, 1)  # Add some noise
+                                
+                                if dist < size * 0.7:
+                                    self.set_tile(x, y, "mountain")
+                                elif dist < size and random.random() < 0.3:
+                                    self.set_tile(x, y, "mountain")
+            
+            # Add some snow peaks
+            num_snow = self.width * self.height // 3000
+            for _ in range(num_snow):
+                center_x = random.randint(5, self.width - 5)
+                center_y = random.randint(5, self.height - 5)
+                size = random.randint(2, 4)
                 
-                # Mountains
-                elif height < 0.85:
-                    self.set_tile(x, y, "mountain")
-                
-                # Snow peaks
-                else:
-                    self.set_tile(x, y, "snow")
-        
-        
-        # Add border walls
-        self._add_border_walls()
-        
-        # Ensure there's at least one accessible water area
-        self._ensure_accessible_water()
-        
-        # Initialize entity tiles manager if not already initialized
-        if not hasattr(self, 'entity_tile_manager'):
-            self.initialize_entity_tiles()
-            print("Initialized entity tile manager during map generation")
-        
-        # Generate trees based on tile type and seed
-        print("Starting tree generation...")
-        self._generate_trees(seed)
-        
-        print(f"Map generation complete. Entity tiles: {len(self.entity_tile_manager.entity_tiles)}")
+                for y in range(center_y - size, center_y + size):
+                    for x in range(center_x - size, center_x + size):
+                        if 0 <= x < self.width and 0 <= y < self.height:
+                            # Only place snow on mountains
+                            if self.get_tile(x, y).type == "mountain":
+                                dist = ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
+                                
+                                if dist < size * 0.6:
+                                    self.set_tile(x, y, "snow")
+            
+            # Add border walls
+            self._add_border_walls()
+            
+            # Ensure there's at least one accessible water area
+            self._ensure_accessible_water()
+            
+            # Initialize entity tiles manager if not already initialized
+            if not hasattr(self, 'entity_tile_manager'):
+                self.initialize_entity_tiles()
+                print("Initialized entity tile manager during map generation")
+            
+            # Generate trees based on tile type and seed
+            print("Starting tree generation...")
+            self._generate_trees(seed)
+            
+            # Reset random state to avoid affecting other game systems
+            random.seed()
+            
+            print(f"Map generation complete. Entity tiles: {len(self.entity_tile_manager.entity_tiles)}")
+            
+        except Exception as e:
+            import traceback
+            print(f"Error generating map: {e}")
+            traceback.print_exc()
+            # Create a simple fallback map
+            self._generate_fallback_map()
+
 
 
     
@@ -276,7 +315,7 @@ class WorldMap:
         """Generate trees on forest and plain tiles based on seed"""
         print(f"Generating trees with seed: {seed}")
         
-        # Reset random state to ensure consistent generation
+        # Set a fixed random seed for deterministic generation
         random.seed(seed)
         
         # Count for debugging
@@ -284,30 +323,30 @@ class WorldMap:
         forest_tiles = 0
         grass_tiles = 0
         
-        # Use a deterministic approach - for each tile, derive a value from its coordinates and the seed
+        # Use a simpler approach - iterate through all tiles and place trees with fixed probabilities
         for y in range(self.height):
             for x in range(self.width):
                 tile = self.get_tile(x, y)
                 if not tile:
                     continue
                 
-                # Create a deterministic value based on coordinates and seed
-                # This hash function will always return the same value for the same inputs
-                hash_value = ((x * 1299721) + (y * 4096) + seed) % 10000
-                normalized_value = hash_value / 10000.0  # Convert to 0-1 range
+                # Use a deterministic approach based on coordinates and seed
+                # This ensures the same trees are placed each time for the same seed
+                random.seed(seed + (x * 1000) + y)
+                chance = random.random()
                 
                 if tile.type == "forest":
                     forest_tiles += 1
-                    # Place tree if hash value is below threshold (10% of forest tiles)
-                    if normalized_value < 0.1:
+                    # Place tree if random value is below threshold (10% of forest tiles)
+                    if chance < 0.1:
                         tree = self.add_tree(x, y)
                         if tree:
                             trees_added += 1
                 
                 elif tile.type == "grass":
                     grass_tiles += 1
-                    # Place tree if hash value is below threshold (0.5% of grass tiles)
-                    if normalized_value < 0.005:
+                    # Place tree if random value is below threshold (0.5% of grass tiles)
+                    if chance < 0.005:
                         tree = self.add_tree(x, y)
                         if tree:
                             trees_added += 1
@@ -461,3 +500,39 @@ class WorldMap:
                                 self.set_tile(x, y, "shallow_water")
                         elif distance < 1.2:
                             self.set_tile(x, y, "sand")
+
+
+    def _generate_fallback_map(self):
+        """Generate a simple fallback map in case the main generation fails"""
+        print("Generating fallback map...")
+        
+        # Clear existing tiles
+        self.tiles = [[None for _ in range(self.width)] for _ in range(self.height)]
+        
+        # Create a simple map with grass in the middle and water around the edges
+        border_size = 10
+        
+        for y in range(self.height):
+            for x in range(self.width):
+                # Border area
+                if (x < border_size or x >= self.width - border_size or 
+                    y < border_size or y >= self.height - border_size):
+                    self.set_tile(x, y, "deep_water")
+                else:
+                    self.set_tile(x, y, "grass")
+        
+        # Add some random features
+        for _ in range(100):
+            x = random.randint(border_size, self.width - border_size - 1)
+            y = random.randint(border_size, self.height - border_size - 1)
+            feature_type = random.choice(["forest", "mountain", "sand"])
+            self.set_tile(x, y, feature_type)
+        
+        # Add border walls
+        self._add_border_walls()
+        
+        # Initialize entity tiles manager if not already initialized
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        print("Fallback map generation complete")

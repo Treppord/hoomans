@@ -368,6 +368,45 @@ class WorldCache:
         print(f"DEBUG: Completed aggressive duplicate cleanup for seed {self.current_seed}")
 
 
+    def create_empty_cache(self, seed):
+        """Create an empty cache file for a new world if it doesn't exist
+        
+        Args:
+            seed: The seed of the world
+            
+        Returns:
+            bool: True if a new cache was created, False if it already existed
+        """
+        # Check if cache already exists
+        cache_file = os.path.join(self.cache_dir, f"world_{seed}.json")
+        if os.path.exists(cache_file):
+            print(f"Cache file already exists for seed {seed}, not creating empty cache")
+            return False
+        
+        # Create empty cache data
+        cache_data = {
+            "seed": seed,
+            "entity_memories": {},
+            "discovered_locations": {},
+            "entity_relationships": {},
+            "last_updated": time.time()
+        }
+        
+        # Create cache directory if it doesn't exist
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # Save the empty cache
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            
+            print(f"Created empty cache file for seed {seed}: {cache_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Error creating empty cache: {e}")
+            print(f"ERROR creating empty cache: {e}")
+            return False
+
 
 
         

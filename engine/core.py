@@ -923,25 +923,37 @@ class SimpleGameEngine:
         Args:
             seed: Optional seed to use for world generation
         """
-        print(f"Starting game from menu with seed: {seed}")
-        self.game_state = GameState.RUNNING
-        
-        # Set map seed if provided
-        if seed is not None:
-            self.map_seed = seed
-            print(f"Using provided seed: {seed}")
-        
-        # Load item icons after pygame is initialized
-        self.load_item_icons()
-        
-        # If we have a world map already, regenerate it with the new seed
-        if hasattr(self, 'world_map') and self.world_map:
-            print(f"Regenerating world map with seed: {self.map_seed}")
-            self.world_map.generate_realistic_map(seed=self.map_seed)
-        
-        # Update world cache with the new seed
-        if hasattr(self, 'world_cache'):
-            self.world_cache.set_world_seed(self.map_seed)
+        try:
+            print(f"Starting game from menu with seed: {seed}")
+            self.game_state = GameState.RUNNING
+            
+            # Set map seed if provided
+            if seed is not None:
+                self.map_seed = seed
+                print(f"Using provided seed: {seed}")
+            
+            # Load item icons after pygame is initialized
+            self.load_item_icons()
+            
+            # If we have a world map already, regenerate it with the new seed
+            if hasattr(self, 'world_map') and self.world_map:
+                print(f"Regenerating world map with seed: {self.map_seed}")
+                self.world_map.generate_realistic_map(seed=self.map_seed)
+            
+            # Update world cache with the new seed
+            if hasattr(self, 'world_cache'):
+                self.world_cache.set_world_seed(self.map_seed)
+        except Exception as e:
+            import traceback
+            print(f"Error starting game from menu: {e}")
+            traceback.print_exc()
+            
+            # Try to recover
+            self.game_state = GameState.RUNNING
+            if hasattr(self, 'world_map') and self.world_map:
+                # Generate a fallback map
+                self.world_map._generate_fallback_map()
+
 
 
     def _quit_game(self):

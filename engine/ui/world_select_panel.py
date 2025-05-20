@@ -149,14 +149,13 @@ class WorldSelectPanel(UIElement):
         except Exception as e:
             print(f"Error deleting world file: {e}")
     
-    # Update _create_world_buttons method
     def _create_world_buttons(self):
         """Create buttons for each world in the list"""
         self.world_buttons = []
         
         # Calculate layout
         button_width = 200
-        button_height = 120
+        button_height = 160  # Increased height to accommodate buttons below
         padding = 20
         buttons_per_row = max(1, (self.screen_width - 100) // (button_width + padding))
         
@@ -187,7 +186,7 @@ class WorldSelectPanel(UIElement):
             self.max_scroll = max(0, content_height - (self.screen_height - 100))
         else:
             self.max_scroll = 0
-    
+
     def _select_world(self, seed):
         """Handle world selection"""
         print(f"Selected world with seed: {seed}")
@@ -340,15 +339,18 @@ class WorldButton:
         self.text = f"World {world_data['seed']}"
         self.hover = False
         
-        # Action buttons
+        # Adjust height to accommodate buttons below the frame
+        self.frame_height = height - 40  # Reserve space for buttons
+        
+        # Action buttons - now positioned below the frame
         self.start_button = {
-            "rect": pygame.Rect(x + 10, y + height - 30, 80, 25),
+            "rect": pygame.Rect(x + 10, y + self.frame_height + 10, 80, 25),
             "text": "Start",
             "hover": False
         }
         
         self.delete_button = {
-            "rect": pygame.Rect(x + width - 90, y + height - 30, 80, 25),
+            "rect": pygame.Rect(x + width - 90, y + self.frame_height + 10, 80, 25),
             "text": "Delete",
             "hover": False
         }
@@ -394,7 +396,7 @@ class WorldButton:
                 return True
         
         return False
-
+    
     def _is_point_inside(self, x, y):
         """Check if a point is inside the button"""
         return (self.x <= x <= self.x + self.width and
@@ -412,21 +414,21 @@ class WorldButton:
         """Render the button at the specified position"""
         # Update button positions based on new coordinates
         self.start_button["rect"].x = x + 10
-        self.start_button["rect"].y = y + self.height - 30
+        self.start_button["rect"].y = y + self.frame_height + 10
         
         self.delete_button["rect"].x = x + self.width - 90
-        self.delete_button["rect"].y = y + self.height - 30
+        self.delete_button["rect"].y = y + self.frame_height + 10
         
-        # Draw button background
-        button_rect = pygame.Rect(x, y, self.width, self.height)
+        # Draw main frame background
+        frame_rect = pygame.Rect(x, y, self.width, self.frame_height)
         
         if self.hover:
-            pygame.draw.rect(screen, (50, 50, 70), button_rect, border_radius=5)
+            pygame.draw.rect(screen, (50, 50, 70), frame_rect, border_radius=5)
         else:
-            pygame.draw.rect(screen, (40, 40, 60), button_rect, border_radius=5)
+            pygame.draw.rect(screen, (40, 40, 60), frame_rect, border_radius=5)
         
-        # Draw border
-        pygame.draw.rect(screen, BORDER_COLOR, button_rect, width=2, border_radius=5)
+        # Draw frame border
+        pygame.draw.rect(screen, BORDER_COLOR, frame_rect, width=2, border_radius=5)
         
         # Draw world seed
         seed_text = f"Seed: {self.world_data['seed']}"

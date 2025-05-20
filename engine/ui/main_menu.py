@@ -81,7 +81,7 @@ class MainMenu(UIElement):
             width=button_width,
             height=button_height,
             text="Start New Game",
-            callback=self.start_game_callback
+            callback=self._start_game_callback
         )
         self.buttons.append(start_button)
         
@@ -213,3 +213,25 @@ class MainMenu(UIElement):
     def _show_options(self):
         """Show options menu (placeholder)"""
         print("Options menu not implemented yet")
+        
+    def _start_game_callback(self, seed=None):
+        """Handle start game button click"""
+        try:
+            if seed is None:
+                # Generate a new random seed for a new game
+                import random
+                seed = random.randint(1, 100000)
+                print(f"Generated new random seed: {seed}")
+                
+                # Create an empty cache file for this new seed
+                from engine.core import SimpleGameEngine
+                if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+                    SimpleGameEngine.instance.world_cache.create_empty_cache(seed)
+            
+            # Call the callback with the seed
+            if self.start_game_callback:
+                self.start_game_callback(seed)
+        except Exception as e:
+            import traceback
+            print(f"Error starting game: {e}")
+            traceback.print_exc()
