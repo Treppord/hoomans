@@ -153,7 +153,7 @@ class HouseSchematicItem(SchematicItem):
         """Initialize a house schematic item"""
         super().__init__(
             item_id, name, description, icon_path or "items/house_schematic.png", 
-            max_stack, structure_type="house", width=3, height=3
+            max_stack, structure_type="house", width=2, height=2
         )
     
     def create_instance(self):

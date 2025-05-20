@@ -26,7 +26,9 @@ class ItemFactory:
         cls.register_template(AxeItem.create_template())
         cls.register_template(PickaxeItem.create_template())
     
+
         # Register schematics
+        from entities.items.schematic import SchematicItem, HouseSchematicItem, CampfireSchematicItem
         cls.register_template(HouseSchematicItem.create_template())
         cls.register_template(CampfireSchematicItem.create_template())
         
@@ -165,6 +167,45 @@ class ItemFactory:
                 durability=item_data.get("durability", 100),
                 effectiveness=item_data.get("effectiveness", 1.0)
             )
+            cls.register_template(item)
+            
+        elif item_type == "schematic":
+            # Handle schematic items
+            structure_type = item_data.get("structure_type", "generic")
+            
+            # Import schematic classes
+            from entities.items.schematic import SchematicItem, HouseSchematicItem, CampfireSchematicItem
+            
+            # Create the appropriate schematic item based on structure type
+            if structure_type == "house":
+                item = HouseSchematicItem(
+                    item_id=item_id,
+                    name=item_data.get("name", "Unknown House Schematic"),
+                    description=item_data.get("description", ""),
+                    icon_path=icon_path or "items/house_schematic.png",
+                    max_stack=item_data.get("max_stack", 5)
+                )
+            elif structure_type == "campfire":
+                item = CampfireSchematicItem(
+                    item_id=item_id,
+                    name=item_data.get("name", "Unknown Campfire Schematic"),
+                    description=item_data.get("description", ""),
+                    icon_path=icon_path or "items/campfire_schematic.png",
+                    max_stack=item_data.get("max_stack", 5)
+                )
+            else:
+                # Generic schematic
+                item = SchematicItem(
+                    item_id=item_id,
+                    name=item_data.get("name", "Unknown Schematic"),
+                    description=item_data.get("description", ""),
+                    icon_path=icon_path or "items/generic_schematic.png",
+                    max_stack=item_data.get("max_stack", 5),
+                    structure_type=structure_type,
+                    width=item_data.get("width", 1),
+                    height=item_data.get("height", 1)
+                )
+            
             cls.register_template(item)
             
         else:

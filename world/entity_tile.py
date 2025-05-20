@@ -26,20 +26,47 @@ def load_entity_images():
         full_path = os.path.join(assets_path, path)
         try:
             if os.path.exists(full_path):
-                IMAGES[key] = pygame.image.load(full_path).convert_alpha()
+                # Load the image
+                img = pygame.image.load(full_path).convert_alpha()
+                
+                # For house, ensure it's at least 32x32 (2x2 tiles)
+                if key == "house":
+                    img_width, img_height = img.get_size()
+                    if img_width < 32 or img_height < 32:
+                        print(f"Warning: House image is too small ({img_width}x{img_height}), resizing to 32x32")
+                        # Create a larger surface and blit the original image onto it
+                        new_img = pygame.Surface((32, 32), pygame.SRCALPHA)
+                        new_img.fill((0, 0, 0, 0))  # Transparent
+                        
+                        # Blit the original image in the center
+                        x_offset = (32 - img_width) // 2
+                        y_offset = (32 - img_height) // 2
+                        new_img.blit(img, (x_offset, y_offset))
+                        img = new_img
+                
+                IMAGES[key] = img
                 print(f"Loaded entity image: {key} from {full_path}")
             else:
                 print(f"Warning: Entity image file not found: {full_path}")
                 # Create a placeholder image
-                placeholder = pygame.Surface((Tile.SIZE, Tile.SIZE), pygame.SRCALPHA)
+                if key == "house":
+                    # For house, create a 32x32 placeholder (2x2 tiles)
+                    placeholder = pygame.Surface((32, 32), pygame.SRCALPHA)
+                else:
+                    placeholder = pygame.Surface((Tile.SIZE, Tile.SIZE), pygame.SRCALPHA)
                 placeholder.fill((255, 0, 255, 128))  # Magenta semi-transparent
                 IMAGES[key] = placeholder
         except Exception as e:
             print(f"Error loading entity image {key}: {e}")
             # Create a placeholder image
-            placeholder = pygame.Surface((Tile.SIZE, Tile.SIZE), pygame.SRCALPHA)
+            if key == "house":
+                # For house, create a 32x32 placeholder (2x2 tiles)
+                placeholder = pygame.Surface((32, 32), pygame.SRCALPHA)
+            else:
+                placeholder = pygame.Surface((Tile.SIZE, Tile.SIZE), pygame.SRCALPHA)
             placeholder.fill((255, 0, 255, 128))  # Magenta semi-transparent
             IMAGES[key] = placeholder
+
 
 # Load images when module is imported
 load_entity_images()
@@ -64,17 +91,27 @@ def render_entity_texture(screen, texture, x, y, width, height, entity_width, en
     src_width = Tile.SIZE
     src_height = Tile.SIZE
     
-    # Check if the texture is large enough
+    # Get texture dimensions
     texture_width, texture_height = texture.get_size()
+    
+    # Check if the texture is large enough for the entire entity
     if texture_width >= (entity_width * Tile.SIZE) and texture_height >= (entity_height * Tile.SIZE):
         # The texture covers the whole entity, extract just this component's part
         src_rect = pygame.Rect(src_x, src_y, src_width, src_height)
         component_texture = texture.subsurface(src_rect)
     else:
-        # The texture is not properly sized, use the whole texture
-        # This is a fallback for improperly sized textures
-        component_texture = texture
-        print(f"Warning: Texture size mismatch. Expected at least {entity_width*Tile.SIZE}x{entity_height*Tile.SIZE}, got {texture_width}x{texture_height}")
+        # The texture is not properly sized for the entire entity
+        # Try to handle it gracefully by using the whole texture for each component
+        
+        # If the texture is at least as large as a single tile, use it directly
+        if texture_width >= Tile.SIZE and texture_height >= Tile.SIZE:
+            component_texture = texture
+        else:
+            # Create a placeholder texture
+            component_texture = pygame.Surface((Tile.SIZE, Tile.SIZE), pygame.SRCALPHA)
+            component_texture.fill((255, 0, 255, 128))  # Magenta semi-transparent
+            
+        print(f"Warning: Texture size mismatch. Expected at least {entity_width*Tile.SIZE}x{entity_height*Tile.SIZE}, got {texture_width}x{texture_height}. Using simplified rendering.")
     
     # Scale the component texture to the desired size
     scaled_texture = pygame.transform.scale(component_texture, (width, height))
@@ -87,6 +124,7 @@ def render_entity_texture(screen, texture, x, y, width, height, entity_width, en
     
     # Draw the texture
     screen.blit(scaled_texture, (x, y))
+
 
 
 class EntityTile:
@@ -324,6 +362,9 @@ class HouseEntityTile(EntityTile):
         self.door_position = (base_x, base_y + 1)  # Bottom-left is the door
         self.is_door_open = False
         self.max_occupants = 4
+        
+        # Use the house texture for the entire entity
+        self.texture = IMAGES.get("house")
     
     def _create_component_tiles(self):
         """Create the house components: walls, roof, door"""
@@ -333,43 +374,30 @@ class HouseEntityTile(EntityTile):
         # Top-left component (main house structure)
         top_left = TileComponent(self, 0, 0, "house_top_left")
         top_left.walkable = True
-        if house_texture:
-            top_left.custom_texture = house_texture
-        else:
-            top_left.custom_color = (139, 69, 19)  # Brown
+        top_left.custom_texture = house_texture
         
         # Top-right component
         top_right = TileComponent(self, 1, 0, "house_top_right")
         top_right.walkable = True
-        if house_texture:
-            top_right.custom_texture = house_texture
-        else:
-            top_right.custom_color = (139, 69, 19)  # Brown
+        top_right.custom_texture = house_texture
         
         # Bottom-left component (wall)
         bottom_left = TileComponent(self, 0, 1, "house_bottom_left")
         bottom_left.walkable = False
-        if house_texture:
-            bottom_left.custom_texture = house_texture
-        else:
-            bottom_left.custom_color = (139, 69, 19)  # Brown
+        bottom_left.custom_texture = house_texture
         
         # Bottom-right component (door)
         door = TileComponent(self, 1, 1, "house_door")
         door.walkable = False 
-        
-        # For the door, we'll use the house texture for rendering the structure
-        # but we'll overlay the door texture when the door is open/closed
-        if house_texture:
-            door.custom_texture = house_texture
-        else:
-            door.custom_color = (139, 69, 19)  # Brown
+        door.custom_texture = house_texture
         
         # Add all components to the tile dictionary
         self.tiles[(0, 0)] = top_left
         self.tiles[(1, 0)] = top_right
         self.tiles[(0, 1)] = bottom_left
         self.tiles[(1, 1)] = door
+
+
 
 
     
@@ -573,3 +601,7 @@ class EntityTileManager:
         for entity_tile in self.entity_tiles:
             if entity_tile.opacity < 1.0:
                 entity_tile.render(screen, camera)
+
+    def has_entity_at(self, x, y):
+        """Check if there's an entity tile at the specified position"""
+        return (x, y) in self.entity_tile_map

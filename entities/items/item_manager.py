@@ -201,16 +201,42 @@ class ItemManager:
             ItemFactory.register_template(item)
             
         elif item_def.category == "schematic":
-            # Schematic item for building structures
-            # This would be a special item that when used, creates a structure
-            # For now, we'll just create a basic item
-            item = Item(
-                item_id=item_def.item_id,
-                name=item_def.name,
-                description=item_def.description,
-                icon_path=item_def.icon_path,
-                max_stack=1
-            )
+            # Properly handle schematic items
+            structure_type = item_def.properties.get("structure_type", "generic")
+            
+            # Create the appropriate schematic item based on structure type
+            if structure_type == "house":
+                from entities.items.schematic import HouseSchematicItem
+                item = HouseSchematicItem(
+                    item_id=item_def.item_id,
+                    name=item_def.name,
+                    description=item_def.description,
+                    icon_path=item_def.icon_path,
+                    max_stack=item_def.properties.get("max_stack", 5)
+                )
+            elif structure_type == "campfire":
+                from entities.items.schematic import CampfireSchematicItem
+                item = CampfireSchematicItem(
+                    item_id=item_def.item_id,
+                    name=item_def.name,
+                    description=item_def.description,
+                    icon_path=item_def.icon_path,
+                    max_stack=item_def.properties.get("max_stack", 5)
+                )
+            else:
+                # Generic schematic
+                from entities.items.schematic import SchematicItem
+                item = SchematicItem(
+                    item_id=item_def.item_id,
+                    name=item_def.name,
+                    description=item_def.description,
+                    icon_path=item_def.icon_path,
+                    max_stack=item_def.properties.get("max_stack", 5),
+                    structure_type=structure_type,
+                    width=item_def.properties.get("width", 1),
+                    height=item_def.properties.get("height", 1)
+                )
+            
             ItemFactory.register_template(item)
     
     def create_item(self, item_def: ItemDefinition) -> None:
@@ -412,11 +438,14 @@ class ItemManager:
         return item_def
     
     def create_schematic_item(self, item_id: str, name: str, description: str, 
-                             structure_type: str, icon_path: str = None) -> ItemDefinition:
+                            structure_type: str, icon_path: str = None, 
+                            width: int = 1, height: int = 1) -> ItemDefinition:
         """Helper function to create a schematic item for building structures"""
         properties = {
             "structure_type": structure_type,
-            "max_stack": 1  # Schematics typically don't stack
+            "max_stack": 5,  # Schematics typically don't stack much
+            "width": width,
+            "height": height
         }
         
         item_def = ItemDefinition(
@@ -430,7 +459,7 @@ class ItemManager:
         
         self.create_item(item_def)
         return item_def
-    
+
     def create_default_items(self) -> None:
         """Create a set of default items if none exist"""
         # Only create defaults if no items exist

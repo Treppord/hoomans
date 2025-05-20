@@ -659,3 +659,11 @@ class WorldMap:
             self.initialize_entity_tiles()
         
         print("Fallback map generation complete")
+
+
+    def is_walkable(self, x, y):
+        """Check if the tile at the specified position is walkable"""
+        tile = self.get_tile(x, y)
+        if not tile:
+            return False
+        return tile.is_walkable()

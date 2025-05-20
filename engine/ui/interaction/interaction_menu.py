@@ -650,10 +650,25 @@ class ConstructHandler(InteractionHandler):
         for y in range(grid_y, grid_y + height):
             for x in range(grid_x, grid_x + width):
                 # Check if tile is walkable and doesn't have an entity tile
-                if not world_map.is_walkable(x, y) or world_map.entity_tile_manager.get_component_at(x, y):
+                
+                # Check if the world_map has is_walkable method
+                if hasattr(world_map, 'is_walkable'):
+                    is_walkable = world_map.is_walkable(x, y)
+                else:
+                    # Fallback: check if the tile exists and is walkable
+                    tile = world_map.get_tile(x, y)
+                    is_walkable = tile and tile.is_walkable()
+                
+                # Check if there's an entity tile at this position
+                has_entity = False
+                if hasattr(world_map, 'entity_tile_manager'):
+                    has_entity = world_map.entity_tile_manager.get_component_at(x, y) is not None
+                
+                if not is_walkable or has_entity:
                     return False
         
         return True
+
     
     def _place_schematic(self):
         """Place the selected schematic at the preview position"""

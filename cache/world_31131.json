@@ -1,0 +1,45 @@
+{
+  "seed": 31131,
+  "entity_memories": {
+    "0bc80fdff344d30008": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "house",
+          "x": 20,
+          "y": 11,
+          "name": "House"
+        },
+        "timestamp": 1747741096.3880682
+      }
+    ],
+    "0becaffe083b41b291": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "house",
+          "x": 20,
+          "y": 11,
+          "name": "House"
+        },
+        "timestamp": 1747741103.227255
+      }
+    ]
+  },
+  "discovered_locations": {
+    "house": [
+      {
+        "x": 20,
+        "y": 11,
+        "name": "House",
+        "discovered_by": [
+          "0bc80fdff344d30008",
+          "0becaffe083b41b291"
+        ],
+        "discovery_time": 1747741096.3880692
+      }
+    ]
+  },
+  "entity_relationships": {},
+  "last_updated": 1747741103.227304
+}

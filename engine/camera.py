@@ -148,3 +148,10 @@ class Camera:
         screen_x = (world_x - self.offset_x) * self.zoom
         screen_y = (world_y - self.offset_y) * self.zoom
         return (screen_x, screen_y)
+
+    def screen_to_world(self, screen_x, screen_y):
+        """Convert screen coordinates to world coordinates"""
+        # This is the same as reverse_apply, just with a more intuitive name
+        world_x = (screen_x / self.zoom) + self.offset_x
+        world_y = (screen_y / self.zoom) + self.offset_y
+        return (world_x, world_y)
