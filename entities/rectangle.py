@@ -4,6 +4,8 @@ import math
 
 from entities.inventory import Inventory
 from entities.items.item_factory import ItemFactory
+from engine.ui.interaction.interaction_menu import InteractionMenu
+
 
 class Rectangle:
     """Base class for all rectangular entities in the game"""
@@ -67,7 +69,12 @@ class Rectangle:
         
         self.starter_items_added = False
 
-        
+                    
+        self.interaction_menu = None
+        if controllable:
+            print("INTERACTION: Creating interaction menu for player")
+            self.interaction_menu = InteractionMenu(self)
+            print(f"INTERACTION: Interaction menu created: {self.interaction_menu}")
         # Generate a persistent ID
         self.entity_id = self.generate_persistent_id()
         
@@ -380,7 +387,9 @@ class Rectangle:
         # Draw the sprite
         screen.blit(tinted_frame, (screen_x, screen_y))
 
-
+        # Render interaction menu if visible
+        if self.interaction_menu and self.interaction_menu.visible:
+            self.interaction_menu.render(screen)
 
     
     def contains_point(self, screen_x, screen_y, camera):
@@ -446,6 +455,8 @@ class Rectangle:
                 {"item_id": "stone_axe", "quantity": 1},
                 {"item_id": "stone", "quantity": 10},
                 {"item_id": "branch", "quantity": 10},
+                {"item_id": "house_schematic", "quantity": 1},  # Add house schematic
+                {"item_id": "campfire_schematic", "quantity": 2},  # Add campfire schematic
             ]
             
             # Add each item to the inventory
@@ -614,3 +625,11 @@ class Rectangle:
         b = max(0, min(255, b))
         
         return (r, g, b, alpha)
+
+    def toggle_interaction_menu(self):
+        """Toggle the interaction menu"""
+        if self.interaction_menu:
+            print(f"DEBUG: Toggling interaction menu from {self.interaction_menu.visible} to {not self.interaction_menu.visible}")
+            self.interaction_menu.visible = not self.interaction_menu.visible
+            return True
+        return False

@@ -5,6 +5,7 @@ from typing import Dict, Optional, List
 from entities.items.item_base import Item
 from entities.items.consumable import FoodItem, WaterBottleItem
 from entities.items.tool import AxeItem, PickaxeItem
+from entities.items.schematic import SchematicItem, HouseSchematicItem, CampfireSchematicItem
 import pygame
 import importlib.util
 
@@ -24,6 +25,10 @@ class ItemFactory:
         # Register tools
         cls.register_template(AxeItem.create_template())
         cls.register_template(PickaxeItem.create_template())
+    
+        # Register schematics
+        cls.register_template(HouseSchematicItem.create_template())
+        cls.register_template(CampfireSchematicItem.create_template())
         
         # Load custom items from JSON if available
         cls.load_custom_items()

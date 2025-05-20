@@ -398,6 +398,24 @@ class SimpleGameEngine:
                 self.running = False
                 return
             
+            menu_handled = False
+            for obj in self.objects:
+                if hasattr(obj, 'interaction_menu') and obj.interaction_menu and obj.interaction_menu.visible:
+                    if obj.interaction_menu.handle_event(event):
+                        menu_handled = True
+                        break
+            
+            if menu_handled:
+                continue
+
+            # Check for F key to toggle interaction menu
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_f:
+                print("DEBUG: F key pressed directly in SimpleGameEngine")
+                for obj in self.objects:
+                    if hasattr(obj, 'controllable') and obj.controllable and hasattr(obj, 'toggle_interaction_menu'):
+                        print("DEBUG: Toggling interaction menu for player")
+                        obj.toggle_interaction_menu()
+                        break
 
             # Handle window resize events
             elif event.type == pygame.VIDEORESIZE:
@@ -420,6 +438,8 @@ class SimpleGameEngine:
                     
                 # Skip other event handling in menu mode
                 continue
+            
+
             
             # Let UI handle events first (for active chat input)
             if self.ui.handle_event(event):
@@ -530,6 +550,8 @@ class SimpleGameEngine:
                 self.input_handler.handle_entity_movement(obj)
                 self.input_handler.handle_entity_action(obj)
                 self.input_handler.handle_entity_interaction(obj)
+
+
                 
     def toggle_borderless_fullscreen(self):
         """Toggle borderless fullscreen mode (windowed fullscreen)"""
