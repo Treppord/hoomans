@@ -18,21 +18,21 @@
         "type": "location_discovery",
         "data": {
           "location_type": "house",
-          "x": 26,
-          "y": 15,
-          "name": "House"
-        },
-        "timestamp": 1747741951.108129
-      },
-      {
-        "type": "location_discovery",
-        "data": {
-          "location_type": "house",
           "x": 20,
           "y": 11,
           "name": "House"
         },
         "timestamp": 1747743165.6735349
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "house",
+          "x": 26,
+          "y": 15,
+          "name": "House"
+        },
+        "timestamp": 1747741951.108129
       }
     ]
   },
@@ -60,5 +60,5 @@
     ]
   },
   "entity_relationships": {},
-  "last_updated": 1747743165.6735418
+  "last_updated": 1747743564.490593
 }
