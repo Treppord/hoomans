@@ -550,6 +550,8 @@ class SimpleGameEngine:
                 self.input_handler.handle_entity_movement(obj)
                 self.input_handler.handle_entity_action(obj)
                 self.input_handler.handle_entity_interaction(obj)
+                
+                
 
 
                 
@@ -915,14 +917,32 @@ class SimpleGameEngine:
             print(f"Error creating default icon: {e}")
             
             
-    # Add these methods to the SimpleGameEngine class
-    def _start_game_from_menu(self):
-        """Start the game from the main menu"""
-        print("Starting game from menu")
+    def _start_game_from_menu(self, seed=None):
+        """Start the game from the main menu
+        
+        Args:
+            seed: Optional seed to use for world generation
+        """
+        print(f"Starting game from menu with seed: {seed}")
         self.game_state = GameState.RUNNING
+        
+        # Set map seed if provided
+        if seed is not None:
+            self.map_seed = seed
+            print(f"Using provided seed: {seed}")
         
         # Load item icons after pygame is initialized
         self.load_item_icons()
+        
+        # If we have a world map already, regenerate it with the new seed
+        if hasattr(self, 'world_map') and self.world_map:
+            print(f"Regenerating world map with seed: {self.map_seed}")
+            self.world_map.generate_realistic_map(seed=self.map_seed)
+        
+        # Update world cache with the new seed
+        if hasattr(self, 'world_cache'):
+            self.world_cache.set_world_seed(self.map_seed)
+
 
     def _quit_game(self):
         """Quit the game from the main menu"""

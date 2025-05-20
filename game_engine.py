@@ -128,7 +128,10 @@ if __name__ == "__main__":
     world_map = WorldMap(256, 256)
     world_map.initialize_entity_tiles()
 
-    world_map.generate_realistic_map(seed=engine.map_seed)
+    # Only generate the map if we're skipping the menu
+    if args.skip_menu:
+        world_map.generate_realistic_map(seed=engine.map_seed)
+
     # Initialize entity tile manager before adding any entity tiles
     
     # Add a tree and print debug info
@@ -139,9 +142,11 @@ if __name__ == "__main__":
     
 
     
+
     # Initialize world cache with the same seed
     world_cache = WorldCache()
-    world_cache.set_world_seed(engine.map_seed)
+    if args.skip_menu:
+        world_cache.set_world_seed(engine.map_seed)
     engine.world_cache = world_cache
     ai_universe.world_cache = world_cache  # Direct reference to the same object
 

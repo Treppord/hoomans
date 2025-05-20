@@ -199,7 +199,7 @@ class WorldMap:
                 ny = y / scale
                 # Use multiple octaves for more natural terrain
                 value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
-                                     lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=seed)
+                                    lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=seed)
                 # Normalize to 0-1 range
                 value = (value + 1) / 2
                 row.append(value)
@@ -214,7 +214,7 @@ class WorldMap:
                 nx = x / scale
                 ny = y / scale
                 value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
-                                     lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=moisture_seed)
+                                    lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=moisture_seed)
                 value = (value + 1) / 2
                 row.append(value)
             moisture_map.append(row)
@@ -269,47 +269,55 @@ class WorldMap:
         self._generate_trees(seed)
         
         print(f"Map generation complete. Entity tiles: {len(self.entity_tile_manager.entity_tiles)}")
+
+
     
     def _generate_trees(self, seed):
         """Generate trees on forest and plain tiles based on seed"""
-        # Create a random generator with the seed for deterministic generation
-        rng = random.Random(seed)
+        print(f"Generating trees with seed: {seed}")
+        
+        # Reset random state to ensure consistent generation
+        random.seed(seed)
         
         # Count for debugging
         trees_added = 0
         forest_tiles = 0
         grass_tiles = 0
         
-        # Iterate through all tiles
+        # Use a deterministic approach - for each tile, derive a value from its coordinates and the seed
         for y in range(self.height):
             for x in range(self.width):
                 tile = self.get_tile(x, y)
                 if not tile:
                     continue
                 
-                # Get a deterministic random value for this position
-                # Use a hash of position and seed to ensure consistency
-                pos_seed = hash((x, y, seed)) % 100000
-                rng.seed(pos_seed)
-                chance = rng.random()
+                # Create a deterministic value based on coordinates and seed
+                # This hash function will always return the same value for the same inputs
+                hash_value = ((x * 1299721) + (y * 4096) + seed) % 10000
+                normalized_value = hash_value / 10000.0  # Convert to 0-1 range
                 
-                # Forest tiles: 10% chance of tree
                 if tile.type == "forest":
                     forest_tiles += 1
-                    if chance < 0.1:
+                    # Place tree if hash value is below threshold (10% of forest tiles)
+                    if normalized_value < 0.1:
                         tree = self.add_tree(x, y)
                         if tree:
                             trees_added += 1
                 
-                # Grass/plain tiles: 10% chance of tree
                 elif tile.type == "grass":
                     grass_tiles += 1
-                    if chance < 0.005:
+                    # Place tree if hash value is below threshold (0.5% of grass tiles)
+                    if normalized_value < 0.005:
                         tree = self.add_tree(x, y)
                         if tree:
                             trees_added += 1
         
+        # Reset random state to avoid affecting other game systems
+        random.seed()
+        
         print(f"Tree generation: Added {trees_added} trees on {forest_tiles} forest tiles and {grass_tiles} grass tiles")
+
+
 
     
     def add_path(self, start_x, start_y, end_x, end_y):
