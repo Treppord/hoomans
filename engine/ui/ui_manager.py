@@ -34,7 +34,12 @@ class UIManager:
         inv_panel_x = (screen_width - inv_panel_width) // 2
         inv_panel_y = (screen_height - inv_panel_height) // 2
         self.inventory_panel = None  # Will be set when player is added
+        # Create pause menu
+        self.pause_menu = None  # Will be set by the game engine
     
+    def set_pause_menu(self, pause_menu):
+        """Set the pause menu"""
+        self.pause_menu = pause_menu    
 
     def set_player_inventory(self, player):
         """Set up the inventory panel for the player"""
@@ -124,6 +129,14 @@ class UIManager:
         
     def handle_event(self, event):
         """Handle UI events"""
+        if self.pause_menu and self.pause_menu.visible and self.pause_menu.handle_event(event):
+            return True
+            
+        # If pause menu is visible, don't process other UI events
+        if self.pause_menu and self.pause_menu.visible:
+            return True
+                    
+        
         # First check if inventory panel is visible and should handle the event
         if self.inventory_panel and self.inventory_panel.visible and self.inventory_panel.handle_event(event):
             return True
@@ -165,17 +178,22 @@ class UIManager:
         
     def render(self, screen):
         """Render all UI elements"""
-        # Render regular UI elements
-        for element in self.elements:
-            if hasattr(element, 'render'):
-                element.render(screen)
-        
         # Render text bubbles
         for bubble in self.text_bubbles[:]:
             if bubble.is_expired():
                 self.text_bubbles.remove(bubble)
             else:
                 bubble.render(screen)
+                
+        # Render regular UI elements
+        for element in self.elements:
+            if hasattr(element, 'render'):
+                element.render(screen)
+        
+
+        # Render pause menu last (on top of everything)
+        if self.pause_menu:
+            self.pause_menu.render(screen)
 
 
     def update_screen_size(self, screen_width, screen_height):

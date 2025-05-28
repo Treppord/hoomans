@@ -12,6 +12,7 @@ from engine.ui.ui_manager import UIManager
 from engine.ui.panels.stats_panel import StatsPanel
 from engine.ui.elements.chat_input import ChatInputBox
 from engine.ui.theme_manager import ThemeManager
+from engine.ui.pause_menu import PauseMenu
 from engine.camera import Camera
 import random
 import os
@@ -134,7 +135,15 @@ class SimpleGameEngine:
         self.ui = UIManager(width, height)
         self.load_item_icons()
 
-
+        # Create pause menu
+        self.pause_menu = PauseMenu(
+            width, 
+            height,
+            resume_callback=self._resume_game,
+            return_to_menu_callback=self._return_to_main_menu,
+            quit_callback=self._quit_game
+        )
+        self.ui.set_pause_menu(self.pause_menu)
         
         # Create chat input box BEFORE adding it to UI
         chat_input_width = 400
@@ -186,6 +195,22 @@ class SimpleGameEngine:
         # Game state
         self.running = False
 
+    def _resume_game(self):
+        """Resume the game from pause menu"""
+        self.paused = False
+        self.game_state = GameState.RUNNING
+        print("Game resumed")
+
+    def _return_to_main_menu(self):
+        """Return to main menu from pause menu"""
+        self.paused = False
+        self.game_state = GameState.MAIN_MENU
+        print("Returned to main menu")
+
+    def _quit_game(self):
+        """Quit the game"""
+        print("Quitting game")
+        self.running = False
     
     def toggle_fullscreen(self):
         """Toggle between fullscreen and windowed mode"""
@@ -433,6 +458,10 @@ class SimpleGameEngine:
                     # Update main menu if it exists
                     if hasattr(self, 'main_menu'):
                         self.main_menu.update_screen_size(self.width, self.height)
+                        
+                    # Update main menu if it exists
+                    if self.game_state == GameState.PAUSED:
+                        self.pause_menu.update_screen_size(self.width, self.height)
             
             # If in main menu, let it handle events
             if self.game_state == GameState.MAIN_MENU:
@@ -447,7 +476,18 @@ class SimpleGameEngine:
                 # Skip other event handling in menu mode
                 continue
             
-
+            if (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and 
+                self.game_state == GameState.RUNNING):
+                if self.pause_menu.visible:
+                    # If pause menu is already visible, resume the game
+                    self._resume_game()
+                else:
+                    # Show pause menu and pause the game
+                    self.paused = True
+                    self.game_state = GameState.PAUSED
+                    self.pause_menu.show()
+                    print("Game paused - ESC menu shown")
+                continue
             
             # Let UI handle events first (for active chat input)
             if self.ui.handle_event(event):
@@ -994,8 +1034,3 @@ class SimpleGameEngine:
             print("  help - Show this help")
 
 
-    def _quit_game(self):
-        """Quit the game from the main menu"""
-        print("Quitting game from menu")
-        self.running = False
-        
