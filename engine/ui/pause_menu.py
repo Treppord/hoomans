@@ -3,6 +3,7 @@ import pygame
 from engine.ui.constants.colors import DARK_PANEL_BG, TEXT_COLOR, TITLE_COLOR
 from engine.ui.elements.base import UIElement
 from engine.ui.elements.button import Button
+from sound.sound_manager import get_sound_manager
 
 class PauseMenu(UIElement):
     """Pause menu that appears when ESC is pressed during gameplay"""
@@ -19,12 +20,14 @@ class PauseMenu(UIElement):
             quit_callback: Function to call when Quit Game is clicked
         """
         # Create a centered panel
-        panel_width = 400
-        panel_height = 300
-        panel_x = (screen_width - panel_width) // 2
-        panel_y = (screen_height - panel_height) // 2
+        self.panel_width = 400
+        self.panel_height = 300
+        panel_x = (screen_width - self.panel_width) // 2
+        panel_y = (screen_height - self.panel_height) // 2
+        self.sound_manager = get_sound_manager()
+
         
-        super().__init__(panel_x, panel_y, panel_width, panel_height, 
+        super().__init__(panel_x, panel_y, self.panel_width, self.panel_height, 
                         background_color=(40, 40, 40, 240))
         
         self.screen_width = screen_width
@@ -57,6 +60,9 @@ class PauseMenu(UIElement):
         # Calculate vertical position for buttons (centered within the panel)
         total_buttons_height = 3 * button_height + 2 * button_spacing
         start_y = self.y + (self.height - total_buttons_height) // 2 + 30  # Offset for title
+        
+        # Clear existing buttons
+        self.buttons = []
         
         # Create Resume button
         resume_button = Button(
@@ -93,12 +99,14 @@ class PauseMenu(UIElement):
     
     def _resume_game(self):
         """Resume the game"""
+        
         self.hide()
         if self.resume_callback:
             self.resume_callback()
     
     def _return_to_menu(self):
         """Return to main menu"""
+        
         # Save all entity positions before returning to menu
         self._save_all_entities()
         
@@ -108,6 +116,7 @@ class PauseMenu(UIElement):
     
     def _quit_game(self):
         """Quit the game"""
+        
         # Save all entity positions before quitting
         self._save_all_entities()
         
@@ -137,10 +146,14 @@ class PauseMenu(UIElement):
     def show(self):
         """Show the pause menu"""
         self.visible = True
+        self.sound_manager.play_ui_click()
+
     
     def hide(self):
         """Hide the pause menu"""
         self.visible = False
+        self.sound_manager.play_ui_click()
+
     
     def toggle(self):
         """Toggle the pause menu visibility"""
@@ -148,18 +161,23 @@ class PauseMenu(UIElement):
     
     def update_screen_size(self, screen_width, screen_height):
         """Update menu when screen size changes"""
+        print(f"DEBUG: Updating pause menu size from {self.screen_width}x{self.screen_height} to {screen_width}x{screen_height}")
+        
         self.screen_width = screen_width
         self.screen_height = screen_height
         
-        # Recalculate panel position
-        panel_x = (screen_width - self.width) // 2
-        panel_y = (screen_height - self.height) // 2
+        # Recalculate panel position (keep panel size the same, just center it)
+        panel_x = (screen_width - self.panel_width) // 2
+        panel_y = (screen_height - self.panel_height) // 2
+        
+        # Update position
         self.x = panel_x
         self.y = panel_y
         
         # Recreate buttons with new positions
-        self.buttons = []
         self._create_buttons()
+        
+        print(f"DEBUG: Pause menu repositioned to ({self.x}, {self.y})")
     
     def handle_event(self, event):
         """Handle menu events"""

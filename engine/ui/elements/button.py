@@ -1,6 +1,8 @@
 """Button UI element"""
 import pygame
 from engine.ui.elements.base import UIElement
+from sound.sound_manager import get_sound_manager
+
 
 class Button(UIElement):
     """A clickable button UI element"""
@@ -28,10 +30,14 @@ class Button(UIElement):
         self.text_color = text_color
         self.disabled_color = disabled_color
         self.is_hovered = False
+        self.hovered = False
         self.is_pressed = False
         self.is_disabled = False
         self.font = None
         self._initialize_font()
+        self.sound_manager = get_sound_manager()
+        self.hover_sound_played = False  # Track if hover sound was played
+    
     
     def _initialize_font(self):
         """Initialize the font for the button text"""
@@ -64,15 +70,22 @@ class Button(UIElement):
             
         # Handle mouse movement for hover effect
         if event.type == pygame.MOUSEMOTION:
-            mouse_pos = event.pos
-            self.is_hovered = self.contains_point(mouse_pos[0], mouse_pos[1])
-            return self.is_hovered
+            was_hovered = self.hovered
+            self.hovered = self.contains_point(event.pos[0], event.pos[1])
+            
+            # Play hover sound when first hovering
+            if self.hovered and not was_hovered and not self.hover_sound_played:
+                self.sound_manager.play_ui_hover()
+                self.hover_sound_played = True
+            elif not self.hovered:
+                self.hover_sound_played = False 
             
         # Handle mouse button down
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
             mouse_pos = event.pos
             if self.contains_point(mouse_pos[0], mouse_pos[1]):
                 self.is_pressed = True
+                self.sound_manager.play_ui_click()
                 return True
                 
         # Handle mouse button up and trigger callback
@@ -83,6 +96,7 @@ class Button(UIElement):
             mouse_pos = event.pos
             if was_pressed and self.contains_point(mouse_pos[0], mouse_pos[1]):
                 # Button was clicked, trigger callback
+
                 if self.callback:
                     self.callback()
                 return True

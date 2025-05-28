@@ -1,3 +1,4 @@
+from sound.sound_manager import initialize_sound_manager
 from engine.core import SimpleGameEngine
 from entities.rectangle import Rectangle
 from entities.npc import NPC
@@ -44,6 +45,15 @@ if __name__ == "__main__":
             print(f"  - Current color: {entity.color}")
         else:
             print(f"DEBUG: {name} has no CNA data")
+
+
+    print("Initializing sound system...")
+    sound_manager = initialize_sound_manager(
+        master_volume=0.7,
+        sfx_volume=0.8,
+        music_volume=0.6
+    )
+    
 
     engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
     

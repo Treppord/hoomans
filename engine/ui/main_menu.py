@@ -4,6 +4,7 @@ from engine.ui.constants.colors import DARK_PANEL_BG, TEXT_COLOR, TITLE_COLOR
 from engine.ui.world_select_panel import WorldSelectPanel
 from engine.ui.elements.base import UIElement
 from engine.ui.elements.button import Button
+from sound.sound_manager import get_sound_manager
 
 class MainMenu(UIElement):
     # Add to __init__ method
@@ -23,6 +24,7 @@ class MainMenu(UIElement):
         self.screen_height = screen_height
         self.start_game_callback = start_game_callback
         self.quit_callback = quit_callback
+        self.sound_manager = get_sound_manager()
         self.buttons = []
         self.title_font = None
         self.subtitle_font = None
@@ -252,6 +254,7 @@ class MainMenu(UIElement):
         """Start a completely new game with a fresh seed"""
         try:
             # Generate a new random seed
+
             import random
             seed = random.randint(1, 100000)
             print(f"Starting new game with fresh seed: {seed}")
@@ -260,6 +263,7 @@ class MainMenu(UIElement):
             if self.start_game_callback:
                 self.start_game_callback(seed, is_new_world=True)
         except Exception as e:
+
             import traceback
             print(f"Error starting new game: {e}")
             traceback.print_exc()

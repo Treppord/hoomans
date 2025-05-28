@@ -1,6 +1,7 @@
 from engine.camera import Camera
 from entities.npc import NPC
 from ai.controllers.ai_universe_controller import WorldStateCollector
+from sound.sound_manager import get_sound_manager
 
 import pygame
 import sys
@@ -64,7 +65,8 @@ class SimpleGameEngine:
     def __init__(self, title="Simple Game Engine", width=800, height=600, fps=60, map_seed=None):
         # Initialize pygame
         pygame.init()
-        
+        self.sound_manager = get_sound_manager()
+
         # Store default dimensions
         self.default_width = width
         self.default_height = height
@@ -215,6 +217,9 @@ class SimpleGameEngine:
         # Save all entity states before quitting
         self._save_all_entity_states()
         
+        self.sound_manager.cleanup()
+
+        
         print("Quitting game")
         self.running = False
     
@@ -278,7 +283,12 @@ class SimpleGameEngine:
         self.camera.update_screen_size(self.width, self.height)
         self.ui.update_screen_size(self.width, self.height)
         
+        # Update pause menu size
+        if hasattr(self, 'pause_menu'):
+            self.pause_menu.update_screen_size(self.width, self.height)
+        
         print(f"Screen mode changed: {'Fullscreen' if self.fullscreen else 'Windowed'} ({self.width}x{self.height})")
+
     
     def handle_resize(self, new_width, new_height):
         """Handle window resize event"""
@@ -289,6 +299,10 @@ class SimpleGameEngine:
             # Update camera and UI
             self.camera.update_screen_size(self.width, self.height)
             self.ui.update_screen_size(self.width, self.height)
+            
+            # Update pause menu size
+            if hasattr(self, 'pause_menu'):
+                self.pause_menu.update_screen_size(self.width, self.height)
             
             print(f"Window resized to {self.width}x{self.height}")
 
@@ -480,6 +494,8 @@ class SimpleGameEngine:
                 self.running = False
                 return
             
+            
+            
             menu_handled = False
             for obj in self.objects:
                 if hasattr(obj, 'interaction_menu') and obj.interaction_menu and obj.interaction_menu.visible:
@@ -508,9 +524,10 @@ class SimpleGameEngine:
                     if hasattr(self, 'main_menu'):
                         self.main_menu.update_screen_size(self.width, self.height)
                         
-                    # Update main menu if it exists
-                    if self.game_state == GameState.PAUSED:
+                    # Update pause menu if it exists and we're in paused state
+                    if hasattr(self, 'pause_menu') and self.game_state == GameState.PAUSED:
                         self.pause_menu.update_screen_size(self.width, self.height)
+            
             
             # If in main menu, let it handle events
             if self.game_state == GameState.MAIN_MENU:
@@ -525,16 +542,22 @@ class SimpleGameEngine:
                 # Skip other event handling in menu mode
                 continue
             
+            # Handle pause menu events when in paused state
+            if self.game_state == GameState.PAUSED:
+                if hasattr(self, 'pause_menu') and self.pause_menu.handle_event(event):
+                    continue
+            
             if (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and 
                 self.game_state == GameState.RUNNING):
-                if self.pause_menu.visible:
+                if hasattr(self, 'pause_menu') and self.pause_menu.visible:
                     # If pause menu is already visible, resume the game
                     self._resume_game()
                 else:
                     # Show pause menu and pause the game
                     self.paused = True
                     self.game_state = GameState.PAUSED
-                    self.pause_menu.show()
+                    if hasattr(self, 'pause_menu'):
+                        self.pause_menu.show()
                     print("Game paused - ESC menu shown")
                 continue
             
@@ -694,6 +717,10 @@ class SimpleGameEngine:
         # Update camera and UI
         self.camera.update_screen_size(self.width, self.height)
         self.ui.update_screen_size(self.width, self.height)
+        
+        # Update pause menu size
+        if hasattr(self, 'pause_menu'):
+            self.pause_menu.update_screen_size(self.width, self.height)
         
         mode_str = "Fullscreen"
         if self.fullscreen and self.borderless:
@@ -932,7 +959,6 @@ class SimpleGameEngine:
 
 
 
-    
     def render(self):
         """Render all game objects"""
         # Clear the screen
@@ -971,6 +997,9 @@ class SimpleGameEngine:
         # Draw UI elements last (on top)
         self.ui.render(self.screen)
         
+        if self.game_state == GameState.PAUSED and hasattr(self, 'pause_menu'):
+            self.pause_menu.render(self.screen)
+        
         # Update the display
         pygame.display.flip()
     
@@ -987,6 +1016,10 @@ class SimpleGameEngine:
         # Clean up
         if hasattr(self, 'ai_universe'):
             self.ai_universe.stop()
+            
+        # Clean up sound manager
+        if hasattr(self, 'sound_manager'):
+            self.sound_manager.cleanup()
             
         self.theme_manager.render_background(self.screen, self.camera)
         self.theme_manager.render_foreground(self.screen, self.camera)
