@@ -145,6 +145,7 @@ class EntityTile:
         
         # Create the component tiles
         self._create_component_tiles()
+        
     
     def _create_component_tiles(self):
         """Create the component tiles - override in subclasses"""
@@ -175,6 +176,23 @@ class EntityTile:
             positions.append((self.base_x + rel_x, self.base_y + rel_y))
         return positions
     
+    def get_save_data(self):
+        """Get data to save to cache"""
+        return {
+            "opacity": self.opacity,
+            "is_active": self.is_active,
+            "entities_inside_count": len(self.entities_inside) if isinstance(self.entities_inside, list) else 0
+        }
+    
+    def load_save_data(self, data):
+        """Load data from cache"""
+        self.opacity = data.get("opacity", 1.0)
+        self.is_active = data.get("is_active", True)
+        # Ensure entities_inside is always a list
+        self.entities_inside = []
+        # Note: entities_inside will be restored when entities are loaded
+
+
     def on_entity_enter(self, entity, component_x, component_y):
         """Called when an entity enters this entity tile"""
         # Add entity to the list if not already there
@@ -295,6 +313,20 @@ class TreeEntityTile(EntityTile):
         super().__init__(base_x, base_y, width=1, height=2, tile_type="tree")
         self.entities_in_trunk = []  # Track entities specifically in the trunk area
     
+    def get_save_data(self):
+        """Get data to save to cache"""
+        data = super().get_save_data()
+        data.update({
+            "entities_in_trunk_count": len(self.entities_in_trunk) if isinstance(self.entities_in_trunk, list) else 0
+        })
+        return data
+    
+    def load_save_data(self, data):
+        """Load data from cache"""
+        super().load_save_data(data)
+        # Ensure entities_in_trunk is always a list
+        self.entities_in_trunk = []
+    
     def _create_component_tiles(self):
         """Create the tree components: trunk and leaves"""
         # Create a single component for the whole tree
@@ -365,6 +397,23 @@ class HouseEntityTile(EntityTile):
         
         # Use the house texture for the entire entity
         self.texture = IMAGES.get("house")
+    
+    def get_save_data(self):
+        """Get data to save to cache"""
+        data = super().get_save_data()
+        data.update({
+            "is_door_open": self.is_door_open,
+            "max_occupants": self.max_occupants,
+            "door_position": self.door_position
+        })
+        return data
+    
+    def load_save_data(self, data):
+        """Load data from cache"""
+        super().load_save_data(data)
+        self.is_door_open = data.get("is_door_open", False)
+        self.max_occupants = data.get("max_occupants", 4)
+        self.door_position = tuple(data.get("door_position", (self.base_x, self.base_y + 1)))
     
     def _create_component_tiles(self):
         """Create the house components: walls, roof, door"""
@@ -485,7 +534,19 @@ class EntityTileManager:
         for pos in entity_tile.get_all_positions():
             self.entity_tile_map[pos] = entity_tile
         
+        # Only save to world cache if we're not loading from cache
+        if (hasattr(self.world_map, 'world_cache') and 
+            self.world_map.world_cache and 
+            not getattr(self.world_map, '_loading_from_cache', False)):
+            save_data = entity_tile.get_save_data()
+            self.world_map.world_cache.save_entity_tile(
+                entity_tile.base_x, entity_tile.base_y, 
+                entity_tile.tile_type, save_data
+            )
+        
         return entity_tile
+
+
     
     def remove_entity_tile(self, entity_tile):
         """Remove an entity tile from the world"""
@@ -496,6 +557,12 @@ class EntityTileManager:
             for pos in entity_tile.get_all_positions():
                 if pos in self.entity_tile_map:
                     del self.entity_tile_map[pos]
+            
+            # Mark as removed in world cache if available
+            if hasattr(self.world_map, 'world_cache') and self.world_map.world_cache:
+                self.world_map.world_cache.remove_entity_tile(
+                    entity_tile.base_x, entity_tile.base_y
+                )
     
     def get_entity_tile_at(self, x, y):
         """Get the entity tile at the specified grid position"""
@@ -585,6 +652,22 @@ class EntityTileManager:
         """Update all entity tiles"""
         for entity_tile in self.entity_tiles:
             entity_tile.update()
+            
+            # Save updated state to cache periodically
+            if hasattr(self.world_map, 'world_cache') and self.world_map.world_cache:
+                # Save every 30 seconds or when significant changes occur
+                import time
+                current_time = time.time()
+                if not hasattr(entity_tile, '_last_cache_save'):
+                    entity_tile._last_cache_save = current_time
+                
+                if current_time - entity_tile._last_cache_save > 30:  # 30 seconds
+                    save_data = entity_tile.get_save_data()
+                    self.world_map.world_cache.save_entity_tile(
+                        entity_tile.base_x, entity_tile.base_y, 
+                        entity_tile.tile_type, save_data
+                    )
+                    entity_tile._last_cache_save = current_time
     
     def render(self, screen, camera):
         """Render all entity tiles"""

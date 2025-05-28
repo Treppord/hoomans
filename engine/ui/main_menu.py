@@ -81,7 +81,7 @@ class MainMenu(UIElement):
             width=button_width,
             height=button_height,
             text="Start New Game",
-            callback=self._start_game_callback
+            callback=self._start_new_game
         )
         self.buttons.append(start_button)
         
@@ -227,11 +227,39 @@ class MainMenu(UIElement):
                 from engine.core import SimpleGameEngine
                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
                     SimpleGameEngine.instance.world_cache.create_empty_cache(seed)
+                    print(f"Created empty cache for new world seed: {seed}")
             
-            # Call the callback with the seed
+            # Call the callback with the seed and indicate if it's a new world
             if self.start_game_callback:
-                self.start_game_callback(seed)
+                self.start_game_callback(seed, is_new_world=(seed is None or not self._cache_exists_for_seed(seed)))
         except Exception as e:
             import traceback
             print(f"Error starting game: {e}")
+            traceback.print_exc()
+    
+    def _cache_exists_for_seed(self, seed):
+        """Check if a cache file exists for the given seed"""
+        import os
+        from engine.core import SimpleGameEngine
+        
+        if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
+            cache_dir = SimpleGameEngine.instance.world_cache.cache_dir
+            cache_file = os.path.join(cache_dir, f"world_{seed}.json")
+            return os.path.exists(cache_file)
+        return False
+
+    def _start_new_game(self):
+        """Start a completely new game with a fresh seed"""
+        try:
+            # Generate a new random seed
+            import random
+            seed = random.randint(1, 100000)
+            print(f"Starting new game with fresh seed: {seed}")
+            
+            # Call the callback indicating this is a new world
+            if self.start_game_callback:
+                self.start_game_callback(seed, is_new_world=True)
+        except Exception as e:
+            import traceback
+            print(f"Error starting new game: {e}")
             traceback.print_exc()

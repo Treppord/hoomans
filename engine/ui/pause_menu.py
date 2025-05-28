@@ -99,14 +99,40 @@ class PauseMenu(UIElement):
     
     def _return_to_menu(self):
         """Return to main menu"""
+        # Save all entity positions before returning to menu
+        self._save_all_entities()
+        
         self.hide()
         if self.return_to_menu_callback:
             self.return_to_menu_callback()
     
     def _quit_game(self):
         """Quit the game"""
+        # Save all entity positions before quitting
+        self._save_all_entities()
+        
         if self.quit_callback:
             self.quit_callback()
+    
+    def _save_all_entities(self):
+        """Save all entity positions and states to cache"""
+        from engine.core import SimpleGameEngine
+        
+        if (hasattr(SimpleGameEngine, 'instance') and 
+            hasattr(SimpleGameEngine.instance, 'world_cache') and
+            SimpleGameEngine.instance.world_cache):
+            
+            print("DEBUG: Saving all entity positions before menu/quit...")
+            
+            # Save all NPCs and other entities
+            for obj in SimpleGameEngine.instance.objects:
+                if hasattr(obj, 'save_position_to_cache'):
+                    obj.save_position_to_cache()
+                    print(f"DEBUG: Saved position for entity {obj.get_entity_id()}")
+            
+            # Force save the world cache
+            SimpleGameEngine.instance.world_cache._save_cache()
+            print("DEBUG: Forced save of world cache completed")
     
     def show(self):
         """Show the pause menu"""

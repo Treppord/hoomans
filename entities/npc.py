@@ -57,12 +57,104 @@ class NPC(Rectangle):
         self.last_comfort_update = 0
         self.heading_to_comfort = False  # Also initialize food-seeking attribute
     
+        # Cache save tracking
+        self.last_position_save = 0
+        self.position_save_interval = 5000  # Save position every 5 seconds
+
 
         
         # If an AI controller was provided, set this entity as its target
         if self.ai_controller:
             self.ai_controller.set_entity(self)
 
+
+    def save_position_to_cache(self):
+        """Save current position and state to world cache"""
+        from engine.core import SimpleGameEngine
+        if (hasattr(SimpleGameEngine, 'instance') and 
+            hasattr(SimpleGameEngine.instance, 'world_cache')):
+            
+            world_cache = SimpleGameEngine.instance.world_cache
+            
+            # Prepare comprehensive entity data
+            entity_data = {
+                "thirst": self.thirst,
+                "hunger": self.hunger,
+                "comfort": getattr(self, 'comfort', 5),
+                "exploration_mode": self.exploration_mode,
+                "exploration_target_x": self.exploration_target_x,
+                "exploration_target_y": self.exploration_target_y,
+                "home_location": self.home_location,
+                "curiosity": self.curiosity,
+                "color": self.color,
+                "cna_file": getattr(self, 'cna_file', None),
+                "interesting_locations": getattr(self, 'interesting_locations', {}),
+                "explored_tiles": list(getattr(self, 'explored_tiles', set())),
+                "heading_to_known_water": getattr(self, 'heading_to_known_water', False),
+                "heading_to_food": getattr(self, 'heading_to_food', False),
+                "heading_to_comfort": getattr(self, 'heading_to_comfort', False),
+                "last_updated": pygame.time.get_ticks()
+            }
+            
+            # Save to cache
+            world_cache.save_entity_position(
+                self.get_entity_id(),
+                self.grid_x,
+                self.grid_y,
+                "npc",
+                entity_data
+            )
+            
+            print(f"DEBUG: Saved NPC {self.get_entity_id()} position and state to cache")
+
+    def load_position_from_cache(self):
+        """Load position and state from world cache"""
+        from engine.core import SimpleGameEngine
+        if (hasattr(SimpleGameEngine, 'instance') and 
+            hasattr(SimpleGameEngine.instance, 'world_cache')):
+            
+            world_cache = SimpleGameEngine.instance.world_cache
+            cached_data = world_cache.get_entity_position(self.get_entity_id())
+            
+            if cached_data:
+                # Restore position
+                self.grid_x = cached_data["x"]
+                self.grid_y = cached_data["y"]
+                self.visual_x = float(self.grid_x)
+                self.visual_y = float(self.grid_y)
+                
+                # Restore entity data
+                entity_data = cached_data.get("data", {})
+                self.thirst = entity_data.get("thirst", self.thirst)
+                self.hunger = entity_data.get("hunger", self.hunger)
+                self.comfort = entity_data.get("comfort", getattr(self, 'comfort', 5))
+                self.exploration_mode = entity_data.get("exploration_mode", "idle")
+                self.exploration_target_x = entity_data.get("exploration_target_x")
+                self.exploration_target_y = entity_data.get("exploration_target_y")
+                self.home_location = tuple(entity_data.get("home_location", self.home_location))
+                self.curiosity = entity_data.get("curiosity", self.curiosity)
+                self.heading_to_known_water = entity_data.get("heading_to_known_water", False)
+                self.heading_to_food = entity_data.get("heading_to_food", False)
+                self.heading_to_comfort = entity_data.get("heading_to_comfort", False)
+                
+                # Restore interesting locations
+                interesting_locations = entity_data.get("interesting_locations", {})
+                if isinstance(interesting_locations, dict):
+                    self.interesting_locations = interesting_locations
+                
+                # Restore explored tiles
+                explored_tiles = entity_data.get("explored_tiles", [])
+                if isinstance(explored_tiles, list):
+                    self.explored_tiles = set(tuple(tile) if isinstance(tile, list) else tile for tile in explored_tiles)
+                
+                # Restore color if saved
+                if "color" in entity_data:
+                    self.color = tuple(entity_data["color"])
+                
+                print(f"DEBUG: Loaded NPC {self.get_entity_id()} from cache at ({self.grid_x}, {self.grid_y}) with {len(self.explored_tiles)} explored tiles")
+                return True
+        
+        return False
 
     def update(self):
         """Update entity state"""
@@ -161,7 +253,21 @@ class NPC(Rectangle):
             if self.is_resting:
                 return
         
+        # Save position to cache periodically
+        if current_time - self.last_position_save > self.position_save_interval:
+            self.save_position_to_cache()
+            self.last_position_save = current_time
         
+        # Call the parent update method to handle the rest
+        
+        # Handle entity tile interactions
+        from engine.core import SimpleGameEngine
+        if (hasattr(SimpleGameEngine, 'instance') and 
+            hasattr(SimpleGameEngine.instance, 'world_map') and
+            hasattr(SimpleGameEngine.instance.world_map, 'entity_tile_manager')):
+            
+            entity_tile_manager = SimpleGameEngine.instance.world_map.entity_tile_manager
+            entity_tile_manager.handle_entity_movement(self)
         
         # PRIORITY 1: Check if we're adjacent to water and thirsty - this takes precedence over most actions
         from engine.core import SimpleGameEngine

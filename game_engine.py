@@ -149,6 +149,11 @@ if __name__ == "__main__":
         world_cache.set_world_seed(engine.map_seed)
     engine.world_cache = world_cache
     ai_universe.world_cache = world_cache  # Direct reference to the same object
+    world_map.set_world_cache(world_cache)
+
+
+
+
 
     # Get absolute path to the project root directory
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -213,6 +218,8 @@ if __name__ == "__main__":
 
     # Initialize exploration attributes for NPCs
     for obj in engine.objects:
+        if isinstance(obj, NPC) and hasattr(obj, 'load_position_from_cache'):
+            obj.load_position_from_cache()
         if isinstance(obj, NPC):
             # Set exploration attributes
             obj.exploration_mode = "idle"

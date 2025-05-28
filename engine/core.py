@@ -203,14 +203,60 @@ class SimpleGameEngine:
 
     def _return_to_main_menu(self):
         """Return to main menu from pause menu"""
+        # Save all entity states before returning to menu
+        self._save_all_entity_states()
+        
         self.paused = False
         self.game_state = GameState.MAIN_MENU
         print("Returned to main menu")
 
     def _quit_game(self):
         """Quit the game"""
+        # Save all entity states before quitting
+        self._save_all_entity_states()
+        
         print("Quitting game")
         self.running = False
+    
+    def _save_all_entity_states(self):
+        """Save all entity positions and states to cache"""
+        if hasattr(self, 'world_cache') and self.world_cache:
+            print("DEBUG: Saving all entity states...")
+            
+            # Save all entities that support caching
+            entities_saved = 0
+            for obj in self.objects:
+                if hasattr(obj, 'save_position_to_cache'):
+                    try:
+                        obj.save_position_to_cache()
+                        entities_saved += 1
+                    except Exception as e:
+                        print(f"Warning: Could not save entity {obj.get_entity_id()}: {e}")
+            
+            # Save all entity tiles
+            if (hasattr(self, 'world_map') and 
+                hasattr(self.world_map, 'entity_tile_manager')):
+                
+                entity_tiles_saved = 0
+                for entity_tile in self.world_map.entity_tile_manager.entity_tiles:
+                    try:
+                        save_data = entity_tile.get_save_data()
+                        self.world_cache.save_entity_tile(
+                            entity_tile.base_x, entity_tile.base_y,
+                            entity_tile.tile_type, save_data
+                        )
+                        entity_tiles_saved += 1
+                    except Exception as e:
+                        print(f"Warning: Could not save entity tile at ({entity_tile.base_x}, {entity_tile.base_y}): {e}")
+                
+                print(f"DEBUG: Saved {entity_tiles_saved} entity tiles")
+            
+            # Force save the cache to disk
+            try:
+                self.world_cache._save_cache()
+                print(f"DEBUG: Successfully saved {entities_saved} entities to cache")
+            except Exception as e:
+                print(f"Error saving cache: {e}")
     
     def toggle_fullscreen(self):
         """Toggle between fullscreen and windowed mode"""
@@ -354,11 +400,14 @@ class SimpleGameEngine:
 
                 
 
-        
     def set_world_map(self, world_map):
         """Set the world map for the game"""
         self.world_map = world_map
         self.physics.set_world_map(world_map)
+        
+        # Connect world cache to world map
+        if hasattr(self, 'world_cache'):
+            world_map.set_world_cache(self.world_cache)
         
     def add_object(self, obj):
         """Add a game object to the world"""
@@ -966,14 +1015,15 @@ class SimpleGameEngine:
             print(f"Error creating default icon: {e}")
             
             
-    def _start_game_from_menu(self, seed=None):
+    def _start_game_from_menu(self, seed=None, is_new_world=False):
         """Start the game from the main menu
         
         Args:
             seed: Optional seed to use for world generation
+            is_new_world: Whether this is a completely new world (not loaded from cache)
         """
         try:
-            print(f"Starting game from menu with seed: {seed}")
+            print(f"Starting game from menu with seed: {seed}, new world: {is_new_world}")
             self.game_state = GameState.RUNNING
             
             # Set map seed if provided
@@ -984,14 +1034,28 @@ class SimpleGameEngine:
             # Load item icons after pygame is initialized
             self.load_item_icons()
             
+            # Handle world cache setup
+            if hasattr(self, 'world_cache'):
+                if is_new_world:
+                    # For new worlds, clear the cache and start fresh
+                    print(f"Creating fresh world cache for new seed: {self.map_seed}")
+                    self.world_cache.create_fresh_world(self.map_seed)
+                else:
+                    # For existing worlds, load the cache
+                    print(f"Loading existing world cache for seed: {self.map_seed}")
+                    self.world_cache.set_world_seed(self.map_seed)
+            
             # If we have a world map already, regenerate it with the new seed
             if hasattr(self, 'world_map') and self.world_map:
                 print(f"Regenerating world map with seed: {self.map_seed}")
                 self.world_map.generate_realistic_map(seed=self.map_seed)
-            
-            # Update world cache with the new seed
-            if hasattr(self, 'world_cache'):
-                self.world_cache.set_world_seed(self.map_seed)
+                
+                # Only load cached entities if this is NOT a new world
+                if not is_new_world:
+                    self._load_cached_entities()
+                else:
+                    print("Skipping cached entity loading for new world")
+                
         except Exception as e:
             import traceback
             print(f"Error starting game from menu: {e}")
@@ -1004,6 +1068,53 @@ class SimpleGameEngine:
                 self.world_map._generate_fallback_map()
 
 
+    def _load_cached_entities(self):
+        """Load cached entity positions and states"""
+        if not hasattr(self, 'world_cache'):
+            return
+            
+        try:
+            cached_entities = self.world_cache.get_all_entity_positions()
+            
+            # Handle case where cached_entities might be a dict instead of a list
+            if isinstance(cached_entities, dict):
+                # Convert dict to list of entity data
+                entity_list = []
+                for entity_id, entity_data in cached_entities.items():
+                    if isinstance(entity_data, dict):
+                        entity_data["entity_id"] = entity_id
+                        entity_list.append(entity_data)
+                cached_entities = entity_list
+            
+            for entity_data in cached_entities:
+                if not isinstance(entity_data, dict):
+                    print(f"Warning: Invalid entity data format: {entity_data}")
+                    continue
+                    
+                entity_id = entity_data.get("entity_id")
+                entity_type = entity_data.get("type")
+                
+                if not entity_id:
+                    print(f"Warning: Entity data missing entity_id: {entity_data}")
+                    continue
+                
+                # Find existing entity with this ID
+                existing_entity = None
+                for obj in self.objects:
+                    if hasattr(obj, 'get_entity_id') and obj.get_entity_id() == entity_id:
+                        existing_entity = obj
+                        break
+                
+                if existing_entity and hasattr(existing_entity, 'load_position_from_cache'):
+                    existing_entity.load_position_from_cache()
+                    print(f"DEBUG: Loaded cached position for entity {entity_id}")
+                    
+        except Exception as e:
+            print(f"Error loading cached entities: {e}")
+            import traceback
+            traceback.print_exc()
+
+                
     def process_command(self, command):
         """Process debug commands"""
         parts = command.split()

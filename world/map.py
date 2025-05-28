@@ -15,11 +15,25 @@ class WorldMap:
         self.width = width
         self.height = height
         self.tiles = [[Tile("empty") for _ in range(width)] for _ in range(height)]
+        self.world_cache = None  # Will be set by the game engine
+    
+    def set_world_cache(self, world_cache):
+        """Set the world cache reference"""
+        self.world_cache = world_cache
     
     def set_tile(self, x, y, tile_type):
         """Set a tile at the specified position"""
         if 0 <= x < self.width and 0 <= y < self.height:
+            old_tile_type = self.tiles[y][x].type if self.tiles[y][x] else "empty"
             self.tiles[y][x] = Tile(tile_type)
+            
+            # Save world modification to cache
+            if self.world_cache:
+                self.world_cache.save_world_modification(
+                    "tile_change", x, y, 
+                    {"type": old_tile_type}, 
+                    {"type": tile_type}
+                )
     
     def get_tile(self, x, y):
         """Get the tile at the specified position"""
@@ -83,6 +97,107 @@ class WorldMap:
         self.entity_tile_manager = EntityTileManager(self)
         print("Entity tile manager initialized")
     
+    def load_cached_entity_tiles(self):
+        """Load entity tiles from cache"""
+        if not self.world_cache:
+            return
+        
+        # Load all cached entity tiles
+        cached_tiles = self.world_cache.get_all_entity_tiles()
+        
+        for tile_data in cached_tiles:
+            x, y = tile_data["x"], tile_data["y"]
+            tile_type = tile_data["type"]
+            
+            # Skip if this tile was marked as removed
+            if self.world_cache.is_entity_tile_removed(x, y):
+                continue
+            
+            print(f"DEBUG: Loading cached entity tile {tile_type} at ({x}, {y})")
+            
+            # Create the appropriate entity tile
+            if tile_type == "tree":
+                self._create_tree_from_cache(x, y, tile_data.get("data", {}))
+            elif tile_type == "house":
+                self._create_house_from_cache(x, y, tile_data.get("data", {}))
+            # Add more entity tile types as needed
+    
+    def _create_tree_from_cache(self, x, y, data):
+        """Create a tree entity tile from cached data"""
+        from world.entity_tile import TreeEntityTile
+        
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 1 and 0 <= y < self.height - 2):
+            return None
+            
+        # Create and add the tree
+        tree = TreeEntityTile(x, y)
+        
+        # Restore any additional data safely
+        if data and isinstance(data, dict):
+            for key, value in data.items():
+                if hasattr(tree, key) and key not in ['entities_inside', 'entities_in_trunk']:
+                    try:
+                        setattr(tree, key, value)
+                    except Exception as e:
+                        print(f"Warning: Could not restore tree attribute {key}: {e}")
+        
+        # Don't save to cache again when loading from cache
+        # Temporarily disable cache saving
+        original_world_cache = None
+        if hasattr(self, 'world_cache'):
+            original_world_cache = self.world_cache
+            self.world_cache = None
+        
+        self.entity_tile_manager.add_entity_tile(tree)
+        
+        # Restore world cache
+        if original_world_cache:
+            self.world_cache = original_world_cache
+        
+        return tree
+    
+    def _create_house_from_cache(self, x, y, data):
+        """Create a house entity tile from cached data"""
+        from world.entity_tile import HouseEntityTile
+        
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 2 and 0 <= y < self.height - 2):
+            return None
+            
+        # Create and add the house
+        house = HouseEntityTile(x, y)
+        
+        # Restore any additional data safely
+        if data and isinstance(data, dict):
+            for key, value in data.items():
+                if hasattr(house, key) and key not in ['entities_inside']:
+                    try:
+                        setattr(house, key, value)
+                    except Exception as e:
+                        print(f"Warning: Could not restore house attribute {key}: {e}")
+        
+        # Don't save to cache again when loading from cache
+        # Temporarily disable cache saving
+        original_world_cache = None
+        if hasattr(self, 'world_cache'):
+            original_world_cache = self.world_cache
+            self.world_cache = None
+        
+        self.entity_tile_manager.add_entity_tile(house)
+        
+        # Restore world cache
+        if original_world_cache:
+            self.world_cache = original_world_cache
+        
+        return house
+    
     def add_tree(self, x, y):
         """Add a tree entity tile at the specified position"""
         from world.entity_tile import TreeEntityTile
@@ -107,6 +222,16 @@ class WorldMap:
         # Create and add the tree
         tree = TreeEntityTile(x, y)
         self.entity_tile_manager.add_entity_tile(tree)
+        
+        # Save to cache
+        if self.world_cache:
+            tree_data = {
+                "opacity": getattr(tree, 'opacity', 1.0),
+                "entities_inside": len(getattr(tree, 'entities_inside', [])),
+                "entities_in_trunk": len(getattr(tree, 'entities_in_trunk', []))
+            }
+            self.world_cache.save_entity_tile(x, y, "tree", tree_data)
+        
         return tree
     
     def add_house(self, x, y):
@@ -135,7 +260,31 @@ class WorldMap:
         house = HouseEntityTile(x, y)
         if hasattr(self, 'entity_tile_manager'):
             self.entity_tile_manager.add_entity_tile(house)
+        
+        # Save to cache
+        if self.world_cache:
+            house_data = {
+                "is_door_open": getattr(house, 'is_door_open', False),
+                "entities_inside": len(getattr(house, 'entities_inside', [])),
+                "max_occupants": getattr(house, 'max_occupants', 4)
+            }
+            self.world_cache.save_entity_tile(x, y, "house", house_data)
+        
         return house
+    
+    def remove_entity_tile(self, x, y):
+        """Remove an entity tile at the specified position"""
+        if hasattr(self, 'entity_tile_manager'):
+            entity_tile = self.entity_tile_manager.get_entity_tile_at(x, y)
+            if entity_tile:
+                self.entity_tile_manager.remove_entity_tile(entity_tile)
+                
+                # Mark as removed in cache
+                if self.world_cache:
+                    self.world_cache.remove_entity_tile(x, y)
+                
+                return True
+        return False
     
     def is_wall(self, x, y):
         """Check if the tile at the specified position is a wall"""
@@ -217,7 +366,12 @@ class WorldMap:
                 self.initialize_entity_tiles()
                 print("Initialized entity tile manager during map generation")
             
-            # Generate trees based on tile type and seed
+            # Load cached entity tiles first
+            if self.world_cache:
+                print("Loading cached entity tiles...")
+                self.load_cached_entity_tiles()
+            
+            # Generate trees based on tile type and seed (only if not loaded from cache)
             print("Starting tree generation...")
             self._generate_trees(seed)
             
@@ -324,6 +478,14 @@ class WorldMap:
             for x in range(self.width):
                 tile = self.get_tile(x, y)
                 if not tile:
+                    continue
+                
+                # Skip if there's already a cached entity tile here
+                if self.world_cache and self.world_cache.get_entity_tile(x, y):
+                    continue
+                
+                # Skip if this position was marked as removed
+                if self.world_cache and self.world_cache.is_entity_tile_removed(x, y):
                     continue
                 
                 # Use a deterministic approach based on coordinates and seed
