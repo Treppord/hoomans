@@ -250,7 +250,6 @@ class NPC(Rectangle):
                     nearest_water = min(water_locations, 
                                       key=lambda loc: abs(loc["x"] - self.grid_x) + abs(loc["y"] - self.grid_y))
                     
-                    print(f"DEBUG: Thirsty NPC {self.get_entity_id()} found water in world cache at ({nearest_water['x']}, {nearest_water['y']})")
                     
                     # Get world map for tile checking
                     world_map = None
@@ -1318,7 +1317,6 @@ class NPC(Rectangle):
                                    key=lambda loc: abs(loc[0] - self.grid_x) + abs(loc[1] - self.grid_y))
                 water_x, water_y = nearest_water
                 
-                print(f"DEBUG: Thirsty NPC {id(self)} remembers water at ({water_x}, {water_y}), currently at ({self.grid_x}, {self.grid_y})")
                 
                 # If not already at the water source, move towards it
                 if abs(water_x - self.grid_x) > 1 or abs(water_y - self.grid_y) > 1:
@@ -1356,7 +1354,6 @@ class NPC(Rectangle):
                         # Drink until thirst is 10
                         while self.thirst < 10:
                             self.thirst = min(10, self.thirst + 2)
-                            print(f"NPC drank water from remembered source, thirst increased to {self.thirst}")
                         
                         # Set the last drink time
                         self.last_drink_time = pygame.time.get_ticks()
@@ -1428,7 +1425,6 @@ class NPC(Rectangle):
                 # Drink until thirst is 10
                 while self.thirst < 10:
                     self.thirst = min(10, self.thirst + 2)
-                    print(f"NPC drank water, thirst increased to {self.thirst}")
                 
                 # Set the last drink time
                 self.last_drink_time = pygame.time.get_ticks()
@@ -1447,7 +1443,6 @@ class NPC(Rectangle):
         elif decision.action == "eat" and self.hunger < 5:
             # Handle eating (for now, just increase hunger without requiring food source)
             self.hunger = min(10, self.hunger + 3)
-            print(f"NPC {self.get_entity_id()} ate food, hunger increased to {self.hunger}")
             
             # Set the last eat time
             self.last_eat_time = pygame.time.get_ticks()
@@ -1526,7 +1521,6 @@ class NPC(Rectangle):
                             key=lambda loc: abs(loc[0] - current_x) + abs(loc[1] - current_y))
             house_x, house_y = nearest_house
             
-            print(f"DEBUG: NPC {self.get_entity_id()} heading to known house at ({house_x}, {house_y})")
             
             # Use pathfinding to find a safe path to the house
             if world_map:
@@ -1540,7 +1534,6 @@ class NPC(Rectangle):
                     # Path found, move to the next position in the path
                     next_pos = path[1]  # path[0] is current position
                     
-                    print(f"DEBUG: NPC {self.get_entity_id()} moving to {next_pos} on path to house")
                     
                     # Set target to the next position
                     self.target_grid_x = next_pos[0]

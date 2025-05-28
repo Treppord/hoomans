@@ -262,6 +262,14 @@ class SimpleGameEngine:
         """Handle a chat message from the player"""
         if self.player:
             print(f"Chat message: {message}")  # Debug output
+            
+            # Check for commands first
+            if message.startswith("/"):
+                self.process_command(message[1:])  # Remove the "/" and process command
+                # When chat is closed, reset chat mode in input handler
+                self.input_handler.set_chat_mode(False)
+                return
+            
             bubble = self.ui.add_text_bubble(message, self.player, duration=5.0)
             # Find NPCs in vicinity and have them respond
             self.process_npc_responses_to_chat(message)
@@ -626,8 +634,9 @@ class SimpleGameEngine:
         
         # Check for commands
         if message.startswith("/"):
-            self.process_command(message[1:])
+            self.process_command(message[1:])  # This line exists but process_command wasn't working
             return
+
         
         # Find the nearest NPC within chat range
         nearest_npc = None
@@ -955,8 +964,38 @@ class SimpleGameEngine:
                 self.world_map._generate_fallback_map()
 
 
+    def process_command(self, command):
+        """Process debug commands"""
+        parts = command.split()
+        if not parts:
+            return
+        
+        cmd = parts[0].lower()
+        
+        if cmd == "debug_map":
+            if hasattr(self, 'world_map'):
+                self.world_map.enable_debug_mode()
+                print("Map debug mode enabled. Next map generation will create debug files.")
+            else:
+                print("No world map available")
+        
+        elif cmd == "regen_map":
+            if hasattr(self, 'world_map'):
+                seed = int(parts[1]) if len(parts) > 1 else None
+                self.world_map.generate_realistic_map(seed=seed)
+                print(f"Map regenerated with seed: {seed}")
+            else:
+                print("No world map available")
+        
+        elif cmd == "help":
+            print("Available commands:")
+            print("  debug_map - Enable debug visualization")
+            print("  regen_map [seed] - Regenerate map with optional seed")
+            print("  help - Show this help")
+
 
     def _quit_game(self):
         """Quit the game from the main menu"""
         print("Quitting game from menu")
         self.running = False
+        

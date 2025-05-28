@@ -80,7 +80,6 @@ class UIManager:
                 existing_bubble.text == text and 
                 not existing_bubble.is_expired()):
                 # Don't create duplicate bubbles
-                print(f"DEBUG: Skipping duplicate text bubble for entity {id(entity)}")
                 return existing_bubble
         
         bubble = TextBubble(text, entity, duration)

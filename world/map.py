@@ -3,6 +3,9 @@ from world.tile import Tile
 import random
 import noise
 import math
+from world.biome_generator import ProceduralMapGenerator
+from world.map_debugger import MapDebugger
+
 
 class WorldMap:
     """Represents the game world as a grid of tiles"""
@@ -183,168 +186,31 @@ class WorldMap:
         return None  # No water found within range
     
     def generate_realistic_map(self, scale=100.0, octaves=6, persistence=0.5, lacunarity=2.0, seed=None):
-        """Generate a realistic world map with natural features like rivers and coherent terrain"""
+        """Generate a realistic world map using the new procedural generator"""
         try:
             if seed is None:
                 seed = random.randint(0, 1000)
-                        
+            
             print(f"Generating realistic map with seed: {seed}")
             
-            # Ensure seed is an integer
-            seed = int(seed)
+            # Use the new procedural generator
+            generator = ProceduralMapGenerator(self.width, self.height, seed)
+            tile_map, metadata = generator.generate_map()
             
-            # Set a fixed random seed for deterministic generation
-            random.seed(seed)
-            
-            # Start with ALL land - fill with grass
+            # Apply the generated tiles to the world map
             for y in range(self.height):
                 for x in range(self.width):
-                    self.set_tile(x, y, "grass")
+                    self.set_tile(x, y, tile_map[y][x])
             
-            # Create a height map for terrain variation - start very high to ensure minimal water
-            height_map = [[0.8 for _ in range(self.width)] for _ in range(self.height)]  # Start very high (almost all land)
-            
-            # Generate mountain ranges
-            num_mountain_ranges = 4 + (seed % 4)  # 4-7 mountain ranges
-            for i in range(num_mountain_ranges):
-                # Create a mountain range that follows a path
-                range_seed = seed + i * 1000
-                random.seed(range_seed)
+            # Create debug visualization if in debug mode
+            if hasattr(self, '_debug_mode') and self._debug_mode:
+                debugger = MapDebugger(self.width, self.height)
+                debug_surface = debugger.create_debug_surface(metadata)
                 
-                # Start point for the range
-                start_x = random.randint(20, self.width - 20)
-                start_y = random.randint(20, self.height - 20)
-                
-                # Generate a winding path for the mountain range
-                range_length = random.randint(15, 40)
-                range_width = random.randint(4, 10)
-                
-                x, y = start_x, start_y
-                for step in range(range_length):
-                    # Move in a random direction, but with some continuity
-                    dx = random.randint(-2, 2)
-                    dy = random.randint(-2, 2)
-                    
-                    x = max(10, min(self.width - 10, x + dx))
-                    y = max(10, min(self.height - 10, y + dy))
-                    
-                    # Add height to this point and surrounding area
-                    for ny in range(y - range_width, y + range_width):
-                        for nx in range(x - range_width, x + range_width):
-                            if 0 <= nx < self.width and 0 <= ny < self.height:
-                                # Calculate distance from center line
-                                dist = math.sqrt((nx - x)**2 + (ny - y)**2)
-                                if dist < range_width:
-                                    # Higher elevation near the center, tapering off
-                                    elevation = (range_width - dist) / range_width
-                                    # Add some randomness to the elevation
-                                    elevation *= (0.8 + random.random() * 0.4)
-                                    # Add to the height map
-                                    height_map[ny][nx] += elevation * 0.2
-            
-            # Create a VERY small number of tiny lakes (depressions in the terrain)
-            num_lakes = 3 + (seed % 5)  # 1-3 lakes only
-            for i in range(num_lakes):
-                lake_seed = seed + i * 2000
-                random.seed(lake_seed)
-                
-                # Start point for the lake
-                start_x = random.randint(20, self.width - 20)
-                start_y = random.randint(20, self.height - 20)
-                
-                # Size of the lake - keep them very small
-                lake_size = random.randint(3, 6)  # Very small lakes
-                
-                # Create a depression in the height map
-                for ny in range(start_y - lake_size, start_y + lake_size):
-                    for nx in range(start_x - lake_size, start_x + lake_size):
-                        if 0 <= nx < self.width and 0 <= ny < self.height:
-                            # Calculate distance from center
-                            dist = math.sqrt((nx - start_x)**2 + (ny - start_y)**2)
-                            if dist < lake_size:
-                                # Lower elevation near the center
-                                depression = (dist / lake_size) * 0.4
-                                # Create a much deeper depression to ensure it becomes water
-                                height_map[ny][nx] = max(0.05, height_map[ny][nx] - (0.8 - depression))
-            
-            # Normalize height map to 0-1 range
-            max_height = max(max(row) for row in height_map)
-            min_height = min(min(row) for row in height_map)
-            height_range = max_height - min_height
-            
-            if height_range > 0:  # Avoid division by zero
-                for y in range(self.height):
-                    for x in range(self.width):
-                        height_map[y][x] = (height_map[y][x] - min_height) / height_range
-            
-            # Set an EXTREMELY low water threshold - only 2-3% of the map should be water
-            water_threshold = 0.1
-            
-            # Set tiles based on height
-            for y in range(self.height):
-                for x in range(self.width):
-                    height = height_map[y][x]
-                    
-                    # Deep water (lowest elevation) - extremely rare
-                    if height < water_threshold - 0.02:
-                        self.set_tile(x, y, "deep_water")
-                    
-                    # Shallow water - very rare
-                    elif height < water_threshold:
-                        self.set_tile(x, y, "shallow_water")
-                    
-                    # Beach/sand (transition from water to land)
-                    elif height < water_threshold + 0.02:
-                        self.set_tile(x, y, "sand")
-                    
-                    # Grassland/plains - most common
-                    elif height < 0.7:
-                        # Add some forests in a natural pattern
-                        forest_chance = 0.2 + (math.sin(x * 0.1) + math.cos(y * 0.1)) * 0.15
-                        if random.random() < forest_chance:
-                            self.set_tile(x, y, "forest")
-                        else:
-                            self.set_tile(x, y, "grass")
-                    
-                    # Mountains
-                    elif height < 0.9:
-                        self.set_tile(x, y, "mountain")
-                    
-                    # Snow peaks (highest elevation)
-                    else:
-                        self.set_tile(x, y, "snow")
-            
-            # Generate rivers - very few and narrow
-            num_rivers = 3 + (seed % 5)  # 1-2 rivers only
-            for i in range(num_rivers):
-                # Find a high point to start the river
-                attempts = 0
-                while attempts < 100:
-                    start_x = random.randint(10, self.width - 10)
-                    start_y = random.randint(10, self.height - 10)
-                    
-                    # Start rivers from mountains or high ground
-                    if height_map[start_y][start_x] > 0.8:  # Start from higher ground
-                        river = self._generate_river(start_x, start_y, height_map)
-                        if river and len(river) > 8:  # Only use rivers of decent length
-                            # Apply the river to the map - make it narrow
-                            for x, y in river:
-                                if 0 <= x < self.width and 0 <= y < self.height:
-                                    self.set_tile(x, y, "shallow_water")
-                                    
-                                    # Add sand banks along rivers (but fewer)
-                                    for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                                        nx, ny = x + dx, y + dy
-                                        if (0 <= nx < self.width and 0 <= ny < self.height and
-                                            not self.get_tile(nx, ny).is_water()):
-                                            if random.random() < 0.2:  # Lower chance
-                                                self.set_tile(nx, ny, "sand")
-                        break
-                    
-                    attempts += 1
-            
-            # Add border walls
-            self._add_border_walls()
+                # Save debug image
+                import pygame
+                pygame.image.save(debug_surface, f"debug_map_{seed}.png")
+                debugger.print_generation_stats(metadata)
             
             # Initialize entity tiles manager if not already initialized
             if not hasattr(self, 'entity_tile_manager'):
@@ -355,7 +221,7 @@ class WorldMap:
             print("Starting tree generation...")
             self._generate_trees(seed)
             
-            # Reset random state to avoid affecting other game systems
+            # Reset random state
             random.seed()
             
             print(f"Map generation complete. Entity tiles: {len(self.entity_tile_manager.entity_tiles)}")
@@ -366,6 +232,14 @@ class WorldMap:
             traceback.print_exc()
             # Create a simple fallback map
             self._generate_fallback_map()
+    
+    def enable_debug_mode(self):
+        """Enable debug mode for map generation"""
+        self._debug_mode = True
+    
+    def disable_debug_mode(self):
+        """Disable debug mode for map generation"""
+        self._debug_mode = False
 
 
 

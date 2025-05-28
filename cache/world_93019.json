@@ -1,0 +1,53 @@
+{
+  "seed": 93019,
+  "entity_memories": {
+    "0bc80fdff344d30008": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 5,
+          "y": 6,
+          "name": "Water source"
+        },
+        "timestamp": 1748469443.8608088
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "house",
+          "x": 20,
+          "y": 11,
+          "name": "House"
+        },
+        "timestamp": 1748469446.039086
+      }
+    ]
+  },
+  "discovered_locations": {
+    "water": [
+      {
+        "x": 5,
+        "y": 6,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1748469443.860811
+      }
+    ],
+    "house": [
+      {
+        "x": 20,
+        "y": 11,
+        "name": "House",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1748469446.039087
+      }
+    ]
+  },
+  "entity_relationships": {},
+  "last_updated": 1748469446.039089
+}

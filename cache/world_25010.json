@@ -1,0 +1,112 @@
+{
+  "seed": 25010,
+  "entity_memories": {
+    "0bc80fdff344d30008": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 6,
+          "y": 7,
+          "name": "Water source"
+        },
+        "timestamp": 1748469132.70976
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "house",
+          "x": 20,
+          "y": 11,
+          "name": "House"
+        },
+        "timestamp": 1748469134.750026
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 6,
+          "y": 6,
+          "name": "Water source"
+        },
+        "timestamp": 1748469134.790294
+      }
+    ],
+    "0becaffe083b41b291": [
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 37,
+          "y": 26,
+          "name": "Water source"
+        },
+        "timestamp": 1748469132.7106218
+      },
+      {
+        "type": "location_discovery",
+        "data": {
+          "location_type": "water",
+          "x": 37,
+          "y": 25,
+          "name": "Water source"
+        },
+        "timestamp": 1748469134.789092
+      }
+    ]
+  },
+  "discovered_locations": {
+    "water": [
+      {
+        "x": 6,
+        "y": 7,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1748469132.7097611
+      },
+      {
+        "x": 37,
+        "y": 26,
+        "name": "Water source",
+        "discovered_by": [
+          "0becaffe083b41b291"
+        ],
+        "discovery_time": 1748469132.710623
+      },
+      {
+        "x": 37,
+        "y": 25,
+        "name": "Water source",
+        "discovered_by": [
+          "0becaffe083b41b291"
+        ],
+        "discovery_time": 1748469134.789093
+      },
+      {
+        "x": 6,
+        "y": 6,
+        "name": "Water source",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1748469134.7902951
+      }
+    ],
+    "house": [
+      {
+        "x": 20,
+        "y": 11,
+        "name": "House",
+        "discovered_by": [
+          "0bc80fdff344d30008"
+        ],
+        "discovery_time": 1748469134.750027
+      }
+    ]
+  },
+  "entity_relationships": {},
+  "last_updated": 1748469144.496289
+}
