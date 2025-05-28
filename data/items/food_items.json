@@ -1,0 +1,20 @@
+[
+  {
+    "id": "apple",
+    "name": "Apple",
+    "description": "A juicy red apple that restores hunger",
+    "type": "food",
+    "icon": "items/apple.png",
+    "max_stack": 16,
+    "hunger_value": 2
+  },
+  {
+    "id": "berries",
+    "name": "Berries",
+    "description": "Small wild berries, slightly filling",
+    "type": "food",
+    "icon": "items/berries.png",
+    "max_stack": 32,
+    "hunger_value": 1
+  }
+]

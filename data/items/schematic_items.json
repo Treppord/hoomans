@@ -1,0 +1,20 @@
+[
+  {
+    "id": "house_schematic",
+    "name": "House Schematic",
+    "description": "A blueprint for building a simple house",
+    "type": "schematic",
+    "icon": "items/house_schematic.png",
+    "structure_type": "house",
+    "max_stack": 1
+  },
+  {
+    "id": "campfire_schematic",
+    "name": "Campfire Schematic",
+    "description": "A blueprint for building a campfire",
+    "type": "schematic",
+    "icon": "items/campfire_schematic.png",
+    "structure_type": "campfire",
+    "max_stack": 1
+  }
+]

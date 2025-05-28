@@ -14,6 +14,25 @@ class Camera:
         self.drag_start = None
         self.dragging = False
         self.follow_target = None
+    
+    def update_screen_size(self, width, height):
+        """Update camera parameters when screen size changes"""
+        # Store old center point in world coordinates
+        old_center_x = (self.width / 2) / self.zoom + self.offset_x
+        old_center_y = (self.height / 2) / self.zoom + self.offset_y
+        
+        # Update dimensions
+        self.width = width
+        self.height = height
+        
+        # Adjust offset to keep the same center point
+        self.offset_x = old_center_x - (self.width / 2) / self.zoom
+        self.offset_y = old_center_y - (self.height / 2) / self.zoom
+        
+        # If we have a follow target, immediately center on it
+        if self.follow_target:
+            self.center_on_target()
+
         
     def apply(self, x, y, width, height):
         """Apply camera transformations to a rectangle"""
@@ -118,6 +137,8 @@ class Camera:
     
     def should_draw_grid(self):
         """Determine if grid lines should be drawn based on zoom level"""
+        if hasattr(self, 'show_grid') and not self.show_grid:
+            return False
         return self.zoom >= 0.5
 
 
@@ -127,3 +148,10 @@ class Camera:
         screen_x = (world_x - self.offset_x) * self.zoom
         screen_y = (world_y - self.offset_y) * self.zoom
         return (screen_x, screen_y)
+
+    def screen_to_world(self, screen_x, screen_y):
+        """Convert screen coordinates to world coordinates"""
+        # This is the same as reverse_apply, just with a more intuitive name
+        world_x = (screen_x / self.zoom) + self.offset_x
+        world_y = (screen_y / self.zoom) + self.offset_y
+        return (world_x, world_y)

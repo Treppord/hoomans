@@ -1,0 +1,24 @@
+[
+  {
+    "id": "stone_axe",
+    "name": "Stone Axe",
+    "description": "A crude axe made of stone",
+    "type": "tool",
+    "icon": "items/stone_axe.png",
+    "tool_type": "axe",
+    "durability": 50,
+    "effectiveness": 0.8,
+    "max_stack": 1
+  },
+  {
+    "id": "stone_pickaxe",
+    "name": "Stone Pickaxe",
+    "description": "A crude pickaxe made of stone",
+    "type": "tool",
+    "icon": "items/stone_pickaxe.png",
+    "tool_type": "pickaxe",
+    "durability": 50,
+    "effectiveness": 0.8,
+    "max_stack": 1
+  }
+]

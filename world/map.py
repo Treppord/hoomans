@@ -3,6 +3,9 @@ from world.tile import Tile
 import random
 import noise
 import math
+from world.biome_generator import ProceduralMapGenerator
+from world.map_debugger import MapDebugger
+
 
 class WorldMap:
     """Represents the game world as a grid of tiles"""
@@ -12,11 +15,25 @@ class WorldMap:
         self.width = width
         self.height = height
         self.tiles = [[Tile("empty") for _ in range(width)] for _ in range(height)]
+        self.world_cache = None  # Will be set by the game engine
+    
+    def set_world_cache(self, world_cache):
+        """Set the world cache reference"""
+        self.world_cache = world_cache
     
     def set_tile(self, x, y, tile_type):
         """Set a tile at the specified position"""
         if 0 <= x < self.width and 0 <= y < self.height:
+            old_tile_type = self.tiles[y][x].type if self.tiles[y][x] else "empty"
             self.tiles[y][x] = Tile(tile_type)
+            
+            # Save world modification to cache
+            if self.world_cache:
+                self.world_cache.save_world_modification(
+                    "tile_change", x, y, 
+                    {"type": old_tile_type}, 
+                    {"type": tile_type}
+                )
     
     def get_tile(self, x, y):
         """Get the tile at the specified position"""
@@ -67,6 +84,207 @@ class WorldMap:
                 grid_x, grid_y, _, _ = camera.apply(start_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 grid_right, _, _, _ = camera.apply(end_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 pygame.draw.line(screen, grid_color, (grid_x, grid_y), (grid_right, grid_y), 1)
+                
+
+        
+        # Render entity tiles if we have an entity tile manager
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.render(screen, camera)
+    
+    def initialize_entity_tiles(self):
+        """Initialize entity tiles manager"""
+        from world.entity_tile import EntityTileManager, TreeEntityTile, HouseEntityTile
+        self.entity_tile_manager = EntityTileManager(self)
+        print("Entity tile manager initialized")
+    
+    def load_cached_entity_tiles(self):
+        """Load entity tiles from cache"""
+        if not self.world_cache:
+            return
+        
+        # Load all cached entity tiles
+        cached_tiles = self.world_cache.get_all_entity_tiles()
+        
+        for tile_data in cached_tiles:
+            x, y = tile_data["x"], tile_data["y"]
+            tile_type = tile_data["type"]
+            
+            # Skip if this tile was marked as removed
+            if self.world_cache.is_entity_tile_removed(x, y):
+                continue
+            
+            print(f"DEBUG: Loading cached entity tile {tile_type} at ({x}, {y})")
+            
+            # Create the appropriate entity tile
+            if tile_type == "tree":
+                self._create_tree_from_cache(x, y, tile_data.get("data", {}))
+            elif tile_type == "house":
+                self._create_house_from_cache(x, y, tile_data.get("data", {}))
+            # Add more entity tile types as needed
+    
+    def _create_tree_from_cache(self, x, y, data):
+        """Create a tree entity tile from cached data"""
+        from world.entity_tile import TreeEntityTile
+        
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 1 and 0 <= y < self.height - 2):
+            return None
+            
+        # Create and add the tree
+        tree = TreeEntityTile(x, y)
+        
+        # Restore any additional data safely
+        if data and isinstance(data, dict):
+            for key, value in data.items():
+                if hasattr(tree, key) and key not in ['entities_inside', 'entities_in_trunk']:
+                    try:
+                        setattr(tree, key, value)
+                    except Exception as e:
+                        print(f"Warning: Could not restore tree attribute {key}: {e}")
+        
+        # Don't save to cache again when loading from cache
+        # Temporarily disable cache saving
+        original_world_cache = None
+        if hasattr(self, 'world_cache'):
+            original_world_cache = self.world_cache
+            self.world_cache = None
+        
+        self.entity_tile_manager.add_entity_tile(tree)
+        
+        # Restore world cache
+        if original_world_cache:
+            self.world_cache = original_world_cache
+        
+        return tree
+    
+    def _create_house_from_cache(self, x, y, data):
+        """Create a house entity tile from cached data"""
+        from world.entity_tile import HouseEntityTile
+        
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 2 and 0 <= y < self.height - 2):
+            return None
+            
+        # Create and add the house
+        house = HouseEntityTile(x, y)
+        
+        # Restore any additional data safely
+        if data and isinstance(data, dict):
+            for key, value in data.items():
+                if hasattr(house, key) and key not in ['entities_inside']:
+                    try:
+                        setattr(house, key, value)
+                    except Exception as e:
+                        print(f"Warning: Could not restore house attribute {key}: {e}")
+        
+        # Don't save to cache again when loading from cache
+        # Temporarily disable cache saving
+        original_world_cache = None
+        if hasattr(self, 'world_cache'):
+            original_world_cache = self.world_cache
+            self.world_cache = None
+        
+        self.entity_tile_manager.add_entity_tile(house)
+        
+        # Restore world cache
+        if original_world_cache:
+            self.world_cache = original_world_cache
+        
+        return house
+    
+    def add_tree(self, x, y):
+        """Add a tree entity tile at the specified position"""
+        from world.entity_tile import TreeEntityTile
+        
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 1 and 0 <= y < self.height - 2):
+            return None
+            
+        # Check if the tiles are available (not water, mountain, or occupied by another entity tile)
+        if (self.get_tile(x, y).is_water() or self.get_tile(x, y).type == "mountain" or
+            self.get_tile(x, y+1).is_water() or self.get_tile(x, y+1).type == "mountain"):
+            return None
+            
+        # Check if there's already an entity tile here
+        if hasattr(self, 'entity_tile_manager'):
+            if self.entity_tile_manager.get_entity_tile_at(x, y) or self.entity_tile_manager.get_entity_tile_at(x, y+1):
+                return None
+        
+        # Create and add the tree
+        tree = TreeEntityTile(x, y)
+        self.entity_tile_manager.add_entity_tile(tree)
+        
+        # Save to cache
+        if self.world_cache:
+            tree_data = {
+                "opacity": getattr(tree, 'opacity', 1.0),
+                "entities_inside": len(getattr(tree, 'entities_inside', [])),
+                "entities_in_trunk": len(getattr(tree, 'entities_in_trunk', []))
+            }
+            self.world_cache.save_entity_tile(x, y, "tree", tree_data)
+        
+        return tree
+    
+    def add_house(self, x, y):
+        """Add a house entity tile at the specified position"""
+        from world.entity_tile import HouseEntityTile
+        
+        # Check if the position is valid
+        if not (0 <= x < self.width - 2 and 0 <= y < self.height - 2):
+            return None
+            
+        # Check if the tiles are available
+        for dx in range(2):
+            for dy in range(2):
+                tile = self.get_tile(x + dx, y + dy)
+                if tile.is_water() or tile.type == "mountain":
+                    return None
+                    
+        # Check if there's already an entity tile here
+        if hasattr(self, 'entity_tile_manager'):
+            for dx in range(2):
+                for dy in range(2):
+                    if self.entity_tile_manager.get_entity_tile_at(x + dx, y + dy):
+                        return None
+        
+        # Create and add the house
+        house = HouseEntityTile(x, y)
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.add_entity_tile(house)
+        
+        # Save to cache
+        if self.world_cache:
+            house_data = {
+                "is_door_open": getattr(house, 'is_door_open', False),
+                "entities_inside": len(getattr(house, 'entities_inside', [])),
+                "max_occupants": getattr(house, 'max_occupants', 4)
+            }
+            self.world_cache.save_entity_tile(x, y, "house", house_data)
+        
+        return house
+    
+    def remove_entity_tile(self, x, y):
+        """Remove an entity tile at the specified position"""
+        if hasattr(self, 'entity_tile_manager'):
+            entity_tile = self.entity_tile_manager.get_entity_tile_at(x, y)
+            if entity_tile:
+                self.entity_tile_manager.remove_entity_tile(entity_tile)
+                
+                # Mark as removed in cache
+                if self.world_cache:
+                    self.world_cache.remove_entity_tile(x, y)
+                
+                return True
+        return False
     
     def is_wall(self, x, y):
         """Check if the tile at the specified position is a wall"""
@@ -117,109 +335,201 @@ class WorldMap:
         return None  # No water found within range
     
     def generate_realistic_map(self, scale=100.0, octaves=6, persistence=0.5, lacunarity=2.0, seed=None):
-        """Generate a realistic world map using Perlin noise"""
-        if seed is None:
-            seed = random.randint(0, 1000)
-        
-        print(f"Generating realistic map with seed: {seed}")
-        
-        # Generate height map using Perlin noise
-        height_map = []
-        for y in range(self.height):
-            row = []
-            for x in range(self.width):
-                # Get noise value at this position
-                nx = x / scale
-                ny = y / scale
-                # Use multiple octaves for more natural terrain
-                value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
-                                     lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=seed)
-                # Normalize to 0-1 range
-                value = (value + 1) / 2
-                row.append(value)
-            height_map.append(row)
-        
-        # Generate moisture map using different seed
-        moisture_map = []
-        moisture_seed = seed + 1000
-        for y in range(self.height):
-            row = []
-            for x in range(self.width):
-                nx = x / scale
-                ny = y / scale
-                value = noise.pnoise2(nx, ny, octaves=octaves, persistence=persistence, 
-                                     lacunarity=lacunarity, repeatx=self.width, repeaty=self.height, base=moisture_seed)
-                value = (value + 1) / 2
-                row.append(value)
-            moisture_map.append(row)
-        
-        # Set tiles based on height and moisture
-        for y in range(self.height):
-            for x in range(self.width):
-                height = height_map[y][x]
-                moisture = moisture_map[y][x]
+        """Generate a realistic world map using the new procedural generator"""
+        try:
+            if seed is None:
+                seed = random.randint(0, 1000)
+            
+            print(f"Generating realistic map with seed: {seed}")
+            
+            # Use the new procedural generator
+            generator = ProceduralMapGenerator(self.width, self.height, seed)
+            tile_map, metadata = generator.generate_map()
+            
+            # Apply the generated tiles to the world map
+            for y in range(self.height):
+                for x in range(self.width):
+                    self.set_tile(x, y, tile_map[y][x])
+            
+            # Create debug visualization if in debug mode
+            if hasattr(self, '_debug_mode') and self._debug_mode:
+                debugger = MapDebugger(self.width, self.height)
+                debug_surface = debugger.create_debug_surface(metadata)
                 
-                # Deep water
-                if height < 0.3:
-                    self.set_tile(x, y, "deep_water")
-                
-                # Shallow water
-                elif height < 0.4:
-                    self.set_tile(x, y, "shallow_water")
-                
-                # Beach/sand
-                elif height < 0.45:
-                    self.set_tile(x, y, "sand")
-                
-                # Grassland/plains
-                elif height < 0.7:
-                    if moisture > 0.6:
-                        self.set_tile(x, y, "forest")
-                    else:
-                        self.set_tile(x, y, "grass")
-                
-                # Mountains
-                elif height < 0.85:
-                    self.set_tile(x, y, "mountain")
-                
-                # Snow peaks
-                else:
-                    self.set_tile(x, y, "snow")
-        
-        # Add some paths connecting areas
-        self._add_paths()
-        
-        # Add border walls
-        self._add_border_walls()
-        
-        # Ensure there's at least one accessible water area
-        self._ensure_accessible_water()
+                # Save debug image
+                import pygame
+                pygame.image.save(debug_surface, f"debug_map_{seed}.png")
+                debugger.print_generation_stats(metadata)
+            
+            # Initialize entity tiles manager if not already initialized
+            if not hasattr(self, 'entity_tile_manager'):
+                self.initialize_entity_tiles()
+                print("Initialized entity tile manager during map generation")
+            
+            # Load cached entity tiles first
+            if self.world_cache:
+                print("Loading cached entity tiles...")
+                self.load_cached_entity_tiles()
+            
+            # Generate trees based on tile type and seed (only if not loaded from cache)
+            print("Starting tree generation...")
+            self._generate_trees(seed)
+            
+            # Reset random state
+            random.seed()
+            
+            print(f"Map generation complete. Entity tiles: {len(self.entity_tile_manager.entity_tiles)}")
+            
+        except Exception as e:
+            import traceback
+            print(f"Error generating map: {e}")
+            traceback.print_exc()
+            # Create a simple fallback map
+            self._generate_fallback_map()
     
-    def _add_paths(self):
-        """Add some natural-looking paths through the terrain"""
-        # Create a few random paths
-        num_paths = random.randint(3, 6)
+    def enable_debug_mode(self):
+        """Enable debug mode for map generation"""
+        self._debug_mode = True
+    
+    def disable_debug_mode(self):
+        """Disable debug mode for map generation"""
+        self._debug_mode = False
+
+
+
+    def _generate_river(self, start_x, start_y, height_map):
+        """Generate a river starting from the given point, flowing downhill"""
+        river = [(start_x, start_y)]
+        x, y = start_x, start_y
         
-        for _ in range(num_paths):
-            # Pick random start and end points
-            start_x = random.randint(5, self.width - 5)
-            start_y = random.randint(5, self.height - 5)
-            end_x = random.randint(5, self.width - 5)
-            end_y = random.randint(5, self.height - 5)
+        # Maximum river length to prevent infinite loops
+        max_length = 100
+        
+        for _ in range(max_length):
+            # Find the lowest neighboring point
+            lowest_height = height_map[y][x]
+            lowest_pos = None
             
-            # Ensure we're not starting in water or mountains
-            if (self.get_tile(start_x, start_y).is_water() or 
-                self.get_tile(start_x, start_y).type == "mountain"):
-                continue
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+                nx, ny = x + dx, y + dy
                 
-            # Simple A* pathfinding to create natural-looking paths
-            path = self._find_path(start_x, start_y, end_x, end_y)
+                if (0 <= nx < self.width and 0 <= ny < self.height and 
+                    (nx, ny) not in river):  # Avoid loops
+                    
+                    # Add some randomness to river path
+                    height = height_map[ny][nx] + random.uniform(0, 0.05)
+                    
+                    if height < lowest_height:
+                        lowest_height = height
+                        lowest_pos = (nx, ny)
             
-            # Create the path
-            for x, y in path:
-                # Don't place paths in water
-                if not self.get_tile(x, y).is_water():
-                    self.set_tile(x, y, "path")
+            # If we can't find a lower point, end the river
+            if lowest_pos is None:
+                break
+            
+            # Move to the lowest point
+            x, y = lowest_pos
+            river.append((x, y))
+            
+            # If we've reached water, end the river
+            if height_map[y][x] < 0.3:
+                break
+        
+        # Only return the river if it's long enough
+        if len(river) > 5:
+            return river
+        return None
+
+    def _create_lake(self, center_x, center_y, size):
+        """Create a lake centered at the given point"""
+        for y in range(center_y - size, center_y + size):
+            for x in range(center_x - size, center_x + size):
+                if 0 <= x < self.width and 0 <= y < self.height:
+                    # Calculate distance from center
+                    dist = math.sqrt((x - center_x)**2 + (y - center_y)**2)
+                    
+                    # Add some irregularity to the lake shape
+                    dist += random.uniform(-1.5, 1.5)
+                    
+                    if dist < size * 0.6:
+                        self.set_tile(x, y, "deep_water")
+                    elif dist < size * 0.8:
+                        self.set_tile(x, y, "shallow_water")
+                    elif dist < size:
+                        self.set_tile(x, y, "sand")
+
+
+
+    
+    def _generate_trees(self, seed):
+        """Generate trees on forest and plain tiles based on seed"""
+        print(f"Generating trees with seed: {seed}")
+        
+        # Set a fixed random seed for deterministic generation
+        random.seed(seed)
+        
+        # Count for debugging
+        trees_added = 0
+        forest_tiles = 0
+        grass_tiles = 0
+        
+        # Use a simpler approach - iterate through all tiles and place trees with fixed probabilities
+        for y in range(self.height):
+            for x in range(self.width):
+                tile = self.get_tile(x, y)
+                if not tile:
+                    continue
+                
+                # Skip if there's already a cached entity tile here
+                if self.world_cache and self.world_cache.get_entity_tile(x, y):
+                    continue
+                
+                # Skip if this position was marked as removed
+                if self.world_cache and self.world_cache.is_entity_tile_removed(x, y):
+                    continue
+                
+                # Use a deterministic approach based on coordinates and seed
+                # This ensures the same trees are placed each time for the same seed
+                random.seed(seed + (x * 1000) + y)
+                chance = random.random()
+                
+                if tile.type == "forest":
+                    forest_tiles += 1
+                    # Place tree if random value is below threshold (10% of forest tiles)
+                    if chance < 0.1:
+                        tree = self.add_tree(x, y)
+                        if tree:
+                            trees_added += 1
+                
+                elif tile.type == "grass":
+                    grass_tiles += 1
+                    # Place tree if random value is below threshold (0.5% of grass tiles)
+                    if chance < 0.005:
+                        tree = self.add_tree(x, y)
+                        if tree:
+                            trees_added += 1
+        
+        # Reset random state to avoid affecting other game systems
+        random.seed()
+        
+        print(f"Tree generation: Added {trees_added} trees on {forest_tiles} forest tiles and {grass_tiles} grass tiles")
+
+
+
+    
+    def add_path(self, start_x, start_y, end_x, end_y):
+        """Add a path between two points on the map"""
+        # Find a path between the start and end points
+        path = self._find_path(start_x, start_y, end_x, end_y)
+        
+        # Create the path
+        for x, y in path:
+            # Don't place paths in water
+            if not self.get_tile(x, y).is_water():
+                self.set_tile(x, y, "path")
+        
+        return path
+
     
     def _find_path(self, start_x, start_y, end_x, end_y):
         """Simple A* pathfinding to create natural-looking paths"""
@@ -292,6 +602,7 @@ class WorldMap:
         
         # No path found
         return []
+
     
     def _heuristic(self, x1, y1, x2, y2):
         """Calculate Manhattan distance heuristic"""
@@ -347,3 +658,48 @@ class WorldMap:
                                 self.set_tile(x, y, "shallow_water")
                         elif distance < 1.2:
                             self.set_tile(x, y, "sand")
+
+
+
+    def _generate_fallback_map(self):
+        """Generate a simple fallback map in case the main generation fails"""
+        print("Generating fallback map...")
+        
+        # Clear existing tiles
+        self.tiles = [[None for _ in range(self.width)] for _ in range(self.height)]
+        
+        # Create a simple map with grass in the middle and water around the edges
+        border_size = 10
+        
+        for y in range(self.height):
+            for x in range(self.width):
+                # Border area
+                if (x < border_size or x >= self.width - border_size or 
+                    y < border_size or y >= self.height - border_size):
+                    self.set_tile(x, y, "deep_water")
+                else:
+                    self.set_tile(x, y, "grass")
+        
+        # Add some random features
+        for _ in range(100):
+            x = random.randint(border_size, self.width - border_size - 1)
+            y = random.randint(border_size, self.height - border_size - 1)
+            feature_type = random.choice(["forest", "mountain", "sand"])
+            self.set_tile(x, y, feature_type)
+        
+        # Add border walls
+        self._add_border_walls()
+        
+        # Initialize entity tiles manager if not already initialized
+        if not hasattr(self, 'entity_tile_manager'):
+            self.initialize_entity_tiles()
+        
+        print("Fallback map generation complete")
+
+
+    def is_walkable(self, x, y):
+        """Check if the tile at the specified position is walkable"""
+        tile = self.get_tile(x, y)
+        if not tile:
+            return False
+        return tile.is_walkable()

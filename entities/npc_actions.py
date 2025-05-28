@@ -121,6 +121,17 @@ class NPCActionHandler:
                 "This is worth remembering.",
                 "I'll add this to my mental map."
             ]
+        },
+        # Add the new seek_food action here
+        "seek_food": {
+            "description": "Search for food when hungry",
+            "responses": [
+                "I need to find some food.",
+                "I'm getting hungry, I should look for food.",
+                "Time to search for something to eat.",
+                "My stomach is growling, I need food.",
+                "I need to eat soon."
+            ]
         }
     }
     
@@ -251,6 +262,9 @@ class NPCActionHandler:
         
         return None
     
+    
+
+    
     @staticmethod
     def handle_return_command(message, agent_id, player_id):
         """Handle a command to return home"""
@@ -307,6 +321,19 @@ class NPCActionHandler:
                 )
         
         return None
+    
+    @staticmethod
+    def handle_food_seeking(npc, game_engine=None):
+        """Handle an NPC seeking food"""
+        if not hasattr(npc, 'hunger') or npc.hunger > 3:
+            return False  # Not hungry enough
+        
+        # Try to find food nearby
+        if hasattr(npc, 'start_searching_for_food'):
+            return npc.start_searching_for_food()
+        
+        return False
+
 
     @staticmethod
     def _parse_advice(message):
