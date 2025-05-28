@@ -5,6 +5,7 @@ import math
 from entities.inventory import Inventory
 from entities.items.item_factory import ItemFactory
 from engine.ui.interaction.interaction_menu import InteractionMenu
+from sound.sound_manager import get_sound_manager
 
 
 class Rectangle:
@@ -37,6 +38,13 @@ class Rectangle:
         self.visual_y = float(grid_y)
         self.move_lerp_factor = 0.2  # Adjust for smoother/faster visual transitions
         
+
+        # Sound manager
+        self.sound_manager = get_sound_manager()
+        
+        # Walking sound timing
+        self.last_walk_sound_time = 0
+        self.walk_sound_interval = 500  # Play walk sound every 500ms when moving
 
         # For animation
         self.sprite_sheet = None
@@ -257,6 +265,8 @@ class Rectangle:
         # Handle movement towards target
         if self.is_moving:
             self.add_footstep_particles()
+            self._play_walking_sound()
+
             # Check if we've reached the target
             if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                 # Only set is_moving to False if we're not a player or if no movement keys are pressed
@@ -312,6 +322,18 @@ class Rectangle:
                 # Only set is_moving to False if we're not actively moving
                 if self.grid_x == self.target_grid_x and self.grid_y == self.target_grid_y:
                     self.is_moving = False
+    
+    
+    def _play_walking_sound(self):
+        """Play walking sound at appropriate intervals"""
+        current_time = pygame.time.get_ticks()
+        
+        # Only play sound if enough time has passed since last walk sound
+        if current_time - self.last_walk_sound_time >= self.walk_sound_interval:
+            # Play walking sound with reduced volume for NPCs
+            volume = 0.3 if not (hasattr(self, 'controllable') and self.controllable) else 0.5
+            self.sound_manager.play_sound("walk", volume=volume)
+            self.last_walk_sound_time = current_time
     
     def use_selected_item(self):
         """Use the currently selected item"""
@@ -426,6 +448,11 @@ class Rectangle:
             if not hasattr(self, 'last_drink_time') or current_time - self.last_drink_time > 2000:
                 self.thirst += 1
                 self.last_drink_time = current_time
+                
+                
+                # Play drinking sound
+                volume = 0.4 if not (hasattr(self, 'controllable') and self.controllable) else 0.6
+                self.sound_manager.play_sound("drink", volume=volume)
                 
                 # Print message
                 entity_type = "Player" if hasattr(self, 'controllable') and self.controllable else "NPC"

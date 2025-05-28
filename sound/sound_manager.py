@@ -59,6 +59,9 @@ class SoundManager:
             "menu_hover": "hover.wav",  # Reuse click for now
             "error": "click.wav",  # Placeholder
             "success": "confirm.wav",  # Reuse confirm
+            "eat": "eat.wav",
+            "drink": "drink.wav",
+            "walk": "walk.wav",
         }
         
         # Load each sound file
@@ -100,6 +103,7 @@ class SoundManager:
     def play_ui_click(self):
         """Play UI click sound"""
         self.play_sound("click")
+        
     
     def play_ui_confirm(self):
         """Play UI confirm sound"""
@@ -116,6 +120,18 @@ class SoundManager:
     def play_success(self):
         """Play success sound"""
         self.play_sound("success")
+        
+    def play_eat_sound(self):
+        """Play eating sound"""
+        self.play_sound("eat")
+        
+    def play_drink_sound(self):
+        """Play drinking sound"""
+        self.play_sound("drink")
+        
+    def play_walk_sound(self):
+        """Play walking sound"""
+        self.play_sound("walk")
     
     def set_master_volume(self, volume: float):
         """Set master volume (0.0 to 1.0)"""
