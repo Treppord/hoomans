@@ -1,0 +1,16 @@
+{
+  "states": {
+    "MAIN_MENU": 0,
+    "RUNNING": 1,
+    "PAUSED": 2,
+    "GAME_OVER": 3
+  },
+  "transitions": {
+    "menu_to_game": {
+      "music_fade_in": 1000
+    },
+    "game_to_menu": {
+      "music_fade_in": 1000
+    }
+  }
+}

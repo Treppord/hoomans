@@ -1,5 +1,6 @@
 from sound.sound_manager import initialize_sound_manager
-from engine.core import SimpleGameEngine
+from engine.core.simple_game_engine import SimpleGameEngine  # Updated import
+from engine.config.config_loader import initialize_config_loader  # New import
 from entities.rectangle import Rectangle
 from entities.npc import NPC
 from engine.ai import RandomWanderAI, FollowPlayerAI
@@ -14,7 +15,7 @@ import argparse
 from engine.constants import GameBalanceConstants
 
 from entities.items.item_manager import ItemManager, initialize_item_system
-from engine.core import GameState
+from engine.core.game_state_manager import GameState  # Updated import
 
 
 # RENDER ORDER
@@ -23,9 +24,11 @@ from engine.core import GameState
 # 3. Entity tiles
 
 
-
-
 if __name__ == "__main__":
+    # Initialize configuration system first
+    print("Initializing configuration system...")
+    config_loader = initialize_config_loader()
+    
     # Create the game engine
     map_seed = 39
     arg_parser = argparse.ArgumentParser(description='Grid-Based Game')
@@ -46,7 +49,6 @@ if __name__ == "__main__":
         else:
             print(f"DEBUG: {name} has no CNA data")
 
-
     print("Initializing sound system...")
     sound_manager = initialize_sound_manager(
         master_volume=0.7,
@@ -54,16 +56,18 @@ if __name__ == "__main__":
         music_volume=0.6
     )
     
-
     engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
     
     # Skip menu if requested (only if the --skip-menu flag is provided)
     if args.skip_menu:
-        engine.game_state = GameState.RUNNING
+        # Use the new game state constants
+        game_state = GameState()
+        engine.game_state = game_state.RUNNING
         engine.load_item_icons()
     else:
         # Ensure we're in menu state (this should be the default)
-        engine.game_state = GameState.MAIN_MENU
+        game_state = GameState()
+        engine.game_state = game_state.MAIN_MENU
     
     # Toggle fullscreen if requested
     if args.fullscreen:
@@ -82,14 +86,9 @@ if __name__ == "__main__":
     ItemFactory.ensure_item_assets_exist()
     ItemFactory.register_item_templates()
 
+    # Rest of the initialization code remains the same...
+    # (The rest of the file continues as before, but now uses the refactored engine)
     
-    # Toggle fullscreen if requested
-    if args.fullscreen:
-        engine.toggle_fullscreen()
-
-    elif args.borderless:
-        engine.toggle_borderless_fullscreen()
-
     project_root = os.path.dirname(os.path.abspath(__file__))
     sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
     walk_sprite_path = os.path.join(project_root, "assets", "ai_walk.png")
@@ -126,8 +125,6 @@ if __name__ == "__main__":
         pygame.image.save(placeholder, walk_sprite_path)
         print(f"Created placeholder walk sprite sheet at {walk_sprite_path}")
 
-
-    
     # Initialize AI Universe Controller
     model_path = os.path.join(project_root, "models", "mistral-7b-instruct-v0.2.Q4_K_M.gguf")
     ai_universe = AIUniverseController(use_llm=True, use_local_model=True, model_path=model_path)
@@ -141,19 +138,11 @@ if __name__ == "__main__":
     # Only generate the map if we're skipping the menu
     if args.skip_menu:
         world_map.generate_realistic_map(seed=engine.map_seed)
-            
-
-
-    # Initialize entity tile manager before adding any entity tiles
     
     # Add a tree and print debug info
-    # tree = world_map.add_tree(24, 18)
     house = world_map.add_house(20, 10)
     
     engine.set_world_map(world_map)
-    
-
-    
 
     # Initialize world cache with the same seed
     world_cache = WorldCache()
@@ -168,7 +157,6 @@ if __name__ == "__main__":
     # Load world items from cache if available
     if hasattr(engine, 'world_cache') and engine.world_cache:
         world_map.world_item_manager.load_from_cache(engine.world_cache)
-
 
     # Example: Spawn some test items
     print("Spawning test items in the world...")
@@ -197,8 +185,7 @@ if __name__ == "__main__":
     player.last_thirst_update = pygame.time.get_ticks()
     player.last_drink_time = 0
     
-
-    # Add thirst attribute to player
+    # Add hunger attribute to player
     player.hunger = GameBalanceConstants.STARTING_HUNGER
     player.last_hunger_update = pygame.time.get_ticks()
     player.last_drink_time = 0
@@ -213,8 +200,6 @@ if __name__ == "__main__":
     
     # Add an NPC with AI Universe Controller
     wanderer = engine.add_object(NPC(grid_x=6, grid_y=6, color=(0, 255, 0), speed=1))
-    # No need to add a specific AI controller, the universe will handle it
-    # engine.add_ai_controller(WaterSeekingAI(wanderer, detection_range=8))
     
     # Load CNA file for wanderer if it exists
     cna_file_path = os.path.join(project_root, "cna", "data", "Skyler_Smith.cna")
@@ -226,8 +211,6 @@ if __name__ == "__main__":
     
     # Add an NPC that follows the player
     follower = engine.add_object(NPC(grid_x=37, grid_y=25, color=(0, 0, 255), speed=1))
-    # You can still use the built-in AI as a fallback
-    # engine.add_ai_controller(FollowPlayerAI(follower, detection_range=8))
     
     # Load CNA file for follower if it exists
     cna_file_path = os.path.join(project_root, "cna", "data", "Dakota_Brown.cna")
@@ -236,16 +219,10 @@ if __name__ == "__main__":
         follower.load_cna_file(cna_file_path)
     else:
         print(f"CNA file not found: {cna_file_path}")
-    
 
     print("Spawning food NPCs in the world...")
-    for _ in range(30):  # Spawn 10 food NPCs
+    for _ in range(30):  # Spawn 30 food NPCs
         food_npc = engine.spawn_food_npc()
-
-
-
-
-
 
     # Initialize exploration attributes for NPCs
     for obj in engine.objects:
@@ -269,7 +246,6 @@ if __name__ == "__main__":
             obj.advice_direction = None
             
             print(f"DEBUG: Initialized exploration attributes for NPC at ({obj.grid_x}, {obj.grid_y})")
-
     
     # Start the game loop
     engine.run()

@@ -242,7 +242,7 @@ class AIUniverseController:
         # Check if we have a world cache reference
         if not hasattr(self, 'world_cache'):
             # Try to get world cache from game engine
-            from engine.core import SimpleGameEngine
+            from engine.core.simple_game_engine import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
                 self.world_cache = SimpleGameEngine.instance.world_cache
                 print(f"DEBUG: Got world cache reference from game engine")
@@ -325,7 +325,7 @@ class AIUniverseController:
                 if resource_type == "general":
                     # Get all agent memories
                     if not hasattr(self, 'world_cache'):
-                        from engine.core import SimpleGameEngine
+                        from engine.core.simple_game_engine import SimpleGameEngine
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
                             self.world_cache = SimpleGameEngine.instance.world_cache
                     
@@ -374,7 +374,7 @@ class AIUniverseController:
                 if resource_type == "water" and hasattr(self, 'world_cache'):
                     # Try to get world cache from game engine if not already available
                     if not hasattr(self, 'world_cache'):
-                        from engine.core import SimpleGameEngine
+                        from engine.core.simple_game_engine import SimpleGameEngine
                         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
                             self.world_cache = SimpleGameEngine.instance.world_cache
                     
@@ -906,7 +906,7 @@ class AIUniverseController:
         # Check if this is a chat response request and notify the game engine
         if "player_message" in kwargs and "should_respond" in kwargs and kwargs["should_respond"]:
             # Find the NPC in the game engine and pause its activities
-            from engine.core import SimpleGameEngine
+            from engine.core.simple_game_engine import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance'):
                 engine = SimpleGameEngine.instance
                 for obj in engine.objects:

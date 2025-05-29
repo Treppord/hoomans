@@ -75,7 +75,7 @@ class TextBubble:
             return
             
         # Get camera from game engine
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         camera = None
         if hasattr(SimpleGameEngine, 'instance'):
             camera = SimpleGameEngine.instance.camera

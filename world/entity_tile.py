@@ -482,7 +482,7 @@ class HouseEntityTile(EntityTile):
     def on_interact(self, entity):
         """Called when an entity interacts with this house"""
         # Show information about who's inside
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
             if self.entities_inside:
                 message = f"This house has {len(self.entities_inside)} occupants."

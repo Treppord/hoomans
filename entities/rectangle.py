@@ -301,7 +301,7 @@ class Rectangle:
                     self.facing = 'up'
                 
                 # Check for collision with entity tiles before moving
-                from engine.core import SimpleGameEngine
+                from engine.core.simple_game_engine import SimpleGameEngine
                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_map'):
                     world_map = SimpleGameEngine.instance.world_map
                     if hasattr(world_map, 'entity_tile_manager'):
@@ -351,7 +351,7 @@ class Rectangle:
             return False
         
         # Get the world from the game engine
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         world = None
         if hasattr(SimpleGameEngine, 'instance'):
             world = SimpleGameEngine.instance.world_map
@@ -437,7 +437,7 @@ class Rectangle:
             return
             
         # Get the world map
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         world_map = None
         if hasattr(SimpleGameEngine, 'instance'):
             world_map = SimpleGameEngine.instance.world_map
@@ -471,7 +471,7 @@ class Rectangle:
 
     def try_pickup_nearby_items(self):
         """Try to pick up items near this entity"""
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if (hasattr(SimpleGameEngine, 'instance') and 
             hasattr(SimpleGameEngine.instance, 'world_map') and
             hasattr(SimpleGameEngine.instance.world_map, 'world_item_manager')):
@@ -540,7 +540,7 @@ class Rectangle:
             return
             
         # Get the game engine instance
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
             return
                 

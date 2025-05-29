@@ -1,0 +1,32 @@
+{
+  "movement": {
+    "up": ["K_UP", "K_w"],
+    "down": ["K_DOWN", "K_s"],
+    "left": ["K_LEFT", "K_a"],
+    "right": ["K_RIGHT", "K_d"]
+  },
+  "actions": {
+    "pause": ["K_SPACE"],
+    "chat": ["K_t"],
+    "inventory": ["K_i"],
+    "interact": ["K_f"],
+    "escape": ["K_ESCAPE"],
+    "tab": ["K_TAB"],
+    "use_item": ["K_e"]
+  },
+  "system": {
+    "fullscreen": ["K_F11"],
+    "borderless_fullscreen": ["K_F10"],
+    "toggle_grid": ["K_g"]
+  },
+  "debug": {
+    "toggle_ambient": ["K_F1"],
+    "toggle_particles": ["K_F2"],
+    "toggle_decorative": ["K_F3"],
+    "toggle_lighting": ["K_F4"]
+  },
+  "mouse": {
+    "zoom_sensitivity": 0.1,
+    "pan_button": 1
+  }
+}

@@ -226,7 +226,7 @@ class MainMenu(UIElement):
                 print(f"Generated new random seed: {seed}")
                 
                 # Create an empty cache file for this new seed
-                from engine.core import SimpleGameEngine
+                from engine.core.simple_game_engine import SimpleGameEngine
                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
                     SimpleGameEngine.instance.world_cache.create_empty_cache(seed)
                     print(f"Created empty cache for new world seed: {seed}")
@@ -242,7 +242,7 @@ class MainMenu(UIElement):
     def _cache_exists_for_seed(self, seed):
         """Check if a cache file exists for the given seed"""
         import os
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         
         if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'world_cache'):
             cache_dir = SimpleGameEngine.instance.world_cache.cache_dir

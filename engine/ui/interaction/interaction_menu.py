@@ -203,7 +203,7 @@ class InteractionMenu(UIElement):
         angle = 2 * math.pi * index / len(self.options)
         
         # Get player screen position (center of screen if not available)
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
             engine = SimpleGameEngine.instance
             player_x, player_y, _, _ = engine.camera.apply(
@@ -249,7 +249,7 @@ class InteractionMenu(UIElement):
             return
         
         # Get player screen position
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if hasattr(SimpleGameEngine, 'instance') and SimpleGameEngine.instance:
             engine = SimpleGameEngine.instance
             player_x, player_y, _, _ = engine.camera.apply(
@@ -607,7 +607,7 @@ class ConstructHandler(InteractionHandler):
     def _update_preview_position(self, mouse_pos):
         """Update the preview position based on mouse position"""
         # Convert screen position to world position
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
             return
             
@@ -636,7 +636,7 @@ class ConstructHandler(InteractionHandler):
         height = item.height
         
         # Get world map
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
             return False
             
@@ -680,7 +680,7 @@ class ConstructHandler(InteractionHandler):
         grid_x, grid_y = self.preview_position
         
         # Get world map
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
             return False
             
@@ -840,7 +840,7 @@ class ConstructHandler(InteractionHandler):
         grid_x, grid_y = self.preview_position
         
         # Get world map and camera
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
             return
             

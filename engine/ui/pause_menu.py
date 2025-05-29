@@ -125,7 +125,7 @@ class PauseMenu(UIElement):
     
     def _save_all_entities(self):
         """Save all entity positions and states to cache"""
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         
         if (hasattr(SimpleGameEngine, 'instance') and 
             hasattr(SimpleGameEngine.instance, 'world_cache') and

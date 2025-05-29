@@ -100,7 +100,7 @@ class FoodNPC(Rectangle):
         
         # Update AI controller if available
         if self.ai_controller:
-            from engine.core import SimpleGameEngine
+            from engine.core.simple_game_engine import SimpleGameEngine
             world_map = None
             objects = []  # Changed from entities to objects
             
@@ -153,7 +153,7 @@ class FoodNPC(Rectangle):
     
     def check_for_consumption(self):
         """Check if any entity is on top of this food and should consume it"""
-        from engine.core import SimpleGameEngine
+        from engine.core.simple_game_engine import SimpleGameEngine
         
         if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
             return
@@ -198,7 +198,7 @@ class FoodNPC(Rectangle):
             print(f"NPC {consumer.get_entity_id()} consumed food, hunger increased from {old_hunger} to {consumer.hunger}")
             
             # Show a speech bubble for the consumer
-            from engine.core import SimpleGameEngine
+            from engine.core.simple_game_engine import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
                 eating_speeches = [
                     "Mmm, delicious!",
@@ -231,7 +231,7 @@ class FoodNPC(Rectangle):
             print(f"NPC {consumer.get_entity_id()} consumed food, hunger increased from {old_hunger} to {consumer.hunger}")
             
             # Show a speech bubble for the consumer
-            from engine.core import SimpleGameEngine
+            from engine.core.simple_game_engine import SimpleGameEngine
             if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'ui'):
                 eating_speeches = [
                     "Mmm, delicious!",

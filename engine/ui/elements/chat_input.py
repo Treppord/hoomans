@@ -353,7 +353,7 @@ class ChatInputBox(UIElement):
                 
                 # If message was empty, also reset chat mode in input handler
                 if not self.text.strip():
-                    from engine.core import SimpleGameEngine
+                    from engine.core.simple_game_engine import SimpleGameEngine
                     if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'input_handler'):
                         SimpleGameEngine.instance.input_handler.set_chat_mode(False)
                 
@@ -362,7 +362,7 @@ class ChatInputBox(UIElement):
             # Handle Escape key - cancel chat
             elif event.key == pygame.K_ESCAPE:
                 self.toggle()
-                from engine.core import SimpleGameEngine
+                from engine.core.simple_game_engine import SimpleGameEngine
                 if hasattr(SimpleGameEngine, 'instance') and hasattr(SimpleGameEngine.instance, 'input_handler'):
                     SimpleGameEngine.instance.input_handler.set_chat_mode(False)
                 return True

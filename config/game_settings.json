@@ -1,0 +1,49 @@
+{
+  "display": {
+    "default_width": 800,
+    "default_height": 600,
+    "default_fps": 60,
+    "title": "Simple Game Engine",
+    "resizable": true
+  },
+  "gameplay": {
+    "chat_range": 5,
+    "vicinity_range": 8,
+    "npc_interaction_distance": 8,
+    "npc_conversation_chance": 0.2,
+    "npc_conversation_trigger_chance": 0.1
+  },
+  "ui": {
+    "stats_panel": {
+      "width": 200,
+      "height": 120,
+      "margin_right": 10,
+      "margin_top": 10
+    },
+    "chat_input": {
+      "width": 400,
+      "height": 40,
+      "margin_right": 10,
+      "margin_bottom": 10
+    },
+    "entity_info_duration": 3.0
+  },
+  "game_stats": {
+    "starting_health": 20,
+    "starting_hunger": 10,
+    "starting_thirst": 10,
+    "hunger_decrease_interval": 1200,
+    "thirst_decrease_interval": 1200,
+    "starting_inventory": {
+      "health_potion": 3
+    }
+  },
+  "camera": {
+    "zoom_step": 0.1,
+    "show_grid_default": false
+  },
+  "theme": {
+    "grid_color": [50, 50, 50],
+    "background_color": [0, 0, 0]
+  }
+}
