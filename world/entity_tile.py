@@ -697,21 +697,45 @@ class EntityTileManager:
                     )
                     entity_tile._last_cache_save = current_time
     
+    
     def render(self, screen, camera):
-        """Render all entity tiles"""
-        # Debug output to confirm entity tiles exist
-        if not self.entity_tiles:
-            return
-            
-        # First render opaque entity tiles
-        for entity_tile in self.entity_tiles:
-            if entity_tile.opacity >= 1.0:
-                entity_tile.render(screen, camera)
+        """Render all entity tiles - DEPRECATED: Now handled by main game engine"""
+        # This method is now deprecated and should not be called directly
+        # Entity tiles are rendered through the main game engine's depth sorting system
+        print("WARNING: EntityTileManager.render() called directly - this is deprecated")
+        print("Entity tiles should be rendered through the main game engine's depth sorting")
         
-        # Then render transparent entity tiles (on top)
-        for entity_tile in self.entity_tiles:
-            if entity_tile.opacity < 1.0:
+        # For backward compatibility, still provide the rendering
+        self._render_entity_tiles(screen, camera)
+    
+    def _render_entity_tiles(self, screen, camera):
+        """Internal method to render entity tiles"""
+        # Get screen dimensions
+        screen_width, screen_height = screen.get_size()
+        
+        # Sort entity tiles by their bottom Y coordinate for proper depth
+        sorted_tiles = sorted(self.entity_tiles, key=lambda tile: tile.base_y + tile.height - 1)
+        
+        for entity_tile in sorted_tiles:
+            # Check if entity tile is visible on screen
+            world_x = entity_tile.base_x * Tile.SIZE
+            world_y = entity_tile.base_y * Tile.SIZE
+            world_width = entity_tile.width * Tile.SIZE
+            world_height = entity_tile.height * Tile.SIZE
+            
+            # Apply camera transformation to check visibility
+            screen_x, screen_y, screen_width_tile, screen_height_tile = camera.apply(
+                world_x, world_y, world_width, world_height
+            )
+            
+            # Only render if on screen
+            if (screen_x + screen_width_tile > 0 and screen_x < screen_width and
+                screen_y + screen_height_tile > 0 and screen_y < screen_height):
                 entity_tile.render(screen, camera)
+    
+    def get_entity_tiles_for_depth_sorting(self):
+        """Get entity tiles prepared for depth sorting"""
+        return self.entity_tiles
 
     def has_entity_at(self, x, y):
         """Check if there's an entity tile at the specified position"""

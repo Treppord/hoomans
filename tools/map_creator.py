@@ -56,14 +56,14 @@ class MapCreatorTool:
         creator_group.add_argument(
             '--map-width',
             type=int,
-            default=64,
-            help='Width of the map in tiles (default: 64)'
+            default=256,
+            help='Width of the map in tiles (default: 256)'
         )
         creator_group.add_argument(
             '--map-height',
             type=int,
-            default=64,
-            help='Height of the map in tiles (default: 64)'
+            default=256,
+            help='Height of the map in tiles (default: 256)'
         )
         creator_group.add_argument(
             '--tile-size',

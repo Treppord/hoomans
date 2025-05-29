@@ -79,7 +79,7 @@ class WorldMap:
             return self.tiles[y][x]
         return None
     
-    def render(self, screen, camera, render_entity_tiles=True):
+    def render(self, screen, camera):
         """Render the visible portion of the map"""
         # Calculate visible tile range based on camera position and zoom
         screen_width, screen_height = screen.get_size()
@@ -110,13 +110,11 @@ class WorldMap:
         # STEP 2: Render world items AFTER terrain tiles
         if hasattr(self, 'world_item_manager'):
             self.world_item_manager.render(screen, camera)
-            
-        # STEP 3: Render entity tiles LAST (on top of everything) if requested
-        if render_entity_tiles and hasattr(self, 'entity_tile_manager'):
-            self.entity_tile_manager.render(screen, camera)
         
+        # NOTE: Entity tiles are now rendered in the main game engine with depth sorting
+        # This ensures proper layering with entities (NPCs, player, etc.)
         
-        # STEP 4: Draw grid lines if zoom level is appropriate
+        # STEP 3: Draw grid lines if zoom level is appropriate
         if camera.should_draw_grid():
             grid_color = (50, 50, 50)  # Dark gray
             

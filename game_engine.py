@@ -130,7 +130,7 @@ if __name__ == "__main__":
         world_map.generate_realistic_map(seed=engine.map_seed)
     
     # Add world structures
-    house = world_map.add_house(20, 10)
+    # house = world_map.add_house(20, 10)
     engine.set_world_map(world_map)
 
     # Initialize world cache system
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     
     # Create NPCs with specific CNA files
     wanderer = entity_manager.create_npc(
-        grid_x=6, grid_y=6, 
+        grid_x=26, grid_y=30, 
         color=(0, 255, 0), 
         speed=1,
         cna_filename="Skyler_Smith.cna"

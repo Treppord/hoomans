@@ -397,27 +397,62 @@ class SimpleGameEngine:
         if self.world_map:
             self.world_map.render(self.display_manager.get_screen(), self.camera)
         
-        # 3. Entity tiles (buildings, trees, etc.) - RENDERED ONCE HERE ONLY
-        if self.world_map and hasattr(self.world_map, 'entity_tile_manager'):
-            self.world_map.entity_tile_manager.render(self.display_manager.get_screen(), self.camera)
-        
-        # 4. Entities (players, NPCs, etc.)
+        # 3. Get all entities for depth sorting
         if self.entity_manager:
             entities = self.entity_manager.get_all_entities()
         else:
             entities = self.objects
-            
-        for obj in entities:
-            if hasattr(obj, 'render'):
-                obj.render(self.display_manager.get_screen(), self.camera)
         
-        # 5. Foreground effects
+        # 4. Get all entity tiles for depth sorting
+        entity_tiles = []
+        if self.world_map and hasattr(self.world_map, 'entity_tile_manager'):
+            entity_tiles = self.world_map.entity_tile_manager.entity_tiles
+        
+        # 5. DEPTH-SORTED RENDERING: Combine entities and entity tiles, sort by Y position
+        all_renderable_objects = []
+        
+        # Add entities to render list
+        for entity in entities:
+            if hasattr(entity, 'render') and hasattr(entity, 'grid_y'):
+                all_renderable_objects.append({
+                    'type': 'entity',
+                    'object': entity,
+                    'y': entity.grid_y,
+                    'x': getattr(entity, 'grid_x', 0)
+                })
+        
+        # Add entity tiles to render list
+        for entity_tile in entity_tiles:
+            if hasattr(entity_tile, 'render'):
+                # For entity tiles, use the bottom Y coordinate for proper depth sorting
+                bottom_y = entity_tile.base_y + entity_tile.height - 1
+                all_renderable_objects.append({
+                    'type': 'entity_tile',
+                    'object': entity_tile,
+                    'y': bottom_y,
+                    'x': entity_tile.base_x
+                })
+        
+        # Sort by Y coordinate first, then by X coordinate for consistent ordering
+        all_renderable_objects.sort(key=lambda obj: (obj['y'], obj['x']))
+        
+        # 6. Render all objects in depth-sorted order
+        for render_obj in all_renderable_objects:
+            try:
+                if render_obj['type'] == 'entity':
+                    render_obj['object'].render(self.display_manager.get_screen(), self.camera)
+                elif render_obj['type'] == 'entity_tile':
+                    render_obj['object'].render(self.display_manager.get_screen(), self.camera)
+            except Exception as e:
+                print(f"Error rendering {render_obj['type']}: {e}")
+        
+        # 7. Foreground effects
         self.theme_manager.render_foreground(self.display_manager.get_screen(), self.camera)
         
-        # 6. UI elements (stats panel, etc.)
+        # 8. UI elements (stats panel, etc.)
         self.ui.render(self.display_manager.get_screen())
         
-        # 7. Interaction menu (ON TOP OF EVERYTHING EXCEPT PAUSE MENU)
+        # 9. Interaction menu (ON TOP OF EVERYTHING EXCEPT PAUSE MENU)
         if (hasattr(self, 'player') and self.player and 
             hasattr(self.player, 'interaction_menu') and 
             self.player.interaction_menu and
@@ -425,7 +460,7 @@ class SimpleGameEngine:
             self.player.interaction_menu.visible):
             self.player.interaction_menu.render(self.display_manager.get_screen())
         
-        # 8. Pause menu (ABSOLUTE TOP)
+        # 10. Pause menu (ABSOLUTE TOP)
         if (self.state_manager.is_state(self.state_manager.game_state_constants.PAUSED) and 
             hasattr(self, 'pause_menu')):
             self.pause_menu.render(self.display_manager.get_screen())
