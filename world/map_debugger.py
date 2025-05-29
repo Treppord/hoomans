@@ -117,6 +117,9 @@ class MapDebugger:
         
         return surface
     
+    
+        
+            
     def print_generation_stats(self, metadata: Dict[str, Any]):
         """Print detailed generation statistics"""
         print(f"\n=== Map Generation Stats (Seed: {metadata['seed']}) ===")
@@ -126,5 +129,49 @@ class MapDebugger:
         for biome, percentage in metadata['biome_distribution'].items():
             print(f"  {biome.capitalize()}: {percentage:.1f}%")
         
-        # Calculate connectivity stats
+        # NEW: Add patch analysis
+        patch_stats = self._analyze_patches(metadata['biome_map'])
+        print(f"\nPatch Analysis:")
+        print(f"  Average patch size: {patch_stats['avg_patch_size']:.1f} tiles")
+        print(f"  Largest patch: {patch_stats['largest_patch']} tiles")
+        print(f"  Total patches: {patch_stats['total_patches']}")
+        
         print(f"\nGeneration completed successfully!")
+
+    def _analyze_patches(self, biome_map):
+        """Analyze patch sizes and distribution"""
+        visited = np.zeros((self.height, self.width), dtype=bool)
+        patch_sizes = []
+        
+        for y in range(self.height):
+            for x in range(self.width):
+                if not visited[y, x]:
+                    biome = biome_map[y, x]
+                    patch_size = self._measure_patch_size(biome_map, x, y, biome, visited)
+                    patch_sizes.append(patch_size)
+        
+        return {
+            'avg_patch_size': np.mean(patch_sizes) if patch_sizes else 0,
+            'largest_patch': max(patch_sizes) if patch_sizes else 0,
+            'total_patches': len(patch_sizes)
+        }
+
+    def _measure_patch_size(self, biome_map, start_x, start_y, target_biome, visited):
+        """Measure the size of a connected patch"""
+        stack = [(start_x, start_y)]
+        size = 0
+        
+        while stack:
+            x, y = stack.pop()
+            if (x < 0 or x >= self.width or y < 0 or y >= self.height or 
+                visited[y, x] or biome_map[y, x] != target_biome):
+                continue
+            
+            visited[y, x] = True
+            size += 1
+            
+            # Add 4-directional neighbors
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                stack.append((x + dx, y + dy))
+        
+        return size

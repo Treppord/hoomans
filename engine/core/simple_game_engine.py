@@ -393,10 +393,16 @@ class SimpleGameEngine:
         # Draw UI elements last (on top)
         self.ui.render(self.display_manager.get_screen())
         
+        # NEW: Render interaction menu BEFORE pause menu (so pause menu is on top)
+        if hasattr(self, 'player') and self.player and hasattr(self.player, 'interaction_menu'):
+            self.player.interaction_menu.render(self.display_manager.get_screen())
+        
         # Draw pause menu if in paused state
         if (self.state_manager.is_state(self.state_manager.game_state_constants.PAUSED) and 
             hasattr(self, 'pause_menu')):
             self.pause_menu.render(self.display_manager.get_screen())
+            
+        
         
         # Update the display
         self.display_manager.flip()

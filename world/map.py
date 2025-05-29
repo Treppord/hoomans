@@ -378,6 +378,42 @@ class WorldMap:
                     queue.append((nx, ny, distance + 1))
                     
         return None  # No water found within range
+        
+    def _calculate_neighbor_info(self, tile_map, x, y, tile_type):
+        """Calculate neighbor information for patch-aware tile creation"""
+        same_type_count = 0
+        total_neighbors = 0
+        
+        for dy in [-1, 0, 1]:
+            for dx in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < self.width and 0 <= ny < self.height:
+                    if tile_map[ny][nx] == tile_type:
+                        same_type_count += 1
+                    total_neighbors += 1
+        
+        return {
+            'same_type_count': same_type_count,
+            'total_neighbors': total_neighbors,
+            'coord_hash': hash(f"{x}_{y}_{tile_type}")
+        }
+
+    def _get_patch_variation(self, x, y, tile_type, neighbor_info):
+        """Get variation that creates coherent patches"""
+        same_count = neighbor_info['same_type_count']
+        
+        if same_count >= 6:
+            # Patch center - use consistent variation
+            return (x // 3 + y // 3) % 5
+        elif same_count >= 4:
+            # Patch middle - moderate variation
+            return (x // 2 + y // 2) % 7
+        else:
+            # Patch edge - more variation
+            return (x + y) % 10
+
     
     def generate_realistic_map(self, scale=100.0, octaves=6, persistence=0.5, lacunarity=2.0, seed=None):
         """Generate a realistic world map using the new procedural generator"""
@@ -394,7 +430,15 @@ class WorldMap:
             # Apply the generated tiles to the world map
             for y in range(self.height):
                 for x in range(self.width):
-                    self.set_tile(x, y, tile_map[y][x])
+                    tile_type = tile_map[y][x]
+                    
+                    # NEW: Calculate neighbor info for patch-aware rendering
+                    neighbor_info = self._calculate_neighbor_info(tile_map, x, y, tile_type)
+                    
+                    # Create tile with neighbor information
+                    self.tiles[y][x] = Tile(tile_type)
+                    # Update the tile's variation based on neighbors
+                    self.tiles[y][x].variation = self._get_patch_variation(x, y, tile_type, neighbor_info)
             
             # Create debug visualization if in debug mode
             if hasattr(self, '_debug_mode') and self._debug_mode:

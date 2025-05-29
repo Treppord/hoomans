@@ -115,7 +115,7 @@ class Tile:
                 # Silently continue if texture can't be loaded
                 pass
     
-    def __init__(self, tile_type="empty"):
+    def __init__(self, tile_type="empty", neighbor_info=None):
         self.type = tile_type
         # Default colors for different tile types
         self.colors = {
@@ -133,6 +133,21 @@ class Tile:
             "snow": (250, 250, 250)   # Snow
         }
         
+        
+        if neighbor_info:
+            # If we have many same-type neighbors, use consistent variation
+            same_type_neighbors = neighbor_info.get('same_type_count', 0)
+            if same_type_neighbors >= 6:
+                # Use a more consistent variation for patch centers
+                self.variation = hash(f"{tile_type}_{same_type_neighbors}") % 5
+            else:
+                # Use coordinate-based variation for patch edges
+                coord_hash = neighbor_info.get('coord_hash', 0)
+                self.variation = coord_hash % 10
+        else:
+            # Fallback to random variation
+            self.variation = random.randint(0, 10)
+                    
         # Add variation to natural tiles
         # Use a smaller variation range to avoid drastic color changes
         self.variation = random.randint(0, 10)
