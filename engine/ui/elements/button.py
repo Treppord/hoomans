@@ -38,6 +38,11 @@ class Button(UIElement):
         self.sound_manager = get_sound_manager()
         self.hover_sound_played = False  # Track if hover sound was played
     
+    # ADD: rect property for compatibility
+    @property
+    def rect(self):
+        """Get the button's rectangle for collision detection and rendering"""
+        return pygame.Rect(self.x, self.y, self.width, self.height)
     
     def _initialize_font(self):
         """Initialize the font for the button text"""
@@ -72,6 +77,8 @@ class Button(UIElement):
         if event.type == pygame.MOUSEMOTION:
             was_hovered = self.hovered
             self.hovered = self.contains_point(event.pos[0], event.pos[1])
+            # ALSO update is_hovered for compatibility
+            self.is_hovered = self.hovered
             
             # Play hover sound when first hovering
             if self.hovered and not was_hovered and not self.hover_sound_played:
@@ -96,7 +103,6 @@ class Button(UIElement):
             mouse_pos = event.pos
             if was_pressed and self.contains_point(mouse_pos[0], mouse_pos[1]):
                 # Button was clicked, trigger callback
-
                 if self.callback:
                     self.callback()
                 return True

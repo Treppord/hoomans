@@ -28,6 +28,12 @@ class WorldCache:
         self.world_modifications = {}  # Track any world modifications
         self.world_items = []  # Track items in the world
 
+
+        # NEW: Custom map support
+        self.custom_map_path = None  # Path to custom map file if loaded
+        self.is_custom_map = False   # Flag to indicate if using custom map
+
+
         # Save interval tracking
         self.last_save_time = 0
         self.save_interval = 60  # Save every 60 seconds
@@ -43,8 +49,92 @@ class WorldCache:
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
     
-
+    def set_custom_map(self, map_path: str):
+        """Set a custom map to be used instead of procedural generation"""
+        if os.path.exists(map_path):
+            self.custom_map_path = map_path
+            self.is_custom_map = True
+            # Use map filename as seed for consistency
+            map_name = os.path.splitext(os.path.basename(map_path))[0]
+            self.current_seed = f"custom_{map_name}"
+            print(f"Set custom map: {map_path} (seed: {self.current_seed})")
+            return True
+        else:
+            print(f"Custom map file not found: {map_path}")
+            return False
     
+    def get_custom_map_path(self) -> Optional[str]:
+        """Get the path to the custom map if one is set"""
+        return self.custom_map_path if self.is_custom_map else None
+    
+    def clear_custom_map(self):
+        """Clear custom map and return to procedural generation"""
+        self.custom_map_path = None
+        self.is_custom_map = False
+        print("Cleared custom map, returning to procedural generation")
+    
+    def get_available_maps(self) -> List[Dict[str, Any]]:
+        """Get list of available custom maps"""
+        maps_dir = "maps"
+        available_maps = []
+        
+        if not os.path.exists(maps_dir):
+            return available_maps
+        
+        try:
+            from tools.map_editor.map_serializer import MapSerializer
+            serializer = MapSerializer()
+            
+            for filename in os.listdir(maps_dir):
+                if filename.endswith('.json'):
+                    map_path = os.path.join(maps_dir, filename)
+                    map_info = serializer.get_map_info(map_path)
+                    
+                    if map_info:
+                        # Add modification time
+                        stat = os.stat(map_path)
+                        map_info['modified_time'] = stat.st_mtime
+                        map_info['modified_str'] = time.strftime(
+                            '%Y-%m-%d %H:%M:%S', 
+                            time.localtime(stat.st_mtime)
+                        )
+                        available_maps.append(map_info)
+            
+            # Sort by modification time (newest first)
+            available_maps.sort(key=lambda x: x['modified_time'], reverse=True)
+            
+        except ImportError:
+            print("Map serializer not available for map info")
+        except Exception as e:
+            print(f"Error scanning for maps: {e}")
+        
+        return available_maps
+    
+    def load_custom_map_world(self) -> Optional['Any']:
+        """Load the custom map if one is set"""
+        if not self.is_custom_map or not self.custom_map_path:
+            return None
+        
+        try:
+            from tools.map_editor.map_serializer import MapSerializer
+            serializer = MapSerializer()
+            
+            world_map = serializer.load_map(self.custom_map_path)
+            if world_map:
+                print(f"Successfully loaded custom map: {self.custom_map_path}")
+                return world_map
+            else:
+                print(f"Failed to load custom map: {self.custom_map_path}")
+                return None
+                
+        except ImportError:
+            print("Map serializer not available, cannot load custom map")
+            return None
+        except Exception as e:
+            print(f"Error loading custom map: {e}")
+            return None
+
+    # Keep all existing methods unchanged...
     def save_entity_tile(self, x, y, entity_tile_type, entity_tile_data=None):
         """Save an entity tile to the cache with optimization"""
         if not self.current_seed:
@@ -349,7 +439,10 @@ class WorldCache:
                 "removed_entity_tiles": removed_tiles_list,
                 "world_modifications": self.world_modifications,
                 "last_updated": time.time(),
-                "cache_version": "1.1"  # Version for future compatibility
+                "cache_version": "1.1",
+                # NEW: Custom map info
+                "custom_map_path": self.custom_map_path,
+                "is_custom_map": self.is_custom_map
             }
             
             # Create cache directory if it doesn't exist
@@ -366,19 +459,58 @@ class WorldCache:
             file_size_mb = file_size / (1024 * 1024)
             
             logger.info(f"Saved cache for seed {self.current_seed} ({file_size_mb:.2f} MB)")
-            print(f"DEBUG: Saved optimized world cache to {cache_file} ({file_size_mb:.2f} MB)")
-            print(f"DEBUG: Cache contains {len(self.entity_memories)} entity memories, {len(self.discovered_locations)} location types")
-            print(f"DEBUG: Cache contains {len(self.entity_tiles)} entity tiles, {len(self.entity_positions)} entity positions")
-            print(f"DEBUG: Cache contains {len(self.world_modifications)} world modifications")
-            
-            # Warn if file is getting large
-            if file_size_mb > 10:
-                print(f"WARNING: Cache file is large ({file_size_mb:.2f} MB). Consider running cleanup.")
             
             return True
         except Exception as e:
             logger.error(f"Error saving cache: {e}")
             print(f"ERROR saving cache: {e}")
+            return False
+    
+    def _load_cache(self):
+        """Load cache data for the current seed"""
+        if not self.current_seed:
+            logger.info("Cannot load cache: No current seed set")
+            return False
+        
+        cache_file = os.path.join(self.cache_dir, f"world_{self.current_seed}.json")
+        
+        if not os.path.exists(cache_file):
+            logger.info(f"No cache file found for seed {self.current_seed}")
+            return False
+        
+        try:
+            with open(cache_file, 'r') as f:
+                cache_data = json.load(f)
+            
+            # Load data from cache
+            self.entity_memories = cache_data.get("entity_memories", {})
+            self.discovered_locations = cache_data.get("discovered_locations", {})
+            self.entity_relationships = cache_data.get("entity_relationships", {})
+            
+            # Load world state data
+            self.entity_tiles = cache_data.get("entity_tiles", {})
+            self.entity_positions = cache_data.get("entity_positions", {})
+            
+            # Convert removed_entity_tiles list back to set
+            removed_tiles_list = cache_data.get("removed_entity_tiles", [])
+            self.removed_entity_tiles = set(tuple(coord) for coord in removed_tiles_list)
+            
+            self.world_modifications = cache_data.get("world_modifications", {})
+            self.world_items = cache_data.get("world_items", [])
+            
+            # NEW: Load custom map info
+            self.custom_map_path = cache_data.get("custom_map_path")
+            self.is_custom_map = cache_data.get("is_custom_map", False)
+            
+            # Calculate and log file size
+            file_size = os.path.getsize(cache_file)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            logger.info(f"Loaded cache for seed {self.current_seed} ({file_size_mb:.2f} MB)")
+            return True
+        except Exception as e:
+            logger.error(f"Error loading cache: {e}")
+            print(f"ERROR loading cache: {e}")
             return False
     
     def get_cache_stats(self):
@@ -776,51 +908,7 @@ class WorldCache:
         
         return self.entity_relationships[entity_id]
     
-    def _load_cache(self):
-        """Load cache data for the current seed"""
-        if not self.current_seed:
-            logger.info("Cannot load cache: No current seed set")
-            return False
-        
-        cache_file = os.path.join(self.cache_dir, f"world_{self.current_seed}.json")
-        
-        if not os.path.exists(cache_file):
-            logger.info(f"No cache file found for seed {self.current_seed}")
-            return False
-        
-        try:
-            with open(cache_file, 'r') as f:
-                cache_data = json.load(f)
-            
-            # Load data from cache
-            self.entity_memories = cache_data.get("entity_memories", {})
-            self.discovered_locations = cache_data.get("discovered_locations", {})
-            self.entity_relationships = cache_data.get("entity_relationships", {})
-            
-            # Load world state data
-            self.entity_tiles = cache_data.get("entity_tiles", {})
-            self.entity_positions = cache_data.get("entity_positions", {})
-            
-            # Convert removed_entity_tiles list back to set
-            removed_tiles_list = cache_data.get("removed_entity_tiles", [])
-            self.removed_entity_tiles = set(tuple(coord) for coord in removed_tiles_list)
-            
-            self.world_modifications = cache_data.get("world_modifications", {})
-            self.world_items = cache_data.get("world_items", [])  # Load world items
-            
-            # Calculate and log file size
-            file_size = os.path.getsize(cache_file)
-            file_size_mb = file_size / (1024 * 1024)
-            
-            logger.info(f"Loaded cache for seed {self.current_seed} ({file_size_mb:.2f} MB)")
-            print(f"DEBUG: Loaded optimized world cache from {cache_file} ({file_size_mb:.2f} MB)")
-            print(f"DEBUG: Cache contains {len(self.entity_memories)} entity memories and {len(self.discovered_locations)} location types")
-            print(f"DEBUG: Cache contains {len(self.entity_tiles)} entity tiles and {len(self.entity_positions)} entity positions")
-            return True
-        except Exception as e:
-            logger.error(f"Error loading cache: {e}")
-            print(f"ERROR loading cache: {e}")
-            return False
+
     
     def _auto_save(self):
         """Automatically save cache if it's been a while"""

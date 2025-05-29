@@ -296,19 +296,42 @@ class SimpleGameEngine:
         print("Quitting game")
         self.running = False
     
-    def _start_game_from_menu(self, seed=None, is_new_world=False):
-        """Start the game from the main menu"""
+    def _start_game_from_menu(self, seed=None, is_new_world=False, use_custom_map=False):
+        """Start the game from the main menu with custom map support"""
         try:
-            print(f"Starting game from menu with seed: {seed}, new world: {is_new_world}")
+            print(f"Starting game from menu - seed: {seed}, new world: {is_new_world}, custom map: {use_custom_map}")
             self.state_manager.set_state(self.state_manager.game_state_constants.RUNNING)
             
             # Switch to game music
             self.sound_manager.play_music("track_game", loops=-1, fade_in=1000)
             
-            # Set map seed if provided
-            if seed is not None:
-                self.map_seed = seed
-                print(f"Using provided seed: {seed}")
+            # Handle custom map loading
+            if use_custom_map and hasattr(self, 'world_cache'):
+                custom_map_path = self.world_cache.get_custom_map_path()
+                if custom_map_path:
+                    print(f"Loading custom map: {custom_map_path}")
+                    
+                    # Load the custom map
+                    custom_world_map = self.world_cache.load_custom_map_world()
+                    if custom_world_map:
+                        # Set the custom map as the world map
+                        self.set_world_map(custom_world_map)
+                        
+                        # Load cached entities for this custom map
+                        self.world_cache_manager.load_cached_entities()
+                        
+                        print("Custom map loaded successfully")
+                        return
+                    else:
+                        print("Failed to load custom map, falling back to procedural generation")
+                        use_custom_map = False
+            
+            # Handle procedural world generation
+            if not use_custom_map:
+                # Set map seed if provided
+                if seed is not None:
+                    self.map_seed = seed
+                    print(f"Using provided seed: {seed}")
             
             # Load item icons after pygame is initialized
             self.load_item_icons()
