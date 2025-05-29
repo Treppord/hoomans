@@ -1,26 +1,27 @@
 """
-Entity palette for selecting and placing entity tiles
+Entity palette for the map editor
+Provides UI for selecting entity types
 """
 
 import pygame
-import sys
-import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 class EntityPalette:
-    """Manages entity tile selection and preview"""
+    """Entity selection palette for the map editor"""
     
     def __init__(self):
         """Initialize the entity palette"""
         # Available entity types
-        self.entity_types = [
+        self.available_entities = [
             "tree", "house"
-            # Add more entity types as they're implemented
         ]
         
-        # Entity colors for preview
+        # Current selection
+        self.selected_entity = "tree"
+        
+        # Colors for entity preview
         self.entity_colors = {
-            "tree": (0, 100, 0),
+            "tree": (0, 120, 0),
             "house": (139, 69, 19)
         }
         
@@ -30,54 +31,62 @@ class EntityPalette:
             "house": "House (2x2)"
         }
         
-        # UI state
-        self.scroll_offset = 0
+        # UI settings
         self.entity_size = 48
-        self.entities_per_row = 3
+        self.padding = 10
+        self.entities_per_row = 2
         
-        print(f"Entity palette initialized with {len(self.entity_types)} entity types")
+        # Colors
+        self.bg_color = (50, 50, 50)
+        self.border_color = (100, 100, 100)
+        self.selected_color = (255, 255, 0)
+        self.text_color = (255, 255, 255)
+        
+        # Font
+        try:
+            self.font = pygame.font.Font(None, 16)
+            self.title_font = pygame.font.Font(None, 20)
+        except:
+            self.font = pygame.font.SysFont(None, 16)
+            self.title_font = pygame.font.SysFont(None, 20)
+        
+        # Scroll state
+        self.scroll_offset = 0
     
-    def handle_event(self, event, palette_rect):
-        """Handle events for entity selection"""
+    def handle_event(self, event):
+        """Handle palette events"""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            # Calculate which entity was clicked
-            relative_pos = (event.pos[0] - palette_rect.left, 
-                          event.pos[1] - palette_rect.top - 50)  # Account for header
-            
-            if relative_pos[1] >= 0:
-                entity_x = relative_pos[0] // (self.entity_size + 10)
-                entity_y = (relative_pos[1] + self.scroll_offset) // (self.entity_size + 30)
-                
-                entity_index = entity_y * self.entities_per_row + entity_x
-                
-                if 0 <= entity_index < len(self.entity_types):
-                    return self.entity_types[entity_index]
+            # This will be handled by the parent editor
+            return False
         
         elif event.type == pygame.MOUSEWHEEL:
             # Scroll through entities
-            if palette_rect.collidepoint(pygame.mouse.get_pos()):
-                self.scroll_offset = max(0, self.scroll_offset - event.y * 20)
-                return None
+            self.scroll_offset = max(0, self.scroll_offset - event.y * 20)
+            return True
         
-        return None
+        return False
     
-    def render(self, screen, palette_rect, selected_entity):
+    def render(self, screen, palette_rect):
         """Render the entity palette"""
-        # Draw header
-        font = pygame.font.Font(None, 24)
-        header_text = font.render("Entities", True, (255, 255, 255))
-        screen.blit(header_text, (palette_rect.left + 10, palette_rect.top + 10))
+        # Draw background
+        pygame.draw.rect(screen, self.bg_color, palette_rect)
+        pygame.draw.rect(screen, self.border_color, palette_rect, 2)
         
-        # Calculate entity grid
-        start_y = palette_rect.top + 50
+        # Draw title
+        title_text = self.title_font.render("Entities", True, self.text_color)
+        screen.blit(title_text, (palette_rect.left + 10, palette_rect.top + 10))
         
-        for i, entity_type in enumerate(self.entity_types):
+        # Calculate starting position
+        start_y = palette_rect.top + 40 - self.scroll_offset
+        
+        # Draw entities
+        for i, entity_type in enumerate(self.available_entities):
             # Calculate position
-            col = i % self.entities_per_row
             row = i // self.entities_per_row
+            col = i % self.entities_per_row
             
-            entity_x = palette_rect.left + 10 + col * (self.entity_size + 10)
-            entity_y = start_y + row * (self.entity_size + 30) - self.scroll_offset
+            entity_x = palette_rect.left + 10 + col * (self.entity_size + self.padding)
+            entity_y = start_y + row * (self.entity_size + 30)
             
             # Skip if not visible
             if entity_y + self.entity_size < palette_rect.top or entity_y > palette_rect.bottom:
@@ -86,8 +95,8 @@ class EntityPalette:
             # Draw entity preview
             entity_rect = pygame.Rect(entity_x, entity_y, self.entity_size, self.entity_size)
             
-            # Draw colored rectangle (placeholder for entity preview)
-            color = self.entity_colors.get(entity_type, (255, 0, 255))
+            # Background color
+            color = self.entity_colors.get(entity_type, (100, 100, 100))
             pygame.draw.rect(screen, color, entity_rect)
             
             # Draw entity icon/shape
@@ -113,13 +122,30 @@ class EntityPalette:
                 pygame.draw.polygon(screen, (139, 69, 19), roof_points)
             
             # Draw selection border
-            if entity_type == selected_entity:
-                pygame.draw.rect(screen, (255, 255, 0), entity_rect, 3)
+            if entity_type == self.selected_entity:
+                pygame.draw.rect(screen, self.selected_color, entity_rect, 3)
             else:
-                pygame.draw.rect(screen, (100, 100, 100), entity_rect, 1)
+                pygame.draw.rect(screen, self.border_color, entity_rect, 1)
             
             # Draw entity description
-            small_font = pygame.font.Font(None, 14)
-            desc_text = small_font.render(self.entity_descriptions.get(entity_type, entity_type), 
-                                        True, (255, 255, 255))
+            desc_text = self.font.render(self.entity_descriptions.get(entity_type, entity_type), 
+                                       True, self.text_color)
             screen.blit(desc_text, (entity_x, entity_y + self.entity_size + 2))
+    
+    def get_entity_at_pos(self, pos, palette_rect):
+        """Get the entity type at the given position within the palette"""
+        relative_x = pos[0] - palette_rect.left - 10
+        relative_y = pos[1] - palette_rect.top - 40 + self.scroll_offset
+        
+        if relative_x < 0 or relative_y < 0:
+            return None
+        
+        col = relative_x // (self.entity_size + self.padding)
+        row = relative_y // (self.entity_size + 30)
+        
+        entity_index = row * self.entities_per_row + col
+        
+        if 0 <= entity_index < len(self.available_entities):
+            return self.available_entities[entity_index]
+        
+        return None

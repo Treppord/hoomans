@@ -49,18 +49,27 @@ class WorldCache:
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
     
-    def set_custom_map(self, map_path: str):
-        """Set a custom map to be used instead of procedural generation"""
-        if os.path.exists(map_path):
+    def set_custom_map(self, map_path):
+        """Set a custom map to be loaded
+        
+        Args:
+            map_path: Full path to the custom map file
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if not os.path.exists(map_path):
+                print(f"Custom map file not found: {map_path}")
+                return False
+            
+            # Store the custom map path for later use
             self.custom_map_path = map_path
-            self.is_custom_map = True
-            # Use map filename as seed for consistency
-            map_name = os.path.splitext(os.path.basename(map_path))[0]
-            self.current_seed = f"custom_{map_name}"
-            print(f"Set custom map: {map_path} (seed: {self.current_seed})")
+            print(f"Custom map set: {map_path}")
             return True
-        else:
-            print(f"Custom map file not found: {map_path}")
+            
+        except Exception as e:
+            print(f"Error setting custom map: {e}")
             return False
     
     def get_custom_map_path(self) -> Optional[str]:
@@ -110,30 +119,69 @@ class WorldCache:
         
         return available_maps
     
-    def load_custom_map_world(self) -> Optional['Any']:
-        """Load the custom map if one is set"""
-        if not self.is_custom_map or not self.custom_map_path:
-            return None
+    def load_custom_map(self, world_map):
+        """Load the set custom map into a world map
+        
+        Args:
+            world_map: The WorldMap instance to load into
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not hasattr(self, 'custom_map_path') or not self.custom_map_path:
+            print("No custom map path set")
+            return False
         
         try:
             from tools.map_editor.map_serializer import MapSerializer
+            
             serializer = MapSerializer()
             
-            world_map = serializer.load_map(self.custom_map_path)
-            if world_map:
-                print(f"Successfully loaded custom map: {self.custom_map_path}")
-                return world_map
-            else:
+            # Load the custom map
+            custom_world_map = serializer.load_map(os.path.basename(self.custom_map_path))
+            
+            if not custom_world_map:
                 print(f"Failed to load custom map: {self.custom_map_path}")
-                return None
+                return False
+            
+            # Copy the custom map data to the target world map
+            if custom_world_map.width != world_map.width or custom_world_map.height != world_map.height:
+                print(f"Warning: Map size mismatch. Custom: {custom_world_map.width}x{custom_world_map.height}, Target: {world_map.width}x{world_map.height}")
+                # You might want to resize or crop here
+            
+            # Copy tiles
+            for y in range(min(custom_world_map.height, world_map.height)):
+                for x in range(min(custom_world_map.width, world_map.width)):
+                    tile = custom_world_map.get_tile(x, y)
+                    if tile:
+                        world_map.set_tile(x, y, tile.type)
+            
+            # Copy entity tiles
+            if hasattr(custom_world_map, 'entity_tile_manager') and custom_world_map.entity_tile_manager:
+                if not hasattr(world_map, 'entity_tile_manager'):
+                    world_map.initialize_entity_tiles()
                 
-        except ImportError:
-            print("Map serializer not available, cannot load custom map")
-            return None
+                for entity_tile in custom_world_map.entity_tile_manager.entity_tiles:
+                    # Recreate entity tiles in the target map
+                    if entity_tile.tile_type == "tree":
+                        world_map.add_tree(entity_tile.base_x, entity_tile.base_y)
+                    elif entity_tile.tile_type == "house":
+                        world_map.add_house(entity_tile.base_x, entity_tile.base_y)
+            
+            print(f"Custom map loaded successfully: {self.custom_map_path}")
+            
+            # Mark this world as using a custom map
+            self.is_custom_map = True
+            self.custom_map_name = os.path.basename(self.custom_map_path)
+            
+            return True
+            
         except Exception as e:
             print(f"Error loading custom map: {e}")
-            return None
-
+            import traceback
+            traceback.print_exc()
+            return False
+        s
     # Keep all existing methods unchanged...
     def save_entity_tile(self, x, y, entity_tile_type, entity_tile_data=None):
         """Save an entity tile to the cache with optimization"""
@@ -438,11 +486,14 @@ class WorldCache:
                 "entity_positions": self.entity_positions,
                 "removed_entity_tiles": removed_tiles_list,
                 "world_modifications": self.world_modifications,
+                "world_items": getattr(self, 'world_items', []),
                 "last_updated": time.time(),
-                "cache_version": "1.1",
-                # NEW: Custom map info
+                "cache_version": "1.2",  # Increment version for custom map support
+                # Enhanced custom map support
                 "custom_map_path": self.custom_map_path,
-                "is_custom_map": self.is_custom_map
+                "is_custom_map": self.is_custom_map,
+                # NEW: Save constructed entity tiles separately for custom maps
+                "constructed_entity_tiles": self._get_constructed_entity_tiles() if self.is_custom_map else {}
             }
             
             # Create cache directory if it doesn't exist
@@ -460,11 +511,130 @@ class WorldCache:
             
             logger.info(f"Saved cache for seed {self.current_seed} ({file_size_mb:.2f} MB)")
             
+            # Special handling for custom maps - also update the original map file if desired
+            if self.is_custom_map and self.custom_map_path:
+                self._save_constructed_tiles_to_custom_map()
+            
             return True
         except Exception as e:
             logger.error(f"Error saving cache: {e}")
             print(f"ERROR saving cache: {e}")
             return False
+    
+    def get_available_maps(self):
+        """Get available custom maps from the map creator"""
+        try:
+            # Import here to avoid circular imports
+            from tools.map_editor.map_serializer import MapSerializer
+            
+            serializer = MapSerializer()
+            map_files = serializer.list_maps()
+            
+            available_maps = []
+            for filename in map_files:
+                map_info = serializer.get_map_info(filename)
+                if map_info:
+                    # Convert to the format expected by the main menu
+                    map_data = {
+                        'filename': filename,
+                        'width': map_info['width'],
+                        'height': map_info['height'],
+                        'entity_count': map_info['entity_count'],
+                        'item_count': 0,  # Maps don't store items yet
+                        'file_size_kb': map_info['file_size'] / 1024,
+                        'compressed': map_info.get('compressed', False),
+                        'full_path': os.path.join(serializer.get_maps_directory(), filename),
+                        'modified_str': self._get_file_modified_time(os.path.join(serializer.get_maps_directory(), filename))
+                    }
+                    available_maps.append(map_data)
+            
+            return available_maps
+            
+        except Exception as e:
+            print(f"Error getting available maps: {e}")
+            return []
+        
+    def _get_file_modified_time(self, file_path):
+        """Get formatted modification time for a file"""
+        try:
+            import time
+            import os
+            mtime = os.path.getmtime(file_path)
+            return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(mtime))
+        except:
+            return "Unknown"
+    
+    def _get_constructed_entity_tiles(self):
+        """Get all entity tiles that were constructed by players (not from original map)"""
+        constructed_tiles = {}
+        
+        # Get the game engine to access the world map
+        from engine.core.simple_game_engine import SimpleGameEngine
+        if not hasattr(SimpleGameEngine, 'instance') or not SimpleGameEngine.instance:
+            return constructed_tiles
+        
+        engine = SimpleGameEngine.instance
+        if not hasattr(engine, 'world_map') or not engine.world_map:
+            return constructed_tiles
+        
+        world_map = engine.world_map
+        if not hasattr(world_map, 'entity_tile_manager'):
+            return constructed_tiles
+        
+        # Get all current entity tiles
+        for entity_tile in world_map.entity_tile_manager.entity_tiles:
+            tile_key = f"{entity_tile.base_x},{entity_tile.base_y}"
+            
+            # Check if this tile was constructed (not from original map)
+            if self._is_constructed_tile(entity_tile):
+                constructed_tiles[tile_key] = {
+                    "x": entity_tile.base_x,
+                    "y": entity_tile.base_y,
+                    "type": entity_tile.tile_type,
+                    "width": entity_tile.width,
+                    "height": entity_tile.height,
+                    "data": entity_tile.get_save_data(),
+                    "constructed_time": time.time()
+                }
+        
+        return constructed_tiles
+    
+    def _is_constructed_tile(self, entity_tile):
+        """Check if an entity tile was constructed by a player (not from original map)"""
+        # For now, we'll assume any entity tile that's not in the original map data is constructed
+        # This could be enhanced with a flag on entity tiles to track their origin
+        
+        if not self.is_custom_map or not self.custom_map_path:
+            return True  # For procedural maps, all entity tiles are "constructed"
+        
+        # Check if this entity tile was in the original custom map
+        try:
+            import json
+            with open(self.custom_map_path, 'r') as f:
+                map_data = json.load(f)
+            
+            original_entity_tiles = map_data.get('entity_tiles', [])
+            
+            # Check if this tile matches any original tile
+            for original_tile in original_entity_tiles:
+                if (original_tile.get('x') == entity_tile.base_x and 
+                    original_tile.get('y') == entity_tile.base_y and
+                    original_tile.get('type') == entity_tile.tile_type):
+                    return False  # This tile was in the original map
+            
+            return True  # This tile was not in the original map, so it's constructed
+            
+        except Exception as e:
+            print(f"Error checking if tile is constructed: {e}")
+            return True  # Assume constructed if we can't check
+    
+    def _save_constructed_tiles_to_custom_map(self):
+        """Optionally save constructed tiles back to the custom map file"""
+        # This is optional - we could create a separate "modified" version of the map
+        # For now, we'll just log that we could do this
+        constructed_count = len(self._get_constructed_entity_tiles())
+        if constructed_count > 0:
+            print(f"DEBUG: {constructed_count} constructed entity tiles could be saved to custom map")
     
     def _load_cache(self):
         """Load cache data for the current seed"""
@@ -498,20 +668,70 @@ class WorldCache:
             self.world_modifications = cache_data.get("world_modifications", {})
             self.world_items = cache_data.get("world_items", [])
             
-            # NEW: Load custom map info
+            # Load custom map info
             self.custom_map_path = cache_data.get("custom_map_path")
             self.is_custom_map = cache_data.get("is_custom_map", False)
+            
+            # NEW: Load constructed entity tiles for custom maps
+            self.constructed_entity_tiles = cache_data.get("constructed_entity_tiles", {})
             
             # Calculate and log file size
             file_size = os.path.getsize(cache_file)
             file_size_mb = file_size / (1024 * 1024)
             
             logger.info(f"Loaded cache for seed {self.current_seed} ({file_size_mb:.2f} MB)")
+            
+            if self.is_custom_map:
+                constructed_count = len(self.constructed_entity_tiles)
+                print(f"DEBUG: Loaded {constructed_count} constructed entity tiles for custom map")
+            
             return True
         except Exception as e:
             logger.error(f"Error loading cache: {e}")
             print(f"ERROR loading cache: {e}")
             return False
+    
+    def load_constructed_entity_tiles(self, world_map):
+        """Load constructed entity tiles into the world map"""
+        if not hasattr(self, 'constructed_entity_tiles') or not self.constructed_entity_tiles:
+            return
+        
+        if not hasattr(world_map, 'entity_tile_manager'):
+            world_map.initialize_entity_tiles()
+        
+        print(f"DEBUG: Loading {len(self.constructed_entity_tiles)} constructed entity tiles")
+        
+        for tile_key, tile_data in self.constructed_entity_tiles.items():
+            try:
+                x = tile_data["x"]
+                y = tile_data["y"]
+                tile_type = tile_data["type"]
+                
+                # Check if this position is already occupied
+                existing_tile = world_map.entity_tile_manager.get_entity_tile_at(x, y)
+                if existing_tile:
+                    print(f"DEBUG: Skipping constructed tile at ({x}, {y}) - position occupied")
+                    continue
+                
+                # Create the appropriate entity tile
+                entity_tile = None
+                if tile_type == "tree":
+                    entity_tile = world_map.add_tree(x, y)
+                elif tile_type == "house":
+                    entity_tile = world_map.add_house(x, y)
+                # Add more entity tile types as needed
+                
+                if entity_tile:
+                    # Restore saved data
+                    if "data" in tile_data:
+                        entity_tile.load_save_data(tile_data["data"])
+                    print(f"DEBUG: Loaded constructed {tile_type} at ({x}, {y})")
+                else:
+                    print(f"DEBUG: Failed to create constructed {tile_type} at ({x}, {y})")
+                    
+            except Exception as e:
+                print(f"Error loading constructed entity tile {tile_key}: {e}")
+
     
     def get_cache_stats(self):
         """Get statistics about the current cache"""

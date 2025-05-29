@@ -74,12 +74,22 @@ class MapCreatorTool:
         creator_group.add_argument(
             '--load-map',
             type=str,
-            help='Load an existing map file'
+            help='Load an existing map file (filename only, no path)'
+        )
+        creator_group.add_argument(
+            '--save-map',
+            type=str,
+            help='Save map with specific filename on exit'
         )
         creator_group.add_argument(
             '--aseprite-path',
             type=str,
             help='Path to Aseprite executable for integration'
+        )
+        creator_group.add_argument(
+            '--list-maps',
+            action='store_true',
+            help='List all available maps and exit'
         )
         
         return parser.parse_args()
@@ -87,6 +97,11 @@ class MapCreatorTool:
     def initialize(self):
         """Initialize all components of the map creator"""
         try:
+            # Handle list maps command
+            if self.args.list_maps:
+                self._list_available_maps()
+                return False
+            
             # Initialize Aseprite integration
             if self.args.aseprite_path:
                 print(f"Initializing Aseprite integration: {self.args.aseprite_path}")
@@ -109,9 +124,14 @@ class MapCreatorTool:
             # Load existing map if specified
             if self.args.load_map:
                 print(f"Loading map: {self.args.load_map}")
-                self.editor.load_map(self.args.load_map)
+                loaded_map = self.editor.load_map(self.args.load_map)
+                if loaded_map:
+                    print("Map loaded successfully")
+                else:
+                    print("Failed to load map, using default")
             
             print("Map Creator initialization complete")
+            print(f"Maps will be saved to: {self.editor.serializer.get_maps_directory()}")
             return True
             
         except Exception as e:
@@ -120,14 +140,38 @@ class MapCreatorTool:
             traceback.print_exc()
             return False
     
+    def _list_available_maps(self):
+        """List all available maps"""
+        serializer = MapSerializer()
+        maps = serializer.list_maps()
+        
+        print(f"\nAvailable maps in {serializer.get_maps_directory()}:")
+        if maps:
+            for i, map_file in enumerate(maps, 1):
+                print(f"  {i:2d}. {map_file}")
+        else:
+            print("  No maps found")
+        print()
+    
     def run(self):
         """Main application loop"""
         if not self.initialize():
+            if self.args.list_maps:
+                return  # Normal exit for list command
             print("Failed to initialize Map Creator")
             return
         
         self.running = True
         print("Starting Map Creator...")
+        print("\nControls:")
+        print("  1-5: Select tools (Tile Brush, Entity Placer, Eraser, Selector, Fill)")
+        print("  G: Toggle grid")
+        print("  P: Toggle palette")
+        print("  Ctrl+S: Save map")
+        print("  Ctrl+O: List and load maps")
+        print("  Ctrl+N: New map")
+        print("  ESC: Exit")
+        print()
         
         while self.running:
             # Handle events
@@ -139,7 +183,10 @@ class MapCreatorTool:
                         self.running = False
                     elif event.key == pygame.K_s and pygame.key.get_pressed()[pygame.K_LCTRL]:
                         # Ctrl+S to save
-                        self.editor.save_map()
+                        if self.args.save_map:
+                            self.editor.save_map(self.args.save_map)
+                        else:
+                            self.editor.save_map()
                     elif event.key == pygame.K_o and pygame.key.get_pressed()[pygame.K_LCTRL]:
                         # Ctrl+O to open
                         self.editor.open_map_dialog()
@@ -163,6 +210,11 @@ class MapCreatorTool:
             
             pygame.display.flip()
             self.clock.tick(60)
+        
+        # Save on exit if specified
+        if self.args.save_map and self.editor:
+            print(f"Saving map on exit: {self.args.save_map}")
+            self.editor.save_map(self.args.save_map)
         
         self.cleanup()
     

@@ -847,18 +847,26 @@ class ConstructHandler(InteractionHandler):
             
         world_map = engine.world_map
         
-        # Place the entity tile based on structure type
+        # Get player entity ID for construction tracking
+        player_id = None
+        if hasattr(self.player, 'get_entity_id'):
+            player_id = self.player.get_entity_id()
+        
+        # Place the entity tile based on structure type and mark as constructed
         placed = False
         
         if item.structure_type == "house":
-            placed = world_map.add_house(grid_x, grid_y) is not None
+            placed_tile = world_map.add_house(grid_x, grid_y, mark_constructed=True, constructed_by=player_id)
+            placed = placed_tile is not None
         elif item.structure_type == "campfire":
-            placed = world_map.add_campfire(grid_x, grid_y) is not None
+            # Add campfire support when implemented
+            placed_tile = world_map.add_campfire(grid_x, grid_y, mark_constructed=True, constructed_by=player_id)
+            placed = placed_tile is not None
         # Add more structure types as needed
         
         # If placement was successful, consume the schematic item
         if placed:
-            print(f"Placed {item.name} at ({grid_x}, {grid_y})")
+            print(f"Placed {item.name} at ({grid_x}, {grid_y}) - marked as constructed by player")
             
             # Reduce quantity
             item.quantity -= 1

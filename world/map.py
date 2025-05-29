@@ -110,6 +110,10 @@ class WorldMap:
         # STEP 2: Render world items AFTER terrain tiles
         if hasattr(self, 'world_item_manager'):
             self.world_item_manager.render(screen, camera)
+            
+        # STEP 3: Render entity tiles LAST (on top of everything) if requested
+        if render_entity_tiles and hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.render(screen, camera)
         
         
         # STEP 4: Draw grid lines if zoom level is appropriate
@@ -149,25 +153,38 @@ class WorldMap:
         if not self.world_cache:
             return
         
-        # Load all cached entity tiles
-        cached_tiles = self.world_cache.get_all_entity_tiles()
+        # Set loading flag to prevent saving during load
+        self._loading_from_cache = True
         
-        for tile_data in cached_tiles:
-            x, y = tile_data["x"], tile_data["y"]
-            tile_type = tile_data["type"]
+        try:
+            # Load all cached entity tiles (original map tiles)
+            cached_tiles = self.world_cache.get_all_entity_tiles()
             
-            # Skip if this tile was marked as removed
-            if self.world_cache.is_entity_tile_removed(x, y):
-                continue
+            for tile_data in cached_tiles:
+                x, y = tile_data["x"], tile_data["y"]
+                tile_type = tile_data["type"]
+                
+                # Skip if this tile was marked as removed
+                if self.world_cache.is_entity_tile_removed(x, y):
+                    continue
+                
+                print(f"DEBUG: Loading cached entity tile {tile_type} at ({x}, {y})")
+                
+                # Create the appropriate entity tile
+                if tile_type == "tree":
+                    self._create_tree_from_cache(x, y, tile_data.get("data", {}))
+                elif tile_type == "house":
+                    self._create_house_from_cache(x, y, tile_data.get("data", {}))
+                # Add more entity tile types as needed
             
-            print(f"DEBUG: Loading cached entity tile {tile_type} at ({x}, {y})")
-            
-            # Create the appropriate entity tile
-            if tile_type == "tree":
-                self._create_tree_from_cache(x, y, tile_data.get("data", {}))
-            elif tile_type == "house":
-                self._create_house_from_cache(x, y, tile_data.get("data", {}))
-            # Add more entity tile types as needed
+            # NEW: Load constructed entity tiles (player-built structures)
+            if hasattr(self.world_cache, 'load_constructed_entity_tiles'):
+                self.world_cache.load_constructed_entity_tiles(self)
+                
+        finally:
+            # Clear loading flag
+            self._loading_from_cache = False
+
     
     def _create_tree_from_cache(self, x, y, data):
         """Create a tree entity tile from cached data"""
@@ -245,7 +262,7 @@ class WorldMap:
         
         return house
     
-    def add_tree(self, x, y):
+    def add_tree(self, x, y, mark_constructed=False, constructed_by=None):
         """Add a tree entity tile at the specified position"""
         from world.entity_tile import TreeEntityTile
         
@@ -268,20 +285,21 @@ class WorldMap:
         
         # Create and add the tree
         tree = TreeEntityTile(x, y)
+        
+        # Mark as constructed if requested
+        if mark_constructed:
+            tree.mark_as_constructed(constructed_by)
+        
         self.entity_tile_manager.add_entity_tile(tree)
         
         # Save to cache
         if self.world_cache:
-            tree_data = {
-                "opacity": getattr(tree, 'opacity', 1.0),
-                "entities_inside": len(getattr(tree, 'entities_inside', [])),
-                "entities_in_trunk": len(getattr(tree, 'entities_in_trunk', []))
-            }
+            tree_data = tree.get_save_data()
             self.world_cache.save_entity_tile(x, y, "tree", tree_data)
         
         return tree
     
-    def add_house(self, x, y):
+    def add_house(self, x, y, mark_constructed=False, constructed_by=None):
         """Add a house entity tile at the specified position"""
         from world.entity_tile import HouseEntityTile
         
@@ -305,16 +323,17 @@ class WorldMap:
         
         # Create and add the house
         house = HouseEntityTile(x, y)
+        
+        # Mark as constructed if requested
+        if mark_constructed:
+            house.mark_as_constructed(constructed_by)
+        
         if hasattr(self, 'entity_tile_manager'):
             self.entity_tile_manager.add_entity_tile(house)
         
         # Save to cache
         if self.world_cache:
-            house_data = {
-                "is_door_open": getattr(house, 'is_door_open', False),
-                "entities_inside": len(getattr(house, 'entities_inside', [])),
-                "max_occupants": getattr(house, 'max_occupants', 4)
-            }
+            house_data = house.get_save_data()
             self.world_cache.save_entity_tile(x, y, "house", house_data)
         
         return house

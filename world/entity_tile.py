@@ -143,8 +143,23 @@ class EntityTile:
         self.entities_inside = []  # List of entities currently inside this entity tile
         self.texture = None   # Full entity texture
         
+        # NEW: Track if this tile was constructed by a player
+        self.is_constructed = False
+        self.construction_time = None
+        self.constructed_by = None  # Entity ID of who constructed it
+        
         # Create the component tiles
         self._create_component_tiles()
+    
+    def mark_as_constructed(self, constructed_by_entity_id=None):
+        """Mark this entity tile as constructed by a player"""
+        import time
+        self.is_constructed = True
+        self.construction_time = time.time()
+        self.constructed_by = constructed_by_entity_id
+        print(f"DEBUG: Marked {self.tile_type} at ({self.base_x}, {self.base_y}) as constructed")
+    
+
         
     
     def _create_component_tiles(self):
@@ -178,11 +193,21 @@ class EntityTile:
     
     def get_save_data(self):
         """Get data to save to cache"""
-        return {
+        base_data = {
             "opacity": self.opacity,
             "is_active": self.is_active,
             "entities_inside_count": len(self.entities_inside) if isinstance(self.entities_inside, list) else 0
         }
+        
+        # Add construction data
+        if self.is_constructed:
+            base_data.update({
+                "is_constructed": self.is_constructed,
+                "construction_time": self.construction_time,
+                "constructed_by": self.constructed_by
+            })
+        
+        return base_data
     
     def load_save_data(self, data):
         """Load data from cache"""
@@ -190,9 +215,12 @@ class EntityTile:
         self.is_active = data.get("is_active", True)
         # Ensure entities_inside is always a list
         self.entities_inside = []
-        # Note: entities_inside will be restored when entities are loaded
-
-
+        
+        # Load construction data
+        self.is_constructed = data.get("is_constructed", False)
+        self.construction_time = data.get("construction_time")
+        self.constructed_by = data.get("constructed_by")
+        
     def on_entity_enter(self, entity, component_x, component_y):
         """Called when an entity enters this entity tile"""
         # Add entity to the list if not already there
