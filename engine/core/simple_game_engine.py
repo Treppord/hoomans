@@ -93,11 +93,14 @@ class SimpleGameEngine:
         self.ui_setup = UISetup(self)
         self.world_cache_manager = WorldCacheManager(self)
         
+        # Entity management (will be set by game_engine.py)
+        self.entity_manager = None
+        
         # Game state
         self.running = False
         self.map_seed = map_seed
         
-        # Game objects storage
+        # Game objects storage (maintained for backward compatibility)
         self.objects = []
         self.world_map = None
         self.player = None
@@ -185,7 +188,12 @@ class SimpleGameEngine:
             world_map.set_world_cache(self.world_cache)
     
     def add_object(self, obj):
-        """Add a game object to the world"""
+        """
+        Add a game object to the world (backward compatibility method)
+        
+        This method is maintained for backward compatibility.
+        New code should use entity_manager.add_entity() instead.
+        """
         self.objects.append(obj)
         
         # If this is a player-controlled object, store a reference
@@ -203,47 +211,56 @@ class SimpleGameEngine:
         return obj
     
     def spawn_food_npc(self, x=None, y=None, food_type=None):
-        """Spawn a food NPC at the specified position or a random valid position"""
-        try:
-            from entities.food_npc import FoodNPC
-            from engine.ai import FoodWanderAI
-            
-            # If no position specified, find a random valid position
-            if x is None or y is None:
-                valid_positions = []
+        """
+        Spawn a food NPC (backward compatibility method)
+        
+        This method is maintained for backward compatibility.
+        New code should use entity_manager.spawn_food_npc() instead.
+        """
+        if self.entity_manager:
+            return self.entity_manager.spawn_food_npc(x, y, food_type)
+        else:
+            # Fallback to original implementation
+            try:
+                from entities.food_npc import FoodNPC
+                from engine.ai import FoodWanderAI
                 
-                # Find valid spawn positions (grass or dirt, not water or walls)
-                for y_pos in range(self.world_map.height):
-                    for x_pos in range(self.world_map.width):
-                        tile = self.world_map.get_tile(x_pos, y_pos)
-                        if tile and hasattr(tile, 'is_walkable') and tile.is_walkable():
-                            # Don't spawn on water
-                            if not (hasattr(tile, 'is_water') and tile.is_water()):
-                                valid_positions.append((x_pos, y_pos))
+                # If no position specified, find a random valid position
+                if x is None or y is None:
+                    valid_positions = []
+                    
+                    # Find valid spawn positions (grass or dirt, not water or walls)
+                    for y_pos in range(self.world_map.height):
+                        for x_pos in range(self.world_map.width):
+                            tile = self.world_map.get_tile(x_pos, y_pos)
+                            if tile and hasattr(tile, 'is_walkable') and tile.is_walkable():
+                                # Don't spawn on water
+                                if not (hasattr(tile, 'is_water') and tile.is_water()):
+                                    valid_positions.append((x_pos, y_pos))
+                    
+                    # Choose a random valid position
+                    if valid_positions:
+                        x, y = random.choice(valid_positions)
+                    else:
+                        # Fallback to a default position if no valid positions found
+                        x, y = 10, 10
                 
-                # Choose a random valid position
-                if valid_positions:
-                    x, y = random.choice(valid_positions)
-                else:
-                    # Fallback to a default position if no valid positions found
-                    x, y = 10, 10
-            
-            # Create the food NPC
-            food_ai = FoodWanderAI()
-            food_npc = FoodNPC(grid_x=x, grid_y=y, ai_controller=food_ai)
-            
-            # Set specific food type if provided
-            if food_type:
-                food_npc.food_type = food_type
-                food_npc.set_color_by_food_type()
-            
-            # Add the food NPC to the game objects
-            self.add_object(food_npc)
-            
-            return food_npc
-        except ImportError:
-            print("Warning: FoodNPC not available")
-            return None
+                # Create the food NPC
+                food_ai = FoodWanderAI()
+                food_npc = FoodNPC(grid_x=x, grid_y=y, ai_controller=food_ai)
+                
+                # Set specific food type if provided
+                if food_type:
+                    food_npc.food_type = food_type
+                    food_npc.set_color_by_food_type()
+                
+                # Add the food NPC to the game objects
+                self.add_object(food_npc)
+                
+                return food_npc
+            except ImportError:
+                print("Warning: FoodNPC not available")
+                return None
     
     def add_ai_controller(self, controller):
         """Add an AI controller to the game"""
@@ -356,8 +373,13 @@ class SimpleGameEngine:
         if self.world_map:
             self.world_map.render(self.display_manager.get_screen(), self.camera)
         
-        # Draw all objects
-        for obj in self.objects:
+        # Draw all objects (use entity manager if available, otherwise fall back to objects list)
+        if self.entity_manager:
+            entities = self.entity_manager.get_all_entities()
+        else:
+            entities = self.objects
+            
+        for obj in entities:
             if hasattr(obj, 'render'):
                 obj.render(self.display_manager.get_screen(), self.camera)
         
