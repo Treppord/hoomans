@@ -479,6 +479,7 @@ class Rectangle:
             starter_items = [
                 {"item_id": "water_bottle", "quantity": 3},
                 {"item_id": "apple", "quantity": 5},
+                {"item_id": "berries", "quantity": 2},
                 {"item_id": "stone_axe", "quantity": 1},
                 {"item_id": "stone", "quantity": 10},
                 {"item_id": "branch", "quantity": 10},
