@@ -224,7 +224,10 @@ class Rectangle:
     
     def update(self):
         """Update entity state"""
-        
+
+        # Try to pick up nearby items
+        if hasattr(self, 'inventory'):
+            self.try_pickup_nearby_items()
     
         if not self.starter_items_added and pygame.get_init():
             print(f"DEBUG: Adding starter items for entity {self.get_entity_id()}, controllable={self.controllable}")
@@ -465,6 +468,24 @@ class Rectangle:
                     else:
                         SimpleGameEngine.instance.ui.add_text_bubble("*drinks water*", self, duration=1.0)
     # Modify the _add_starter_items method in the Rectangle class
+
+    def try_pickup_nearby_items(self):
+        """Try to pick up items near this entity"""
+        from engine.core import SimpleGameEngine
+        if (hasattr(SimpleGameEngine, 'instance') and 
+            hasattr(SimpleGameEngine.instance, 'world_map') and
+            hasattr(SimpleGameEngine.instance.world_map, 'world_item_manager')):
+            
+            picked_up_items = SimpleGameEngine.instance.world_map.try_pickup_items_for_entity(self)
+            
+            # Show pickup notifications for player
+            if picked_up_items and hasattr(self, 'controllable') and self.controllable:
+                for item in picked_up_items:
+                    print(f"Picked up {item.quantity}x {item.name}")
+            
+            return picked_up_items
+        
+        return []
 
     def _add_starter_items(self):
         """Add some starter items to the inventory"""

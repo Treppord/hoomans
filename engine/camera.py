@@ -115,7 +115,7 @@ class Camera:
             
             self.offset_x += (center_x - new_screen_center_x) / self.zoom
             self.offset_y += (center_y - new_screen_center_y) / self.zoom
-    
+
     def zoom_out(self, amount=0.1):
         """Zoom out by the specified amount"""
         old_zoom = self.zoom
@@ -134,12 +134,22 @@ class Camera:
             
             self.offset_x += (center_x - new_screen_center_x) / self.zoom
             self.offset_y += (center_y - new_screen_center_y) / self.zoom
-    
+
     def should_draw_grid(self):
         """Determine if grid lines should be drawn based on zoom level"""
         if hasattr(self, 'show_grid') and not self.show_grid:
             return False
         return self.zoom >= 0.5
+
+    def get_tile_size_at_zoom(self):
+        """Get the size of a tile at the current zoom level"""
+        return 16 * self.zoom
+
+    def is_point_visible(self, world_x, world_y, margin=32):
+        """Check if a world point is visible on screen with optional margin"""
+        screen_x, screen_y = self.world_to_screen(world_x, world_y)
+        return (-margin <= screen_x <= self.width + margin and 
+                -margin <= screen_y <= self.height + margin)
 
 
     def world_to_screen(self, world_x, world_y):

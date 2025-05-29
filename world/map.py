@@ -1,3 +1,4 @@
+from world.world_item import WorldItemManager
 import pygame
 from world.tile import Tile
 import random
@@ -16,6 +17,43 @@ class WorldMap:
         self.height = height
         self.tiles = [[Tile("empty") for _ in range(width)] for _ in range(height)]
         self.world_cache = None  # Will be set by the game engine
+        self.world_debugger = None  # Will be set by the game engine
+        
+    def initialize_world_items(self):
+        """Initialize the world item manager"""
+        if not hasattr(self, 'world_item_manager'):
+            self.world_item_manager = WorldItemManager(self)
+            print("World item manager initialized")
+
+    # Add this method to the WorldMap class:
+    def spawn_item(self, item_id: str, x: int, y: int, quantity: int = 1, 
+                offset_x: float = 0, offset_y: float = 0):
+        """Spawn an item in the world"""
+        if not hasattr(self, 'world_item_manager'):
+            self.initialize_world_items()
+        
+        return self.world_item_manager.spawn_item(item_id, x, y, quantity, offset_x, offset_y)
+
+    def spawn_item_at_position(self, item_id: str, world_x: float, world_y: float, quantity: int = 1):
+        """Spawn an item at a specific world position"""
+        if not hasattr(self, 'world_item_manager'):
+            self.initialize_world_items()
+        
+        return self.world_item_manager.spawn_item_at_position(item_id, world_x, world_y, quantity)
+
+    def get_items_at_tile(self, x: int, y: int):
+        """Get all items at a specific tile"""
+        if not hasattr(self, 'world_item_manager'):
+            return []
+        
+        return self.world_item_manager.get_items_at_tile(x, y)
+
+    def try_pickup_items_for_entity(self, entity):
+        """Try to pick up items for an entity"""
+        if not hasattr(self, 'world_item_manager'):
+            return []
+        
+        return self.world_item_manager.try_pickup_items(entity)
     
     def set_world_cache(self, world_cache):
         """Set the world cache reference"""
@@ -55,8 +93,8 @@ class WorldMap:
         start_y = max(0, int(world_top / Tile.SIZE))
         end_x = min(self.width, int(world_right / Tile.SIZE) + 2)
         end_y = min(self.height, int(world_bottom / Tile.SIZE) + 2)
-        
-        # Render visible tiles
+                
+        # STEP 1: Render visible tiles FIRST
         for y in range(start_y, end_y):
             for x in range(start_x, end_x):
                 # Apply camera transformation
@@ -69,7 +107,15 @@ class WorldMap:
                     tile_y + tile_height > 0 and tile_y < screen_height):
                     self.tiles[y][x].render(screen, tile_x, tile_y, tile_width, tile_height)
         
-        # Draw grid lines if zoom level is appropriate
+        # STEP 2: Render world items AFTER terrain tiles
+        if hasattr(self, 'world_item_manager'):
+            self.world_item_manager.render(screen, camera)
+        
+        # STEP 3: Render entity tiles LAST (on top of everything)
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.render(screen, camera)
+        
+        # STEP 4: Draw grid lines if zoom level is appropriate
         if camera.should_draw_grid():
             grid_color = (50, 50, 50)  # Dark gray
             
@@ -85,17 +131,16 @@ class WorldMap:
                 grid_right, _, _, _ = camera.apply(end_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 pygame.draw.line(screen, grid_color, (grid_x, grid_y), (grid_right, grid_y), 1)
                 
-
-        
-        # Render entity tiles if we have an entity tile manager
-        if hasattr(self, 'entity_tile_manager'):
-            self.entity_tile_manager.render(screen, camera)
-    
     def initialize_entity_tiles(self):
         """Initialize entity tiles manager"""
         from world.entity_tile import EntityTileManager, TreeEntityTile, HouseEntityTile
         self.entity_tile_manager = EntityTileManager(self)
         print("Entity tile manager initialized")
+        
+    def update_world_items(self, delta_time: float = 1/60):
+        """Update world items"""
+        if hasattr(self, 'world_item_manager'):
+            self.world_item_manager.update(delta_time)
     
     def load_cached_entity_tiles(self):
         """Load entity tiles from cache"""

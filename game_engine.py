@@ -141,6 +141,8 @@ if __name__ == "__main__":
     # Only generate the map if we're skipping the menu
     if args.skip_menu:
         world_map.generate_realistic_map(seed=engine.map_seed)
+            
+
 
     # Initialize entity tile manager before adding any entity tiles
     
@@ -161,9 +163,28 @@ if __name__ == "__main__":
     ai_universe.world_cache = world_cache  # Direct reference to the same object
     world_map.set_world_cache(world_cache)
 
+    world_map.initialize_world_items()
+
+    # Load world items from cache if available
+    if hasattr(engine, 'world_cache') and engine.world_cache:
+        world_map.world_item_manager.load_from_cache(engine.world_cache)
 
 
+    # Example: Spawn some test items
+    print("Spawning test items in the world...")
+    world_map.spawn_item("apple", 30, 20, 3)  # 3 apples
+    world_map.spawn_item("berries", 25, 22, 1)  # 1 berries
+    world_map.spawn_item("water_bottle", 35, 15, 2)  # 2 water bottles
+    world_map.spawn_item("stone_axe", 28, 22, 1)  # 1 stone axe
 
+    # Add this to the main game loop (in the engine's update method):
+    # Update world items
+    if hasattr(engine.world_map, 'world_item_manager'):
+        world_map.update_world_items()
+
+    # Save world items to cache periodically
+    if hasattr(engine, 'world_cache') and engine.world_cache:
+        world_map.world_item_manager.save_to_cache(engine.world_cache)
 
     # Get absolute path to the project root directory
     project_root = os.path.dirname(os.path.abspath(__file__))

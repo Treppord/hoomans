@@ -26,15 +26,17 @@ class WorldCache:
         self.entity_positions = {}  # entity_id -> {x, y, type, data}
         self.removed_entity_tiles = set()  # Set of (x, y) coordinates where entity tiles were removed
         self.world_modifications = {}  # Track any world modifications
-        
+        self.world_items = []  # Track items in the world
+
+        # Save interval tracking
         self.last_save_time = 0
         self.save_interval = 60  # Save every 60 seconds
         
-        # Optimization settings
-        self.max_memories_per_entity = 50  # Reduced from 100
-        self.max_world_modifications = 100  # Limit world modifications
-        self.max_entity_tiles = 2000  # Limit entity tiles
-        self.cleanup_interval = 300  # Clean up every 5 minutes
+        # Optimization settings - increased limits to reduce cleanup frequency
+        self.max_memories_per_entity = 100  # Increased from 50
+        self.max_world_modifications = 500  # Increased from 100
+        self.max_entity_tiles = 5000  # Increased from 2000
+        self.cleanup_interval = 600  # Clean up every 10 minutes instead of 5
         self.last_cleanup_time = 0
         
         # Create cache directory if it doesn't exist
@@ -235,13 +237,14 @@ class WorldCache:
         """Clean up old data to keep cache size manageable"""
         current_time = time.time()
         
-        # Only run cleanup periodically
+        # Only run cleanup periodically - increase the interval to reduce spam
         if current_time - self.last_cleanup_time < self.cleanup_interval:
             return
         
         self.last_cleanup_time = current_time
         
-        print("DEBUG: Running cache cleanup...")
+        # Only print debug message occasionally
+        cleanup_count = 0
         
         # Clean up old world modifications (keep only last 30 days)
         cutoff_time = current_time - (30 * 24 * 3600)  # 30 days
@@ -252,15 +255,15 @@ class WorldCache:
         
         for key in old_modifications:
             del self.world_modifications[key]
-        
-        if old_modifications:
-            print(f"DEBUG: Cleaned up {len(old_modifications)} old world modifications")
+            cleanup_count += 1
         
         # Clean up old entity memories (keep only recent ones)
         for entity_id in list(self.entity_memories.keys()):
             memories = self.entity_memories[entity_id]
             if len(memories) > self.max_memories_per_entity:
+                old_count = len(memories)
                 self.entity_memories[entity_id] = memories[-self.max_memories_per_entity:]
+                cleanup_count += old_count - len(self.entity_memories[entity_id])
         
         # Clean up old entity tiles (remove very old ones)
         old_tiles = []
@@ -270,9 +273,11 @@ class WorldCache:
         
         for key in old_tiles:
             del self.entity_tiles[key]
+            cleanup_count += 1
         
-        if old_tiles:
-            print(f"DEBUG: Cleaned up {len(old_tiles)} old entity tiles")
+        # Only print debug message if we actually cleaned up a significant amount
+        if cleanup_count > 10:
+            print(f"DEBUG: Cache cleanup completed - removed {cleanup_count} old entries")
     
     def _cleanup_old_entity_tiles(self):
         """Remove oldest entity tiles when at limit"""
@@ -297,18 +302,27 @@ class WorldCache:
         if len(self.world_modifications) <= self.max_world_modifications:
             return
         
-        # Sort by timestamp and remove oldest 20%
+        # Sort by timestamp and remove oldest entries (not newest!)
         sorted_mods = sorted(
             self.world_modifications.items(),
             key=lambda x: x[1].get('timestamp', 0)
         )
         
+        # Calculate how many to remove (remove oldest 20%)
         remove_count = len(sorted_mods) // 5  # Remove 20%
+        if remove_count == 0:
+            remove_count = 1  # Remove at least 1 if we're at the limit
+        
+        # Remove the OLDEST entries (first in sorted list)
+        removed_keys = []
         for i in range(remove_count):
             key = sorted_mods[i][0]
+            removed_keys.append(key)
             del self.world_modifications[key]
         
-        print(f"DEBUG: Removed {remove_count} oldest world modifications")
+        # Only print debug message if we actually removed something significant
+        if remove_count > 5:  # Only log if we removed more than 5 items
+            print(f"DEBUG: Removed {remove_count} oldest world modifications (keeping {len(self.world_modifications)} recent ones)")
     
     def _save_cache(self):
         """Save cache data for the current seed with compression"""
@@ -792,6 +806,7 @@ class WorldCache:
             self.removed_entity_tiles = set(tuple(coord) for coord in removed_tiles_list)
             
             self.world_modifications = cache_data.get("world_modifications", {})
+            self.world_items = cache_data.get("world_items", [])  # Load world items
             
             # Calculate and log file size
             file_size = os.path.getsize(cache_file)
@@ -809,9 +824,24 @@ class WorldCache:
     
     def _auto_save(self):
         """Automatically save cache if it's been a while"""
-        if time.time() - self.last_save_time > self.save_interval:
+        current_time = time.time()
+        if current_time - self.last_save_time > self.save_interval:
             return self._save_cache()
         return False
+
+
+    def save_world_items(self, items_data):
+        """Save world items data"""
+        if not self.current_seed:
+            return False
+        
+        self.world_items = items_data
+        self._auto_save()
+        return True
+
+    def get_world_items(self):
+        """Get world items data"""
+        return getattr(self, 'world_items', [])
 
     def create_fresh_world(self, seed):
         """Create a completely fresh world cache, clearing any existing data"""
@@ -884,6 +914,7 @@ class WorldCache:
             "entity_positions": {},
             "removed_entity_tiles": [],
             "world_modifications": {},
+            "world_items": [],  # Add empty world items
             "last_updated": time.time(),
             "cache_version": "1.1"
         }
