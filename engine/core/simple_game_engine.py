@@ -351,9 +351,9 @@ class SimpleGameEngine:
     def update(self):
         """Update game logic - delegated to game loop"""
         self.game_loop.update()
-    
+            
     def render(self):
-        """Render all game objects"""
+        """Render all game objects - SINGLE SOURCE OF TRUTH FOR RENDER ORDER"""
         # Clear the screen
         self.display_manager.clear()
         
@@ -366,14 +366,20 @@ class SimpleGameEngine:
             self.display_manager.flip()
             return
         
-        # Render background
+        # ===== RENDER ORDER - DO NOT CHANGE THIS ORDER! =====
+        
+        # 1. Background
         self.theme_manager.render_background(self.display_manager.get_screen(), self.camera)
         
-        # Draw the world map first
+        # 2. World map (terrain tiles + world items only, NO entity tiles)
         if self.world_map:
             self.world_map.render(self.display_manager.get_screen(), self.camera)
         
-        # Draw all objects (use entity manager if available, otherwise fall back to objects list)
+        # 3. Entity tiles (buildings, trees, etc.) - RENDERED ONCE HERE ONLY
+        if self.world_map and hasattr(self.world_map, 'entity_tile_manager'):
+            self.world_map.entity_tile_manager.render(self.display_manager.get_screen(), self.camera)
+        
+        # 4. Entities (players, NPCs, etc.)
         if self.entity_manager:
             entities = self.entity_manager.get_all_entities()
         else:
@@ -383,29 +389,44 @@ class SimpleGameEngine:
             if hasattr(obj, 'render'):
                 obj.render(self.display_manager.get_screen(), self.camera)
         
-        # Draw entity tiles last (on top of everything)
-        if self.world_map and hasattr(self.world_map, 'entity_tile_manager'):
-            self.world_map.entity_tile_manager.render(self.display_manager.get_screen(), self.camera)
-        
-        # Render foreground effects
+        # 5. Foreground effects
         self.theme_manager.render_foreground(self.display_manager.get_screen(), self.camera)
         
-        # Draw UI elements last (on top)
+        # 6. UI elements (stats panel, etc.)
         self.ui.render(self.display_manager.get_screen())
         
-        # NEW: Render interaction menu BEFORE pause menu (so pause menu is on top)
-        if hasattr(self, 'player') and self.player and hasattr(self.player, 'interaction_menu'):
+        # 7. Interaction menu (ON TOP OF EVERYTHING EXCEPT PAUSE MENU)
+        if (hasattr(self, 'player') and self.player and 
+            hasattr(self.player, 'interaction_menu') and 
+            self.player.interaction_menu and
+            hasattr(self.player.interaction_menu, 'visible') and
+            self.player.interaction_menu.visible):
             self.player.interaction_menu.render(self.display_manager.get_screen())
         
-        # Draw pause menu if in paused state
+        # 8. Pause menu (ABSOLUTE TOP)
         if (self.state_manager.is_state(self.state_manager.game_state_constants.PAUSED) and 
             hasattr(self, 'pause_menu')):
             self.pause_menu.render(self.display_manager.get_screen())
-            
-        
         
         # Update the display
         self.display_manager.flip()
+
+
+    def _get_player_interaction_menu(self):
+        """Safely get the player's interaction menu if it exists"""
+        try:
+            if (hasattr(self, 'player') and self.player and 
+                hasattr(self.player, 'interaction_menu') and 
+                self.player.interaction_menu):
+                return self.player.interaction_menu
+        except AttributeError:
+            pass
+        return None
+
+    def _is_interaction_menu_visible(self):
+        """Check if the player's interaction menu is visible"""
+        menu = self._get_player_interaction_menu()
+        return menu and hasattr(menu, 'visible') and menu.visible
     
     def run(self):
         """Main game loop"""

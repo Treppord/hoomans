@@ -191,10 +191,6 @@ class UIManager:
                 element.render(screen)
         
 
-        # Render pause menu last (on top of everything)
-        if self.pause_menu:
-            self.pause_menu.render(screen)
-
 
     def update_screen_size(self, screen_width, screen_height):
         """Update UI elements when screen size changes"""

@@ -79,7 +79,7 @@ class WorldMap:
             return self.tiles[y][x]
         return None
     
-    def render(self, screen, camera):
+    def render(self, screen, camera, render_entity_tiles=True):
         """Render the visible portion of the map"""
         # Calculate visible tile range based on camera position and zoom
         screen_width, screen_height = screen.get_size()
@@ -111,9 +111,6 @@ class WorldMap:
         if hasattr(self, 'world_item_manager'):
             self.world_item_manager.render(screen, camera)
         
-        # STEP 3: Render entity tiles LAST (on top of everything)
-        if hasattr(self, 'entity_tile_manager'):
-            self.entity_tile_manager.render(screen, camera)
         
         # STEP 4: Draw grid lines if zoom level is appropriate
         if camera.should_draw_grid():
@@ -130,7 +127,12 @@ class WorldMap:
                 grid_x, grid_y, _, _ = camera.apply(start_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 grid_right, _, _, _ = camera.apply(end_x * Tile.SIZE, y * Tile.SIZE, 0, 0)
                 pygame.draw.line(screen, grid_color, (grid_x, grid_y), (grid_right, grid_y), 1)
-                
+
+    def render_entity_tiles_only(self, screen, camera):
+        """Render only entity tiles (for separate rendering control)"""
+        if hasattr(self, 'entity_tile_manager'):
+            self.entity_tile_manager.render(screen, camera)
+
     def initialize_entity_tiles(self):
         """Initialize entity tiles manager"""
         from world.entity_tile import EntityTileManager, TreeEntityTile, HouseEntityTile

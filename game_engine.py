@@ -1,51 +1,34 @@
 from sound.sound_manager import initialize_sound_manager
-from engine.core.simple_game_engine import SimpleGameEngine  # Updated import
-from engine.config.config_loader import initialize_config_loader  # New import
-from entities.entity_manager import EntityManager  # New import
+from engine.core.simple_game_engine import SimpleGameEngine
+from engine.config.config_loader import initialize_config_loader
+from entities.entity_manager import EntityManager
 from world.map import WorldMap
 from world.world_cache import WorldCache
 import random
 import os
 import pygame
-# Add this import
 from ai.controllers.ai_universe_controller import AIUniverseController, WorldStateCollector
-import argparse
 from engine.constants import GameBalanceConstants
-
 from entities.items.item_manager import ItemManager, initialize_item_system
-from engine.core.game_state_manager import GameState  # Updated import
+from engine.core.game_state_manager import GameState
 
+# NEW: Import the argument parser
+from config.game_args import parse_game_arguments
 
 # RENDER ORDER
 # 1. Terrain tiles
 # 2. Entities
 # 3. Entity tiles
 
-
 if __name__ == "__main__":
     # Initialize configuration system first
     print("Initializing configuration system...")
     config_loader = initialize_config_loader()
     
-    # Parse command line arguments
-    map_seed = 39
-    arg_parser = argparse.ArgumentParser(description='Grid-Based Game')
-    arg_parser.add_argument('--seed', type=int, help='Seed for map generation')
-    arg_parser.add_argument('--fullscreen', action='store_true', help='Start in fullscreen mode')
-    arg_parser.add_argument('--borderless', action='store_true', help='Start in borderless fullscreen mode')
-    arg_parser.add_argument('--width', type=int, default=800, help='Window width (default: 800)')
-    arg_parser.add_argument('--height', type=int, default=600, help='Window height (default: 600)')
-    arg_parser.add_argument('--skip-menu', action='store_true', help='Skip main menu and start game directly')
-    args = arg_parser.parse_args()
-
-    def debug_cna_data(self, entity, name):
-        """Debug function to print CNA data details"""
-        if hasattr(entity, 'cna_data') and entity.cna_data:
-            print(f"DEBUG: {name} CNA data:")
-            print(f"  - Culture: {entity.cna_data.culture} (value: {entity.cna_data.culture.value})")
-            print(f"  - Current color: {entity.color}")
-        else:
-            print(f"DEBUG: {name} has no CNA data")
+    # NEW: Parse command line arguments using the dedicated parser
+    print("Parsing command line arguments...")
+    args = parse_game_arguments()
+    
 
     # Initialize sound system
     print("Initializing sound system...")
@@ -55,22 +38,25 @@ if __name__ == "__main__":
         music_volume=0.6
     )
     
-    # Create the main game engine
-    engine = SimpleGameEngine(title="Hoomans", width=args.width, height=args.height, map_seed=args.seed)
+    # Create the main game engine with parsed arguments
+    engine = SimpleGameEngine(
+        title="Hoomans", 
+        width=args.width, 
+        height=args.height, 
+        map_seed=args.seed
+    )
     
     # Initialize entity management system
     print("Initializing entity management system...")
     entity_manager = EntityManager(engine)
-    engine.entity_manager = entity_manager  # Store reference in engine
+    engine.entity_manager = entity_manager
     
     # Set game state based on arguments
     if args.skip_menu:
-        # Use the new game state constants
         game_state = GameState()
         engine.game_state = game_state.RUNNING
         engine.load_item_icons()
     else:
-        # Ensure we're in menu state (this should be the default)
         game_state = GameState()
         engine.game_state = game_state.MAIN_MENU
     
@@ -100,13 +86,9 @@ if __name__ == "__main__":
     if not os.path.exists(sprite_path):
         print(f"Warning: Idle sprite sheet not found at {sprite_path}")
         print("Creating a placeholder idle sprite sheet...")
-        # Create a placeholder sprite sheet
         placeholder = pygame.Surface((32, 16))
-        # First frame (left half)
         placeholder.fill((255, 255, 255), rect=(0, 0, 16, 16))
-        # Second frame (right half)
         placeholder.fill((255, 255, 255), rect=(16, 0, 16, 16))
-        # Save the placeholder
         os.makedirs(os.path.dirname(sprite_path), exist_ok=True)
         pygame.image.save(placeholder, sprite_path)
         print(f"Created placeholder idle sprite sheet at {sprite_path}")
@@ -114,31 +96,34 @@ if __name__ == "__main__":
     if not os.path.exists(walk_sprite_path):
         print(f"Warning: Walk sprite sheet not found at {walk_sprite_path}")
         print("Creating a placeholder walk sprite sheet...")
-        # Create a placeholder walk sprite sheet with slightly different frames
         placeholder = pygame.Surface((32, 16))
-        # First frame (left half) - slightly different color to distinguish
         placeholder.fill((240, 240, 240), rect=(0, 0, 16, 16))
-        # Second frame (right half) - slightly different color to distinguish
         placeholder.fill((240, 240, 240), rect=(16, 0, 16, 16))
-        # Add some walking indicators
         pygame.draw.line(placeholder, (200, 200, 200), (4, 12), (12, 12), 2)
         pygame.draw.line(placeholder, (200, 200, 200), (20, 12), (28, 12), 2)
-        # Save the placeholder
         os.makedirs(os.path.dirname(walk_sprite_path), exist_ok=True)
         pygame.image.save(placeholder, walk_sprite_path)
         print(f"Created placeholder walk sprite sheet at {walk_sprite_path}")
 
-    # Initialize AI Universe Controller
-    print("Initializing AI Universe Controller...")
-    model_path = os.path.join(project_root, "models", "mistral-7b-instruct-v0.2.Q4_K_M.gguf")
-    ai_universe = AIUniverseController(use_llm=True, use_local_model=True, model_path=model_path)
-    ai_universe.start()
-    engine.ai_universe = ai_universe
+    # Initialize AI Universe Controller (with option to disable for testing)
+    if not args.no_ai:
+        print("Initializing AI Universe Controller...")
+        model_path = os.path.join(project_root, "models", "mistral-7b-instruct-v0.2.Q4_K_M.gguf")
+        ai_universe = AIUniverseController(use_llm=True, use_local_model=True, model_path=model_path)
+        ai_universe.start()
+        engine.ai_universe = ai_universe
+    else:
+        print("AI Universe Controller disabled (--no-ai flag)")
     
     # Initialize world map
     print("Initializing world map...")
     world_map = WorldMap(256, 256)
     world_map.initialize_entity_tiles()
+
+    # Enable map debug mode if requested
+    if args.map_debug:
+        world_map.enable_debug_mode()
+        print("Map debug mode enabled")
 
     # Only generate the map if we're skipping the menu
     if args.skip_menu:
@@ -154,7 +139,8 @@ if __name__ == "__main__":
     if args.skip_menu:
         world_cache.set_world_seed(engine.map_seed)
     engine.world_cache = world_cache
-    ai_universe.world_cache = world_cache  # Direct reference to the same object
+    if not args.no_ai and 'ai_universe' in locals():
+        ai_universe.world_cache = world_cache
     world_map.set_world_cache(world_cache)
 
     # Initialize world items
@@ -167,10 +153,10 @@ if __name__ == "__main__":
 
     # Spawn test items in the world
     print("Spawning test items in the world...")
-    world_map.spawn_item("apple", 30, 20, 3)  # 3 apples
-    world_map.spawn_item("berries", 25, 22, 1)  # 1 berries
-    world_map.spawn_item("water_bottle", 35, 15, 2)  # 2 water bottles
-    world_map.spawn_item("stone_axe", 28, 22, 1)  # 1 stone axe
+    world_map.spawn_item("apple", 30, 20, 3)
+    world_map.spawn_item("berries", 25, 22, 1)
+    world_map.spawn_item("water_bottle", 35, 15, 2)
+    world_map.spawn_item("stone_axe", 28, 22, 1)
 
     # Update and save world items
     if hasattr(engine.world_map, 'world_item_manager'):

@@ -21,6 +21,18 @@ class EventHandler:
                 self.game_engine.running = False
                 return
             
+            # SECOND PRIORITY: Interaction menu (if player has one and it's visible)
+            # FIXED: Add comprehensive safety checks
+            if (hasattr(self, 'player') and self.player and 
+                hasattr(self.player, 'interaction_menu') and 
+                self.player.interaction_menu and
+                hasattr(self.player.interaction_menu, 'visible') and
+                self.player.interaction_menu.visible and
+                hasattr(self.player.interaction_menu, 'handle_event') and
+                self.player.interaction_menu.handle_event(event)):
+                continue
+            
+            
             # Handle delayed music start
             if event.type == pygame.USEREVENT + 1:
                 if self.game_engine.state_manager.is_state(self.game_engine.state_manager.game_state_constants.MAIN_MENU):
@@ -62,6 +74,7 @@ class EventHandler:
         
         # Update input manager for continuous key state
         self.game_engine.input_manager.update()
+        
         
         # Handle entity input if not in chat mode and not paused
         if (not self.game_engine.input_manager.chat_mode and 
