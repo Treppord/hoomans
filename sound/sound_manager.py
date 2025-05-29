@@ -40,6 +40,37 @@ class SoundManager:
         
         # Load all sounds
         self._load_sounds()
+        self._load_music()
+        
+    def _load_music(self):
+        """Load all music files from the assets directory"""
+        # Get the project root directory
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        music_dir = os.path.join(project_root, "assets", "music")
+        
+        if not os.path.exists(music_dir):
+            print(f"Music directory not found: {music_dir}")
+            os.makedirs(music_dir, exist_ok=True)
+            print(f"Created music directory: {music_dir}")
+            return
+        
+        # Define music mappings
+        music_files = {
+            "track_main": "track_main.wav",
+            "track_game": "track_game.wav",
+        }
+        
+        # Load each music file
+        for music_name, filename in music_files.items():
+            file_path = os.path.join(music_dir, filename)
+            
+            if os.path.exists(file_path):
+                self.music_tracks[music_name] = file_path
+                print(f"Loaded music track: {music_name} from {filename}")
+            else:
+                print(f"Music file not found: {file_path}")
+        
+        print(f"Sound manager loaded {len(self.music_tracks)} music tracks")
     
     def _load_sounds(self):
         """Load all sound files from the assets directory"""
@@ -136,6 +167,9 @@ class SoundManager:
     def set_master_volume(self, volume: float):
         """Set master volume (0.0 to 1.0)"""
         self.master_volume = max(0.0, min(1.0, volume))
+        # Update current music volume if playing
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.set_volume(self.master_volume * self.music_volume)
         print(f"Master volume set to {self.master_volume}")
     
     def set_sfx_volume(self, volume: float):
@@ -170,20 +204,15 @@ class SoundManager:
         print(f"Music {'enabled' if self.music_enabled else 'disabled'}")
         return self.music_enabled
     
-    def load_music(self, name: str, filename: str):
-        """Load a music track"""
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        music_path = os.path.join(project_root, "assets", "music", filename)
-        
-        if os.path.exists(music_path):
-            self.music_tracks[name] = music_path
-            print(f"Loaded music track: {name}")
-        else:
-            print(f"Music file not found: {music_path}")
-    
     def play_music(self, name: str, loops: int = -1, fade_in: int = 0):
         """Play a music track"""
         if not self.music_enabled or name not in self.music_tracks:
+            print(f"Cannot play music: enabled={self.music_enabled}, track_exists={name in self.music_tracks}")
+            return
+        
+        # Don't restart the same track
+        if self.current_music == name and pygame.mixer.music.get_busy():
+            print(f"Music track {name} is already playing")
             return
         
         try:
@@ -245,6 +274,40 @@ class SoundManager:
             "sound_enabled": self.sound_enabled,
             "music_enabled": self.music_enabled
         }
+    
+    
+    def _load_music(self):
+        """Load all music files from the assets directory"""
+        # Get the project root directory
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        music_dir = os.path.join(project_root, "assets", "music")
+        
+        if not os.path.exists(music_dir):
+            print(f"Music directory not found: {music_dir}")
+            os.makedirs(music_dir, exist_ok=True)
+            print(f"Created music directory: {music_dir}")
+            return
+        
+        # Define music mappings
+        music_files = {
+            "track_main": "track_main.wav",
+            "track_game": "track_game.wav",
+        }
+        
+        # Load each music file
+        for music_name, filename in music_files.items():
+            file_path = os.path.join(music_dir, filename)
+            
+            if os.path.exists(file_path):
+                self.music_tracks[music_name] = file_path
+                print(f"Loaded music track: {music_name} from {filename}")
+            else:
+                print(f"Music file not found: {file_path}")
+        
+        print(f"Sound manager loaded {len(self.music_tracks)} music tracks")
+    
+    
+    
     
     def apply_volume_settings(self, settings: dict):
         """Apply volume settings from a dictionary"""

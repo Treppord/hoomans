@@ -15,7 +15,7 @@ Your custom game engine is exceptionally well-designed for a small-scale indie p
 
 ### **Strong Technical Foundation (A Level)**
 
-- **World Persistence**: Comprehensive caching and save systems
+- **World Persistence**: Comprehensive caching and saave systems
 - **Procedural Generation**: Wave Function Collapse implementation is sophisticated
 - **Entity-Component System**: Well-implemented ECS architecture
 - **Multi-threaded AI**: Proper threading for AI processing

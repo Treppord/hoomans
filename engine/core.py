@@ -208,8 +208,11 @@ class SimpleGameEngine:
         # Save all entity states before returning to menu
         self._save_all_entity_states()
         
+
+        
         self.paused = False
         self.game_state = GameState.MAIN_MENU
+        self.sound_manager.play_music("track_main", loops=-1, fade_in=1000)
         print("Returned to main menu")
 
     def _quit_game(self):
@@ -493,8 +496,13 @@ class SimpleGameEngine:
             if event.type == pygame.QUIT:
                 self.running = False
                 return
-            
-            
+                
+            # Handle delayed music start
+            if event.type == pygame.USEREVENT + 1:
+                if self.game_state == GameState.MAIN_MENU:
+                    self.sound_manager.play_music("track_main", loops=-1)
+                pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Cancel the timer
+                continue
             
             menu_handled = False
             for obj in self.objects:
@@ -531,6 +539,8 @@ class SimpleGameEngine:
             
             # If in main menu, let it handle events
             if self.game_state == GameState.MAIN_MENU:
+                pygame.time.set_timer(pygame.USEREVENT + 1, 500)  # Start music after 500ms
+
                 if hasattr(self, 'main_menu') and self.main_menu.handle_event(event):
                     continue
                 
@@ -632,7 +642,15 @@ class SimpleGameEngine:
                     elif event.y < 0:
                         self.camera.zoom_out(0.1)
                 continue
-                
+            
+            # Check for Tab key to close character info panel
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+                if hasattr(self, 'ui') and self.ui:
+                    if hasattr(self.ui, 'char_info_panel') and self.ui.char_info_panel.visible:
+                        self.ui.char_info_panel.visible = False
+                        print("Character info panel closed with Tab key")
+                        continue
+                            
             # Handle mouse buttons for panning
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
@@ -1058,6 +1076,9 @@ class SimpleGameEngine:
         try:
             print(f"Starting game from menu with seed: {seed}, new world: {is_new_world}")
             self.game_state = GameState.RUNNING
+
+            # Switch to game music
+            self.sound_manager.play_music("track_game", loops=-1, fade_in=1000)
             
             # Set map seed if provided
             if seed is not None:
