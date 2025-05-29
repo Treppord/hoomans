@@ -236,7 +236,6 @@ class EntityManager:
         Update all managed entities
         This method ensures all entities get their update() method called
         """
-        print(f"DEBUG: Updating {len(self.entities)} entities through EntityManager")
         
         for entity in self.entities:
             if hasattr(entity, 'update'):

@@ -358,12 +358,25 @@ class ConsumeHandler(InteractionHandler):
         for i, slot in enumerate(self.player.inventory.slots):
             if not slot.is_empty():
                 item = slot.item
-                # Check if item is consumable
-                if hasattr(item, 'effect_type') and hasattr(item, 'effect_value'):
+                # Check if item is consumable (expanded criteria)
+                is_consumable = False
+                
+                # Check for new hunger/thirst values
+                if hasattr(item, 'hunger_value') and item.hunger_value > 0:
+                    is_consumable = True
+                elif hasattr(item, 'thirst_value') and item.thirst_value > 0:
+                    is_consumable = True
+                # Check for legacy effect_type and effect_value
+                elif hasattr(item, 'effect_type') and hasattr(item, 'effect_value'):
+                    if item.effect_type in ['hunger', 'thirst']:
+                        is_consumable = True
+                
+                if is_consumable:
                     self.consumable_items.append({
                         "item": item,
                         "slot_index": i
                     })
+
     
     def handle_hover(self, mouse_pos):
         """Handle mouse hover over consumable items"""
@@ -383,9 +396,14 @@ class ConsumeHandler(InteractionHandler):
                     item = item_data["item"]
                     slot_index = item_data["slot_index"]
                     
-                    # Use the item
-                    if item.use(self.player):
-                        print(f"Consumed {item.name}, restoring {item.effect_value} {item.effect_type}")
+                    # NEW: Apply item effects to player based on item type
+                    consumed = self._consume_item_with_effects(item)
+                    
+                    if consumed:
+                        print(f"Consumed {item.name}")
+                        
+                        # Reduce item quantity
+                        item.quantity -= 1
                         
                         # If item quantity is now 0, remove it from inventory
                         if item.quantity <= 0:
@@ -396,6 +414,109 @@ class ConsumeHandler(InteractionHandler):
         
         # If clicked outside items, close the handler
         return "close"
+
+    def _consume_item_with_effects(self, item):
+        """Apply the item's effects to the player based on item type"""
+        try:
+            # DEBUG: Print item details
+            print(f"DEBUG: Attempting to consume {item.name}")
+            print(f"DEBUG: Item has hunger_value: {getattr(item, 'hunger_value', 'None')}")
+            print(f"DEBUG: Item has thirst_value: {getattr(item, 'thirst_value', 'None')}")
+            print(f"DEBUG: Item has effect_type: {getattr(item, 'effect_type', 'None')}")
+            print(f"DEBUG: Item has effect_value: {getattr(item, 'effect_value', 'None')}")
+            print(f"DEBUG: Player current thirst: {getattr(self.player, 'thirst', 'None')}")
+            print(f"DEBUG: Player current hunger: {getattr(self.player, 'hunger', 'None')}")
+            
+            # Check if player has hunger/thirst attributes
+            if not hasattr(self.player, 'hunger'):
+                self.player.hunger = 10  # Initialize if missing
+                print("DEBUG: Initialized player hunger to 10")
+            if not hasattr(self.player, 'thirst'):
+                self.player.thirst = 10  # Initialize if missing
+                print("DEBUG: Initialized player thirst to 10")
+            
+            # Apply effects based on item properties
+            consumed = False
+            
+            # Check for hunger restoration (food items)
+            if hasattr(item, 'hunger_value') and item.hunger_value > 0:
+                print(f"DEBUG: Processing hunger item with value {item.hunger_value}")
+                old_hunger = self.player.hunger
+                self.player.hunger = min(10, self.player.hunger + item.hunger_value)
+                hunger_restored = self.player.hunger - old_hunger
+                
+                if hunger_restored > 0:
+                    print(f"Restored {hunger_restored} hunger (now {self.player.hunger}/10)")
+                    consumed = True
+                else:
+                    print("Hunger is already full!")
+                    return False
+            
+            # Check for thirst restoration (water items)
+            elif hasattr(item, 'thirst_value') and item.thirst_value > 0:
+                print(f"DEBUG: Processing thirst item with value {item.thirst_value}")
+                old_thirst = self.player.thirst
+                self.player.thirst = min(10, self.player.thirst + item.thirst_value)
+                thirst_restored = self.player.thirst - old_thirst
+                
+                print(f"DEBUG: Old thirst: {old_thirst}, New thirst: {self.player.thirst}, Restored: {thirst_restored}")
+                
+                if thirst_restored > 0:
+                    print(f"Restored {thirst_restored} thirst (now {self.player.thirst}/10)")
+                    consumed = True
+                else:
+                    print("Thirst is already full!")
+                    return False
+            
+            # Fallback: check for generic effect_type and effect_value
+            elif hasattr(item, 'effect_type') and hasattr(item, 'effect_value'):
+                print(f"DEBUG: Processing legacy item with effect_type: {item.effect_type}, effect_value: {item.effect_value}")
+                if item.effect_type == 'hunger':
+                    old_hunger = self.player.hunger
+                    self.player.hunger = min(10, self.player.hunger + item.effect_value)
+                    hunger_restored = self.player.hunger - old_hunger
+                    
+                    if hunger_restored > 0:
+                        print(f"Restored {hunger_restored} hunger (now {self.player.hunger}/10)")
+                        consumed = True
+                    else:
+                        print("Hunger is already full!")
+                        return False
+                        
+                elif item.effect_type == 'thirst':
+                    print(f"DEBUG: Processing legacy thirst item")
+                    old_thirst = self.player.thirst
+                    self.player.thirst = min(10, self.player.thirst + item.effect_value)
+                    thirst_restored = self.player.thirst - old_thirst
+                    
+                    print(f"DEBUG: Legacy thirst - Old: {old_thirst}, New: {self.player.thirst}, Restored: {thirst_restored}")
+                    
+                    if thirst_restored > 0:
+                        print(f"Restored {thirst_restored} thirst (now {self.player.thirst}/10)")
+                        consumed = True
+                    else:
+                        print("Thirst is already full!")
+                        return False
+            else:
+                print("DEBUG: Item is not consumable - no valid hunger/thirst values found")
+                return False
+            
+            # Play consumption sound if available
+            if consumed and hasattr(self.player, 'sound_manager'):
+                if hasattr(item, 'thirst_value') or (hasattr(item, 'effect_type') and item.effect_type == 'thirst'):
+                    self.player.sound_manager.play_sound("drink", volume=0.6)
+                else:
+                    # Play eating sound (you may need to add this sound)
+                    self.player.sound_manager.play_sound("eat", volume=0.6)
+            
+            print(f"DEBUG: Consumption result: {consumed}")
+            return consumed
+            
+        except Exception as e:
+            print(f"Error consuming item: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def render(self, screen):
         """Render the consumable items menu"""
@@ -443,7 +564,7 @@ class ConsumeHandler(InteractionHandler):
         
         # Draw title
         font = pygame.font.Font(None, 28)
-        title = font.render("Select Item to Consume", True, (255, 255, 255))
+        title = font.render("Use Item", True, (255, 255, 255))
         title_rect = title.get_rect(midtop=(bg_rect.centerx, bg_rect.top + 10))
         screen.blit(title, title_rect)
         
@@ -472,27 +593,63 @@ class ConsumeHandler(InteractionHandler):
             # Draw border
             pygame.draw.rect(screen, (150, 150, 150, 150), item_rect, width=1, border_radius=3)
             
-            # Draw item
+            # FIXED: Draw item with proper parameters
             item_size_inner = item_size - 8
-            item_x = x + (item_size - item_size_inner) // 2
-            item_y = y + (item_size - item_size_inner) // 2
-            item.render(screen, item_x, item_y, item_size_inner, item_size_inner)
+            item_x = x + 4  # Center the item with 4px padding
+            item_y = y + 4  # Center the item with 4px padding
+            
+            # Check if item has a render method and what parameters it expects
+            if hasattr(item, 'render'):
+                try:
+                    # Try the standard render method with screen, x, y, width, height
+                    item.render(screen, item_x, item_y, item_size_inner, item_size_inner)
+                except TypeError:
+                    # Fallback: try with just screen and position
+                    try:
+                        item.render(screen, item_x, item_y)
+                    except TypeError:
+                        # Last resort: draw a placeholder
+                        pygame.draw.rect(screen, (100, 100, 100), 
+                                    (item_x, item_y, item_size_inner, item_size_inner))
+                        
+                        # Draw item name as text
+                        font = pygame.font.Font(None, 16)
+                        text = font.render(item.name[:4], True, (255, 255, 255))
+                        text_rect = text.get_rect(center=(item_x + item_size_inner//2, item_y + item_size_inner//2))
+                        screen.blit(text, text_rect)
+            else:
+                # Item doesn't have render method, draw placeholder
+                pygame.draw.rect(screen, (100, 100, 100), 
+                            (item_x, item_y, item_size_inner, item_size_inner))
+                
+                # Draw item name as text
+                font = pygame.font.Font(None, 16)
+                text = font.render(getattr(item, 'name', 'Item')[:4], True, (255, 255, 255))
+                text_rect = text.get_rect(center=(item_x + item_size_inner//2, item_y + item_size_inner//2))
+                screen.blit(text, text_rect)
             
             # Draw quantity
-            if item.quantity > 1:
+            if hasattr(item, 'quantity') and item.quantity > 1:
                 small_font = pygame.font.Font(None, 20)
                 qty_text = small_font.render(str(item.quantity), True, (255, 255, 255))
-                screen.blit(qty_text, (x + item_size - qty_text.get_width() - 2, y + item_size - qty_text.get_height() - 2))
+                screen.blit(qty_text, (item_x + item_size_inner - qty_text.get_width() - 2, item_y + item_size_inner - qty_text.get_height() - 2))
         
         # Draw tooltip for hovered item
         if self.hover_index >= 0 and self.hover_index < len(self.consumable_items):
             item = self.consumable_items[self.hover_index]["item"]
             
-            # Create tooltip text
-            tooltip_lines = [
-                item.name,
-                f"Restores {item.effect_value} {item.effect_type.capitalize()}"
-            ]
+            # Create tooltip text with proper restoration values
+            tooltip_lines = [item.name]
+            
+            # Check for hunger restoration
+            if hasattr(item, 'hunger_value') and item.hunger_value > 0:
+                tooltip_lines.append(f"Restores {item.hunger_value} Hunger")
+            # Check for thirst restoration  
+            elif hasattr(item, 'thirst_value') and item.thirst_value > 0:
+                tooltip_lines.append(f"Restores {item.thirst_value} Thirst")
+            # Fallback to legacy effect system
+            elif hasattr(item, 'effect_type') and hasattr(item, 'effect_value'):
+                tooltip_lines.append(f"Restores {item.effect_value} {item.effect_type.capitalize()}")
             
             if hasattr(item, 'description') and item.description:
                 tooltip_lines.append("")
