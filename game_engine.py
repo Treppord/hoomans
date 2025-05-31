@@ -1,44 +1,48 @@
-from sound.sound_manager import initialize_sound_manager
+"""
+Refactored Game Engine Entry Point
+Now uses dynamic configuration system
+"""
+import sys
 from engine.core.simple_game_engine import SimpleGameEngine
-from engine.config.config_loader import initialize_config_loader
-from entities.entity_manager import EntityManager
-from world.map import WorldMap
-from world.world_cache import WorldCache
-import random
-import os
-import pygame
-from ai.controllers.ai_universe_controller import AIUniverseController, WorldStateCollector
-from engine.constants import GameBalanceConstants
-from entities.items.item_manager import ItemManager, initialize_item_system
-from engine.core.game_state_manager import GameState
-
-# NEW: Import the argument parser
+from engine.core.game_initializer import GameInitializer
 from config.game_args import parse_game_arguments
+from config.game_loader import GameConfigLoader
 
-# RENDER ORDER
-# 1. Terrain tiles
-# 2. Entities
-# 3. Entity tiles
-
-if __name__ == "__main__":
-    # Initialize configuration system first
-    print("Initializing configuration system...")
-    config_loader = initialize_config_loader()
-    
-    # NEW: Parse command line arguments using the dedicated parser
+def main():
+    """Main entry point for the game"""
+    # Parse command line arguments
     print("Parsing command line arguments...")
     args = parse_game_arguments()
     
-
-    # Initialize sound system
-    print("Initializing sound system...")
-    sound_manager = initialize_sound_manager(
-        master_volume=0.7,
-        sfx_volume=0.8,
-        music_volume=0.6
-    )
+    # Initialize game configuration loader
+    config_loader = GameConfigLoader()
     
-    # Create the main game engine with parsed arguments
+    # Handle list games command
+    if args.list_games:
+        print("\nAvailable game configurations:")
+        for game_name in config_loader.list_available_games():
+            info = config_loader.get_game_info(game_name)
+            print(f"  {game_name}:")
+            print(f"    Name: {info['name']}")
+            print(f"    Description: {info['description']}")
+            print(f"    World Size: {info['world_size']}")
+            print(f"    Entities: {info['entity_count']}")
+            print(f"    Systems: {info['system_count']}")
+            print()
+        return
+    
+    # Load game configuration
+    try:
+        print(f"Loading game configuration: {args.game_config}")
+        game_config = config_loader.get_game_config(args.game_config)
+        print(f"Loaded: {game_config.name}")
+        print(f"Description: {game_config.description}")
+    except Exception as e:
+        print(f"Error loading game configuration: {e}")
+        print(f"Available configurations: {config_loader.list_available_games()}")
+        sys.exit(1)
+    
+    # Create the main game engine
     engine = SimpleGameEngine(
         title="Hoomans", 
         width=args.width, 
@@ -46,17 +50,24 @@ if __name__ == "__main__":
         map_seed=args.seed
     )
     
-    # Initialize entity management system
-    print("Initializing entity management system...")
-    entity_manager = EntityManager(engine)
-    engine.entity_manager = entity_manager
+    # Initialize game using configuration
+    initializer = GameInitializer(engine)
+    
+    # Register custom post-initialization hooks
+    initializer.register_hook("finalize_world_items", _finalize_world_items)
+    initializer.register_hook("initialize_npc_exploration", _initialize_npc_exploration)
+    
+    # Initialize the game
+    initializer.initialize_game(game_config, args)
     
     # Set game state based on arguments
     if args.skip_menu:
+        from engine.core.game_state_manager import GameState
         game_state = GameState()
         engine.game_state = game_state.RUNNING
         engine.load_item_icons()
     else:
+        from engine.core.game_state_manager import GameState
         game_state = GameState()
         engine.game_state = game_state.MAIN_MENU
     
@@ -65,143 +76,38 @@ if __name__ == "__main__":
         engine.toggle_fullscreen()
     elif args.borderless:
         engine.toggle_borderless_fullscreen()
-
-    # Initialize item management system
-    print("Initializing item management system...")
-    item_manager = initialize_item_system()
-    engine.item_manager = item_manager
-    
-    # Initialize item factory after pygame is initialized
-    from entities.items.item_factory import ItemFactory
-    engine.load_item_icons()
-    ItemFactory.ensure_item_assets_exist()
-    ItemFactory.register_item_templates()
-
-    # Initialize sprite assets
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    sprite_path = os.path.join(project_root, "assets", "ai_sheet.png")
-    walk_sprite_path = os.path.join(project_root, "assets", "ai_walk.png")
-    
-    # Check if sprite sheets exist and create placeholders if needed
-    if not os.path.exists(sprite_path):
-        print(f"Warning: Idle sprite sheet not found at {sprite_path}")
-        print("Creating a placeholder idle sprite sheet...")
-        placeholder = pygame.Surface((32, 16))
-        placeholder.fill((255, 255, 255), rect=(0, 0, 16, 16))
-        placeholder.fill((255, 255, 255), rect=(16, 0, 16, 16))
-        os.makedirs(os.path.dirname(sprite_path), exist_ok=True)
-        pygame.image.save(placeholder, sprite_path)
-        print(f"Created placeholder idle sprite sheet at {sprite_path}")
-    
-    if not os.path.exists(walk_sprite_path):
-        print(f"Warning: Walk sprite sheet not found at {walk_sprite_path}")
-        print("Creating a placeholder walk sprite sheet...")
-        placeholder = pygame.Surface((32, 16))
-        placeholder.fill((240, 240, 240), rect=(0, 0, 16, 16))
-        placeholder.fill((240, 240, 240), rect=(16, 0, 16, 16))
-        pygame.draw.line(placeholder, (200, 200, 200), (4, 12), (12, 12), 2)
-        pygame.draw.line(placeholder, (200, 200, 200), (20, 12), (28, 12), 2)
-        os.makedirs(os.path.dirname(walk_sprite_path), exist_ok=True)
-        pygame.image.save(placeholder, walk_sprite_path)
-        print(f"Created placeholder walk sprite sheet at {walk_sprite_path}")
-
-    # Initialize AI Universe Controller (with option to disable for testing)
-    if not args.no_ai:
-        print("Initializing AI Universe Controller...")
-        model_path = os.path.join(project_root, "models", "mistral-7b-instruct-v0.2.Q4_K_M.gguf")
-        ai_universe = AIUniverseController(use_llm=True, use_local_model=True, model_path=model_path)
-        ai_universe.start()
-        engine.ai_universe = ai_universe
-    else:
-        print("AI Universe Controller disabled (--no-ai flag)")
-    
-    # Initialize world map
-    print("Initializing world map...")
-    world_map = WorldMap(256, 256)
-    world_map.initialize_entity_tiles()
-
-    # Enable map debug mode if requested
-    if args.map_debug:
-        world_map.enable_debug_mode()
-        print("Map debug mode enabled")
-
-    # Only generate the map if we're skipping the menu
-    if args.skip_menu:
-        world_map.generate_realistic_map(seed=engine.map_seed)
-    
-    # Add world structures
-    # house = world_map.add_house(20, 10)
-    engine.set_world_map(world_map)
-
-    # Initialize world cache system
-    print("Initializing world cache system...")
-    world_cache = WorldCache()
-    if args.skip_menu:
-        world_cache.set_world_seed(engine.map_seed)
-    engine.world_cache = world_cache
-    if not args.no_ai and 'ai_universe' in locals():
-        ai_universe.world_cache = world_cache
-    world_map.set_world_cache(world_cache)
-
-    # Initialize world items
-    print("Initializing world items...")
-    world_map.initialize_world_items()
-
-    # Load world items from cache if available
-    if hasattr(engine, 'world_cache') and engine.world_cache:
-        world_map.world_item_manager.load_from_cache(engine.world_cache)
-
-    # Spawn test items in the world
-    print("Spawning test items in the world...")
-    world_map.spawn_item("apple", 30, 20, 3)
-    world_map.spawn_item("berries", 25, 22, 1)
-    world_map.spawn_item("water_bottle", 35, 15, 2)
-    world_map.spawn_item("stone_axe", 28, 22, 1)
-
-    # Update and save world items
-    if hasattr(engine.world_map, 'world_item_manager'):
-        world_map.update_world_items()
-
-    # Save world items to cache periodically
-    if hasattr(engine, 'world_cache') and engine.world_cache:
-        world_map.world_item_manager.save_to_cache(engine.world_cache)
-
-    # === ENTITY CREATION USING ENTITY MANAGER ===
-    print("Creating game entities...")
-    
-    # Create player entity
-    player = entity_manager.create_player(grid_x=25, grid_y=19, color=(255, 0, 0), speed=1)
-    
-    # Create NPCs with specific CNA files
-    wanderer = entity_manager.create_npc(
-        grid_x=26, grid_y=30, 
-        color=(0, 255, 0), 
-        speed=1,
-        cna_filename="Skyler_Smith.cna"
-    )
-    
-    follower = entity_manager.create_npc(
-        grid_x=37, grid_y=25, 
-        color=(0, 0, 255), 
-        speed=1,
-        cna_filename="Dakota_Brown.cna"
-    )
-
-    # Spawn food NPCs using entity manager
-    entity_manager.spawn_multiple_food_npcs(count=30)
-
-    # Initialize exploration attributes for all NPCs
-    print("Initializing NPC exploration attributes...")
-    entity_manager.initialize_all_npc_exploration_attributes()
-    
-    # Print entity statistics
-    entity_counts = entity_manager.get_entity_count()
-    print(f"Entity creation complete:")
-    print(f"  Total entities: {entity_counts['total']}")
-    print(f"  Player: {entity_counts['player']}")
-    print(f"  NPCs: {entity_counts['npcs']}")
-    print(f"  Food NPCs: {entity_counts['food_npcs']}")
     
     # Start the main game loop
     print("Starting game loop...")
     engine.run()
+
+def _finalize_world_items(config, args):
+    """Custom hook to finalize world items"""
+    engine = SimpleGameEngine.instance
+    
+    if hasattr(engine, 'world_map') and engine.world_map:
+        # Update and save world items
+        if hasattr(engine.world_map, 'world_item_manager'):
+            engine.world_map.update_world_items()
+        
+        # Save world items to cache periodically
+        if hasattr(engine, 'world_cache') and engine.world_cache:
+            engine.world_map.world_item_manager.save_to_cache(engine.world_cache)
+        
+        # Load world items from cache if available
+        if hasattr(engine, 'world_cache') and engine.world_cache:
+            engine.world_map.world_item_manager.load_from_cache(engine.world_cache)
+        
+        print("World items finalized and cached")
+
+def _initialize_npc_exploration(config, args):
+    """Custom hook to initialize NPC exploration attributes"""
+    engine = SimpleGameEngine.instance
+    
+    if hasattr(engine, 'entity_manager') and engine.entity_manager:
+        print("Initializing NPC exploration attributes...")
+        engine.entity_manager.initialize_all_npc_exploration_attributes()
+        print("NPC exploration attributes initialized")
+
+if __name__ == "__main__":
+    main()

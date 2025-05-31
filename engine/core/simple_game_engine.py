@@ -6,6 +6,7 @@ import pygame
 import sys
 import os
 import random
+from engine.core.game_config_manager import GameConfigManager
 
 # Core engine components
 from engine.core.display_manager import DisplayManager
@@ -51,6 +52,8 @@ class SimpleGameEngine:
         
         # Load configuration
         self.config = get_config_loader()
+        self.config_manager = GameConfigManager(self)
+
         
         # Initialize display manager
         self.display_manager = DisplayManager(title, width, height)
