@@ -19,7 +19,7 @@ from config.game_loader import GameConfigLoader
 
 class EngineStudio:
     """Main game engine studio interface"""
-        
+            
     def __init__(self):
         pygame.init()
         self.screen_size = (1400, 900)
@@ -49,24 +49,253 @@ class EngineStudio:
         
         # Initialize managers
         self.config_loader = GameConfigLoader()
-
-
         self.tool_manager = StudioToolManager(self)
         self.game_launcher = GameLauncher(self)
         self.project_manager = ProjectManager(self)
         
+        # Game state
+        self.current_game = None
+        self.game_loaded = False
+        
         # UI elements
         self.status_label = None
         self.workspace_label = None
-        self.config_list = None
-        self.properties_text = None
         
         print("=== Hoomans Game Engine Studio ===")
         print("Starting Hoomans Game Engine Studio...")
-        print("Available tools: Map Editor, Config Editor, Asset Browser")
-        print("Click 'New Game' to create a new game configuration")
         
-        self._setup_ui()
+        # Start with game selection menu
+        self._setup_game_selection_ui()
+
+
+    def _setup_game_selection_ui(self):
+        """Setup the initial game selection interface with modern styling"""
+        # Clear any existing UI
+        self.ui_manager.clear_and_reset()
+        
+        # Background panel for better visual separation
+        background_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(0, 0, self.screen_size[0], self.screen_size[1]),
+            manager=self.ui_manager,
+            element_id='background_panel'
+        )
+        
+        # Header section with logo area
+        header_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(0, 0, self.screen_size[0], 120),
+            manager=self.ui_manager,
+            container=background_panel,
+            element_id='header_panel'
+        )
+        
+        # Main title with better positioning
+        title_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(self.screen_size[0]//2 - 250, 20, 500, 40),
+            text="Hoomans Game Engine Studio",
+            manager=self.ui_manager,
+            container=header_panel,
+            object_id='#main_title'
+        )
+        
+        subtitle_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(self.screen_size[0]//2 - 150, 60, 300, 30),
+            text="Select or Create a Game Project",
+            manager=self.ui_manager,
+            container=header_panel,
+            object_id='#subtitle'
+        )
+        
+        # Main content area
+        content_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(50, 140, self.screen_size[0] - 100, self.screen_size[1] - 200),
+            manager=self.ui_manager,
+            container=background_panel,
+            element_id='content_panel'
+        )
+        
+        # Left side - Recent/Available Games
+        games_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(20, 20, (self.screen_size[0] - 140) // 2, self.screen_size[1] - 280),
+            manager=self.ui_manager,
+            container=content_panel,
+            element_id='games_panel'
+        )
+        
+        games_title = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(10, 10, 200, 30),
+            text="Available Games",
+            manager=self.ui_manager,
+            container=games_panel,
+            object_id='#section_title'
+        )
+        
+        # Game list with better sizing
+        available_games = self.config_loader.list_available_games()
+        self.game_selection_list = pygame_gui.elements.UISelectionList(
+            relative_rect=pygame.Rect(10, 50, (self.screen_size[0] - 180) // 2 - 20, self.screen_size[1] - 400),
+            item_list=available_games,
+            manager=self.ui_manager,
+            container=games_panel
+        )
+        
+        # Right side - Actions and Info
+        actions_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect((self.screen_size[0] - 140) // 2 + 40, 20, (self.screen_size[0] - 140) // 2, self.screen_size[1] - 280),
+            manager=self.ui_manager,
+            container=content_panel,
+            element_id='actions_panel'
+        )
+        
+        actions_title = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(10, 10, 200, 30),
+            text="Actions",
+            manager=self.ui_manager,
+            container=actions_panel,
+            object_id='#section_title'
+        )
+        
+        # Action buttons with better spacing and sizing
+        button_width = 180
+        button_height = 45
+        button_spacing = 15
+        start_y = 60
+        
+        self.load_game_btn = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect(20, start_y, button_width, button_height),
+            text="Open Selected Game",
+            manager=self.ui_manager,
+            container=actions_panel,
+            object_id='#primary_button'
+        )
+        
+        self.new_game_btn = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect(20, start_y + button_height + button_spacing, button_width, button_height),
+            text="Create New Game",
+            manager=self.ui_manager,
+            container=actions_panel,
+            object_id='#secondary_button'
+        )
+        
+        # Info section
+        info_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(20, start_y + 2 * (button_height + button_spacing) + 20, 200, 30),
+            text="Game Information",
+            manager=self.ui_manager,
+            container=actions_panel,
+            object_id='#section_title'
+        )
+        
+        self.game_info_text = pygame_gui.elements.UITextBox(
+            relative_rect=pygame.Rect(20, start_y + 2 * (button_height + button_spacing) + 60, (self.screen_size[0] - 140) // 2 - 40, 150),
+            html_text="<p>Select a game to view details</p>",
+            manager=self.ui_manager,
+            container=actions_panel
+        )
+        
+        # Bottom action bar
+        bottom_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(0, self.screen_size[1] - 60, self.screen_size[0], 60),
+            manager=self.ui_manager,
+            container=background_panel,
+            element_id='bottom_panel'
+        )
+        
+        self.exit_btn = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect(self.screen_size[0] - 100, 10, 80, 40),
+            text="Exit",
+            manager=self.ui_manager,
+            container=bottom_panel,
+            object_id='#exit_button'
+        )
+
+
+    def _load_selected_game(self):
+        """Load the selected game and switch to main studio interface"""
+        selected = self.game_selection_list.get_single_selection()
+        if not selected:
+            return
+        
+        try:
+            # Load the game configuration
+            self.current_game = self.config_loader.get_game_config(selected)
+            self.game_loaded = True
+            
+            # Clear selection UI and setup main studio
+            self.ui_manager.clear_and_reset()
+            self._setup_main_studio_ui()
+            
+            print(f"Loaded game: {self.current_game.name}")
+            
+        except Exception as e:
+            print(f"Error loading game: {e}")
+
+    def _setup_main_studio_ui(self):
+        """Setup the main studio interface (without game config sidebar)"""
+        # Main menu bar
+        self.menu_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(0, 0, self.screen_size[0], 60),
+            manager=self.ui_manager,
+            element_id='menu_panel'
+        )
+        
+        # Menu buttons
+        button_width = 120
+        button_height = 40
+        button_y = 10
+        
+        buttons_data = [
+            ("Map Editor", 10),
+            ("Item Editor", 140),
+            ("Config Editor", 270),
+            ("Asset Browser", 400),
+            ("Play Game", 530),
+            ("Switch Game", 660)
+        ]
+        
+        self.buttons = {}
+        for text, x_pos in buttons_data:
+            btn_id = text.lower().replace(' ', '_') + '_btn'
+            button = pygame_gui.elements.UIButton(
+                relative_rect=pygame.Rect(x_pos, button_y, button_width, button_height),
+                text=text,
+                manager=self.ui_manager,
+                container=self.menu_panel
+            )
+            setattr(self, btn_id, button)
+            self.buttons[text] = button
+        
+        # Current game label
+        self.current_game_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(self.screen_size[0] - 400, button_y, 200, button_height),
+            text=f"Game: {self.current_game.name}",
+            manager=self.ui_manager,
+            container=self.menu_panel
+        )
+        
+        # Status label
+        self.status_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(self.screen_size[0] - 180, button_y, 160, button_height),
+            text="Ready",
+            manager=self.ui_manager,
+            container=self.menu_panel
+        )
+        
+        # Main workspace (full width now)
+        content_y = 70
+        content_height = self.screen_size[1] - content_y - 10
+        
+        self.workspace_panel = pygame_gui.elements.UIPanel(
+            relative_rect=pygame.Rect(10, content_y, self.screen_size[0] - 20, content_height),
+            manager=self.ui_manager,
+            object_id='#workspace_panel'
+        )
+        
+        self.workspace_label = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(20, 20, self.screen_size[0] - 60, 40),
+            text=f"Working on: {self.current_game.name} - Select a tool to begin",
+            manager=self.ui_manager,
+            container=self.workspace_panel
+        )
 
     def _load_ui_theme(self):
         """Load UI theme for the studio"""
@@ -258,35 +487,129 @@ class EngineStudio:
         )
     
     def handle_events(self):
-            """Handle UI events"""
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.running = False
-                
-                if event.type == pygame.VIDEORESIZE:
-                    self.screen_size = event.size
-                    self.screen = pygame.display.set_mode(self.screen_size, pygame.RESIZABLE)
-                    self.ui_manager.set_window_resolution(self.screen_size)
-                    self.tools_ui_manager.set_window_resolution(self.screen_size)
-                    self._resize_ui()
-                
-                # Let tool manager handle events first (higher priority)
+        """Handle UI events"""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            
+            if event.type == pygame.VIDEORESIZE:
+                self.screen_size = event.size
+                self.screen = pygame.display.set_mode(self.screen_size, pygame.RESIZABLE)
+                self.ui_manager.set_window_resolution(self.screen_size)
+                self.tools_ui_manager.set_window_resolution(self.screen_size)
+            
+            # Handle game selection phase
+            if not self.game_loaded:
+                if event.type == pygame.USEREVENT:
+                    if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
+                        if event.ui_element == self.load_game_btn:
+                            self._load_selected_game()
+                        elif event.ui_element == self.new_game_btn:
+                            self._create_new_game_from_selection()
+                        elif event.ui_element == self.exit_btn:
+                            self.running = False
+            
+            # Handle main studio phase
+            else:
+                # Let tool manager handle events first
                 if self.tool_manager.handle_event(event):
                     continue
                 
                 if event.type == pygame.USEREVENT:
                     if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
-                        self._handle_button_press(event.ui_element)
-                    elif event.user_type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
-                        if event.ui_element == self.config_list:
-                            self._handle_config_selection(event.text)
-                    elif event.user_type == pygame_gui.UI_CONFIRMATION_DIALOG_CONFIRMED:
-                        if hasattr(self, 'new_game_dialog') and event.ui_element == self.new_game_dialog:
-                            self._create_game_config()
+                        self._handle_main_studio_button_press(event.ui_element)
+            
+            # Process events for both UI managers
+            self.tools_ui_manager.process_events(event)
+            self.ui_manager.process_events(event)
+            
+    def _handle_main_studio_button_press(self, button):
+        """Handle button press events in main studio"""
+        button_text = button.text
+        
+        if button_text == "Map Editor":
+            self._open_map_editor()
+        elif button_text == "Item Editor":
+            self._open_item_editor()
+        elif button_text == "Config Editor":
+            self._open_config_editor()
+        elif button_text == "Asset Browser":
+            self._open_asset_browser()
+        elif button_text == "Play Game":
+            self._play_current_game()
+        elif button_text == "Switch Game":
+            self._switch_game()
+
+    def _switch_game(self):
+        """Switch to a different game"""
+        self.game_loaded = False
+        self.current_game = None
+        self.tool_manager.cleanup()  # Close any open tools
+        self._setup_game_selection_ui()
+        self.status_label = None  # Reset status label reference
+
+    def _create_new_game_from_selection(self):
+        """Create new game from selection screen"""
+        # Similar to existing _create_new_game but refresh the selection list after creation
+        self.new_game_dialog = pygame_gui.windows.UIConfirmationDialog(
+            rect=pygame.Rect(400, 200, 400, 300),
+            manager=self.ui_manager,
+            window_title="Create New Game",
+            action_long_desc="Enter details for your new game configuration:",
+            action_short_name="Create"
+        )
+        
+        # Add input fields (same as existing implementation)
+        self.game_name_input = pygame_gui.elements.UITextEntryLine(
+            relative_rect=pygame.Rect(20, 80, 360, 30),
+            manager=self.ui_manager,
+            container=self.new_game_dialog,
+            placeholder_text="Game Name"
+        )
+        
+        self.game_desc_input = pygame_gui.elements.UITextEntryBox(
+            relative_rect=pygame.Rect(20, 120, 360, 60),
+            manager=self.ui_manager,
+            container=self.new_game_dialog,
+            placeholder_text="Game Description"
+        )
+
+    def _play_current_game(self):
+        """Play the currently loaded game"""
+        if self.current_game:
+            try:
+                self.workspace_label.set_text(f"Starting game: {self.current_game.name}")
+                if self.status_label:
+                    self.status_label.set_text("Launching game...")
                 
-                # Process events for both UI managers
-                self.tools_ui_manager.process_events(event)
-                self.ui_manager.process_events(event)
+                # Get the game name from config loader's available games
+                game_name = None
+                for name in self.config_loader.list_available_games():
+                    try:
+                        config = self.config_loader.get_game_config(name)
+                        if config.name == self.current_game.name:
+                            game_name = name
+                            break
+                    except:
+                        continue
+                
+                if game_name:
+                    success = self.game_launcher.launch_game(
+                        game_name,
+                        skip_menu=True,
+                        width=1024,
+                        height=768
+                    )
+                    
+                    if success and self.status_label:
+                        self.status_label.set_text(f"Game launched: {self.current_game.name}")
+                    elif self.status_label:
+                        self.status_label.set_text("Failed to launch game")
+                
+            except Exception as e:
+                self.workspace_label.set_text(f"Error starting game: {e}")
+                if self.status_label:
+                    self.status_label.set_text(f"Launch error: {e}")
     
     def _handle_button_press(self, button):
         """Handle button press events"""
@@ -556,33 +879,7 @@ def get_{safe_name}_game_config():
             self.workspace_label.set_text(f"Item Editor - Error: {e}")
             self.status_label.set_text(f"Error: {e}")
     
-    def _play_current_game(self):
-        """Play the currently selected game"""
-        selected = self.config_list.get_single_selection()
-        if selected:
-            try:
-                self.workspace_label.set_text(f"Starting game: {selected}")
-                self.status_label.set_text("Launching game...")
-                
-                # Launch game with skip menu option
-                success = self.game_launcher.launch_game(
-                    selected,
-                    skip_menu=True,
-                    width=1024,
-                    height=768
-                )
-                
-                if success:
-                    self.status_label.set_text(f"Game launched: {selected}")
-                else:
-                    self.status_label.set_text("Failed to launch game")
-                
-            except Exception as e:
-                self.workspace_label.set_text(f"Error starting game: {e}")
-                self.status_label.set_text(f"Launch error: {e}")
-        else:
-            self.workspace_label.set_text("Please select a game configuration first")
-            self.status_label.set_text("No configuration selected")
+
     
     def _resize_ui(self):
         """Resize UI elements when window is resized"""
