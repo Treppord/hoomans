@@ -7,6 +7,8 @@ import sys
 import os
 from typing import Dict, Any, Optional
 import json
+import pygame_gui.windows
+import textwrap
 
 # Add the project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -47,6 +49,8 @@ class EngineStudio:
         
         # Initialize managers
         self.config_loader = GameConfigLoader()
+
+
         self.tool_manager = StudioToolManager(self)
         self.game_launcher = GameLauncher(self)
         self.project_manager = ProjectManager(self)
@@ -254,32 +258,35 @@ class EngineStudio:
         )
     
     def handle_events(self):
-        """Handle UI events"""
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-            
-            if event.type == pygame.VIDEORESIZE:
-                self.screen_size = event.size
-                self.screen = pygame.display.set_mode(self.screen_size, pygame.RESIZABLE)
-                self.ui_manager.set_window_resolution(self.screen_size)
-                self.tools_ui_manager.set_window_resolution(self.screen_size)
-                self._resize_ui()
-            
-            # Let tool manager handle events first (higher priority)
-            if self.tool_manager.handle_event(event):
-                continue
-            
-            if event.type == pygame.USEREVENT:
-                if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
-                    self._handle_button_press(event.ui_element)
-                elif event.user_type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
-                    if event.ui_element == self.config_list:
-                        self._handle_config_selection(event.text)
-            
-            # Process events for both UI managers
-            self.tools_ui_manager.process_events(event)
-            self.ui_manager.process_events(event)
+            """Handle UI events"""
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                
+                if event.type == pygame.VIDEORESIZE:
+                    self.screen_size = event.size
+                    self.screen = pygame.display.set_mode(self.screen_size, pygame.RESIZABLE)
+                    self.ui_manager.set_window_resolution(self.screen_size)
+                    self.tools_ui_manager.set_window_resolution(self.screen_size)
+                    self._resize_ui()
+                
+                # Let tool manager handle events first (higher priority)
+                if self.tool_manager.handle_event(event):
+                    continue
+                
+                if event.type == pygame.USEREVENT:
+                    if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
+                        self._handle_button_press(event.ui_element)
+                    elif event.user_type == pygame_gui.UI_SELECTION_LIST_NEW_SELECTION:
+                        if event.ui_element == self.config_list:
+                            self._handle_config_selection(event.text)
+                    elif event.user_type == pygame_gui.UI_CONFIRMATION_DIALOG_CONFIRMED:
+                        if hasattr(self, 'new_game_dialog') and event.ui_element == self.new_game_dialog:
+                            self._create_game_config()
+                
+                # Process events for both UI managers
+                self.tools_ui_manager.process_events(event)
+                self.ui_manager.process_events(event)
     
     def _handle_button_press(self, button):
         """Handle button press events"""
@@ -349,14 +356,163 @@ class EngineStudio:
             self.properties_text.rebuild()
             self.status_label.set_text(f"Error: {e}")
     
+# Add this import at the top with other pygame_gui imports:
+
+    # Add this method to the EngineStudio class:
     def _create_new_game(self):
         """Create a new game configuration"""
-        self.workspace_label.set_text("Creating new game configuration...")
-        self.status_label.set_text("New game dialog not implemented yet")
+        # Create new game dialog
+        self.new_game_dialog = pygame_gui.windows.UIConfirmationDialog(
+            rect=pygame.Rect(400, 200, 400, 300),
+            manager=self.ui_manager,
+            window_title="Create New Game",
+            action_long_desc="Enter details for your new game configuration:",
+            action_short_name="Create"
+        )
         
-        # TODO: Open new game dialog
-        # For now, just show a message
-        print("New game creation not implemented yet")
+        # Add input fields to the dialog
+        self.game_name_input = pygame_gui.elements.UITextEntryLine(
+            relative_rect=pygame.Rect(20, 80, 360, 30),
+            manager=self.ui_manager,
+            container=self.new_game_dialog,
+            placeholder_text="Game Name"
+        )
+        
+        self.game_desc_input = pygame_gui.elements.UITextEntryBox(
+            relative_rect=pygame.Rect(20, 120, 360, 60),
+            manager=self.ui_manager,
+            container=self.new_game_dialog,
+            placeholder_text="Game Description"
+        )
+        
+        # Add labels
+        pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(20, 55, 100, 25),
+            text="Name:",
+            manager=self.ui_manager,
+            container=self.new_game_dialog
+        )
+        
+        pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(20, 95, 100, 25),
+            text="Description:",
+            manager=self.ui_manager,
+            container=self.new_game_dialog
+        )
+
+    
+
+    # Add this new method to actually create the game config:
+    def _create_game_config(self):
+        """Create the actual game configuration file"""
+        try:
+            game_name = self.game_name_input.get_text().strip()
+            game_desc = self.game_desc_input.get_text().strip()
+            
+            if not game_name:
+                self.status_label.set_text("Error: Game name required")
+                return
+            
+            # Create safe filename
+            safe_name = game_name.lower().replace(' ', '_').replace('-', '_')
+            safe_name = ''.join(c for c in safe_name if c.isalnum() or c == '_')
+            
+            # Create game config file
+
+                # Replace the config_content assignment with:
+            config_content = textwrap.dedent(f'''
+"""
+{game_name} Game Configuration
+{game_desc if game_desc else "A new game configuration"}
+"""
+from config.game_config import GameConfig, SystemConfig, EntityConfig, WorldItemConfig
+
+def get_{safe_name}_game_config():
+    """Get the {game_name} game configuration"""
+    return GameConfig(
+        name="{game_name}",
+        description="{game_desc if game_desc else "A new game configuration"}",
+        
+        world_width=256,
+        world_height=256,
+        
+        systems=[
+            SystemConfig(name="sound_system", enabled=True),
+            SystemConfig(name="entity_manager", enabled=True),
+            SystemConfig(name="item_system", enabled=True),
+            SystemConfig(name="world_map", enabled=True, config={{'width': 256, 'height': 256}}),
+            SystemConfig(name="world_cache", enabled=True),
+            SystemConfig(name="ai_universe", enabled=True),
+        ],
+        
+        entities=[
+            EntityConfig(entity_type="player", grid_x=128, grid_y=128, color=(255, 0, 0), speed=1),
+            EntityConfig(entity_type="npc", grid_x=133, grid_y=133, color=(0, 255, 0), speed=1),
+            EntityConfig(entity_type="npc", grid_x=123, grid_y=123, color=(0, 0, 255), speed=1),
+            EntityConfig(entity_type="food_npcs", color=(255, 255, 255), speed=1, count=30),
+        ],
+        
+        world_items=[
+            WorldItemConfig(item_type="apple", x=131, y=131, quantity=3),
+            WorldItemConfig(item_type="berries", x=125, y=125, quantity=1),
+            WorldItemConfig(item_type="water_bottle", x=128, y=133, quantity=2),
+        ]
+    )
+''').strip()
+            
+                    # Write to file
+            config_path = os.path.join(project_root, "config", "games", f"{safe_name}_game.py")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            with open(config_path, 'w') as f:
+                f.write(config_content)
+            
+            print(f"Created config file at: {config_path}")
+            print(f"File exists: {os.path.exists(config_path)}")
+            
+            # FORCE CLEAR PYTHON MODULE CACHE
+            import sys
+            module_name = f"config.games.{safe_name}_game"
+            if module_name in sys.modules:
+                del sys.modules[module_name]
+            
+            # Force reload the config loader with a fresh instance
+            from config.game_loader import GameConfigLoader
+            self.config_loader = GameConfigLoader()
+            
+            # Force the loader to rescan by clearing its internal cache if it has one
+            if hasattr(self.config_loader, '_game_configs'):
+                self.config_loader._game_configs = {}
+            if hasattr(self.config_loader, 'available_games'):
+                self.config_loader.available_games = None
+                
+            # Get updated list
+            available_games = self.config_loader.list_available_games()
+            print(f"Available games after reload: {available_games}")
+            
+            # Debug: Check if the specific file is being detected
+            games_dir = os.path.join(project_root, "config", "games")
+            print(f"Files in games directory: {os.listdir(games_dir)}")
+            
+            # Try to manually load the specific config
+            try:
+                test_config = self.config_loader.get_game_config(safe_name)
+                print(f"Successfully loaded {safe_name} config: {test_config.name}")
+            except Exception as e:
+                print(f"Failed to load {safe_name} config: {e}")
+            
+            # Update the config list
+            self.config_list.set_item_list(available_games)
+            self.config_list.rebuild()
+            
+            self.status_label.set_text(f"Created: {game_name}")
+            self.workspace_label.set_text(f"Created new game configuration: {game_name}")
+            
+        except Exception as e:
+            self.status_label.set_text(f"Error creating game: {e}")
+            print(f"Error creating game config: {e}")
+            import traceback
+            traceback.print_exc()
+
     
     def _load_game(self):
         """Load an existing game"""
@@ -541,6 +697,26 @@ class EngineStudio:
         import json
         with open(settings_path, 'w') as f:
             json.dump(self.settings, f, indent=2)
+            
+    def refresh_config_list(self):
+        """Refresh the configuration list"""
+        try:
+            # Reload the config loader
+            self.config_loader = GameConfigLoader()
+            
+            # Get updated list
+            game_configs = self.config_loader.list_available_games()
+            print(f"Refreshed configs: {game_configs}")
+            
+            # Update UI
+            self.config_list.set_item_list(game_configs)
+            self.config_list.rebuild()
+            
+            self.status_label.set_text("Config list refreshed")
+            
+        except Exception as e:
+            print(f"Error refreshing config list: {e}")
+            self.status_label.set_text(f"Refresh error: {e}")
         
 
 def main():
@@ -557,3 +733,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -5,6 +5,9 @@ Manages loading different game configurations
 import importlib
 from typing import Dict, List
 from config.game_config import GameConfig
+import os
+import glob
+
 
 class GameConfigLoader:
     """Loads and manages game configurations"""
@@ -13,12 +16,34 @@ class GameConfigLoader:
         self.available_games = {}
         self._load_available_games()
     
+        
     def _load_available_games(self):
         """Load all available game configurations"""
-        # Register built-in game configurations
-        self._register_game("default", "config.games.default_game", "get_default_game_config")
-        self._register_game("minimal", "config.games.minimal_game", "get_minimal_game_config")
-        self._register_game("survival", "config.games.survival_game", "get_survival_game_config")
+        # Auto-discover game configuration files
+        games_dir = os.path.join(os.path.dirname(__file__), "games")
+        
+        if os.path.exists(games_dir):
+            # Find all Python files in the games directory
+            game_files = glob.glob(os.path.join(games_dir, "*_game.py"))
+            
+            for game_file in game_files:
+                filename = os.path.basename(game_file)
+                if filename.startswith("__"):
+                    continue
+                    
+                # Extract game name (remove _game.py suffix)
+                game_name = filename[:-3]  # Remove .py
+                if game_name.endswith("_game"):
+                    game_name = game_name[:-5]  # Remove _game
+                
+                module_path = f"config.games.{filename[:-3]}"
+                function_name = f"get_{game_name}_game_config"
+                
+                # Try to register the game
+                try:
+                    self._register_game(game_name, module_path, function_name)
+                except Exception as e:
+                    print(f"Failed to register game {game_name}: {e}")
     
     def _register_game(self, name: str, module_path: str, function_name: str):
         """Register a game configuration"""
