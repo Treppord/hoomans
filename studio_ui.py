@@ -10,6 +10,9 @@ from PySide6.QtCore import Qt, QSize, Signal, QPropertyAnimation, QEasingCurve, 
 from PySide6.QtGui import QFont, QPalette, QColor, QPixmap, QIcon, QPainter, QLinearGradient
 import pygame
 
+from PySide6.QtWidgets import QTabWidget, QTreeWidget, QTreeWidgetItem, QMenu
+from PySide6.QtCore import QPoint
+
 
 # Import map system components
 from engine.systems.map_system import (
@@ -53,6 +56,20 @@ class MapEditorWidget(QWidget):
             QFrame {
                 background-color: #f8f9fa;
                 border-right: 1px solid #e0e0e0;
+            }
+            QGroupBox {
+                color: #2c3e50;
+                font-weight: bold;
+            }
+            QLabel {
+                color: #2c3e50;
+            }
+            QSpinBox, QComboBox {
+                color: #2c3e50;
+                background: white;
+            }
+            QCheckBox {
+                color: #2c3e50;
             }
         """)
         
@@ -484,10 +501,12 @@ class ModernButton(QPushButton):
                 }
             """)
 
+
 class StudioUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.projects_path = Path.home() / "hoomans" / "project"
+        self.open_tabs = {}  # Track open tabs
         self.setup_ui()
         self.load_projects()
         
@@ -712,21 +731,12 @@ class StudioUI(QMainWindow):
         """)
         
         # Left panel (hierarchy/assets)
-        left_panel = self.create_panel("Project Hierarchy", "#f8f9fa")
+        left_panel = self.create_hierarchy_panel()
         left_panel.setMinimumWidth(280)
         left_panel.setMaximumWidth(400)
         
-        # Center panel (map editor)
-        center_panel = QFrame()
-        center_panel.setStyleSheet("QFrame { background-color: #ffffff; border: none; }")
-        
-        # Add map editor to center panel
-        center_layout = QVBoxLayout(center_panel)
-        center_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Map editor widget
-        self.map_editor = MapEditorWidget()
-        center_layout.addWidget(self.map_editor)
+        # Center panel (tabbed editor area)
+        center_panel = self.create_tabbed_editor_panel()
         
         # Right panel (inspector)
         right_panel = self.create_panel("Inspector", "#f8f9fa")
@@ -742,6 +752,233 @@ class StudioUI(QMainWindow):
         
         layout.addWidget(splitter)
         return widget
+    
+    def create_hierarchy_panel(self):
+        """Create the project hierarchy panel with map generator option"""
+        panel = QFrame()
+        panel.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa;
+                border: none;
+            }
+        """)
+        
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # Panel title
+        title_label = QLabel("Project Hierarchy")
+        title_label.setFont(QFont("Arial", 16, QFont.Weight.Medium))
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #2c3e50;
+                background: transparent;
+                padding: 10px 0px;
+                border-bottom: 2px solid rgba(74, 144, 226, 0.3);
+            }
+        """)
+        layout.addWidget(title_label)
+        
+        # Hierarchy tree
+        self.hierarchy_tree = QTreeWidget()
+        self.hierarchy_tree.setHeaderHidden(True)
+        self.hierarchy_tree.setStyleSheet("""
+            QTreeWidget {
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 4px;
+                padding: 5px;
+                color: #2c3e50;
+            }
+            QTreeWidget::item {
+                padding: 5px;
+                border-radius: 3px;
+                color: #2c3e50;
+            }
+            QTreeWidget::item:hover {
+                background: rgba(74, 144, 226, 0.1);
+                color: #2c3e50;
+            }
+            QTreeWidget::item:selected {
+                background: rgba(74, 144, 226, 0.2);
+                color: #2c3e50;
+            }
+        """)
+        
+        # Add project structure
+        self.setup_hierarchy_tree()
+        
+        # Connect context menu
+        self.hierarchy_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.hierarchy_tree.customContextMenuRequested.connect(self.show_hierarchy_context_menu)
+        
+        layout.addWidget(self.hierarchy_tree)
+        layout.addStretch()
+        
+        return panel
+
+    def setup_hierarchy_tree(self):
+        """Setup the hierarchy tree with project components"""
+        self.hierarchy_tree.clear()
+        
+        # Project root
+        project_root = QTreeWidgetItem(self.hierarchy_tree, ["Project"])
+        project_root.setExpanded(True)
+        
+        # Assets folder
+        assets_folder = QTreeWidgetItem(project_root, ["Assets"])
+        assets_folder.setExpanded(True)
+        
+        # Maps folder
+        maps_folder = QTreeWidgetItem(assets_folder, ["Maps"])
+        
+        # Tools folder
+        tools_folder = QTreeWidgetItem(project_root, ["Tools"])
+        tools_folder.setExpanded(True)
+        
+        # Map Generator tool
+        map_generator_item = QTreeWidgetItem(tools_folder, ["Map Generator"])
+        map_generator_item.setData(0, Qt.UserRole, "map_generator")
+        
+        # Scripts folder
+        scripts_folder = QTreeWidgetItem(project_root, ["Scripts"])
+        
+        # Connect double-click
+        self.hierarchy_tree.itemDoubleClicked.connect(self.on_hierarchy_item_double_clicked)
+    
+    def create_tabbed_editor_panel(self):
+        """Create the center panel with tab widget"""
+        panel = QFrame()
+        panel.setStyleSheet("QFrame { background-color: #ffffff; border: none; }")
+        
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Tab widget
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.setMovable(True)
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #e0e0e0;
+                background: #ffffff;
+            }
+            QTabBar::tab {
+                background: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                color: "#2c3e50";
+            }
+            QTabBar::tab:selected {
+                background: #ffffff;
+                border-bottom: 1px solid #ffffff;
+            }
+            QTabBar::tab:hover {
+                background: #e9ecef;
+            }
+            QTabBar::close-button {
+                image: url(data:image/png;base64,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
+        """)
+        # Connect tab close signal
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        
+        # Default welcome tab
+        welcome_widget = self.create_welcome_tab()
+        self.tab_widget.addTab(welcome_widget, "Welcome")
+        
+        layout.addWidget(self.tab_widget)
+        return panel
+    
+    def create_welcome_tab(self):
+        """Create the default welcome tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setAlignment(Qt.AlignCenter)
+        
+        welcome_label = QLabel("Welcome to the Editor")
+        welcome_label.setFont(QFont("Arial", 24, QFont.Weight.Light))
+        welcome_label.setAlignment(Qt.AlignCenter)
+        welcome_label.setStyleSheet("color: #2c3e50; margin: 40px;")
+        
+        instruction_label = QLabel("Double-click items in the hierarchy to open them as tabs")
+        instruction_label.setFont(QFont("Arial", 14))
+        instruction_label.setAlignment(Qt.AlignCenter)
+        instruction_label.setStyleSheet("color: #34495e; margin: 20px;")
+        
+        layout.addWidget(welcome_label)
+        layout.addWidget(instruction_label)
+        
+        return widget
+    
+    def show_hierarchy_context_menu(self, position: QPoint):
+        """Show context menu for hierarchy items"""
+        item = self.hierarchy_tree.itemAt(position)
+        if not item:
+            return
+            
+        item_data = item.data(0, Qt.UserRole)
+        if item_data == "map_generator":
+            menu = QMenu(self.hierarchy_tree)
+            
+            open_action = menu.addAction("Open Map Generator")
+            open_action.triggered.connect(lambda: self.open_map_generator_tab())
+            
+            menu.exec_(self.hierarchy_tree.mapToGlobal(position))
+            
+    
+    def on_hierarchy_item_double_clicked(self, item, column):
+        """Handle double-click on hierarchy items"""
+        item_data = item.data(0, Qt.UserRole)
+        
+        if item_data == "map_generator":
+            self.open_map_generator_tab()
+    
+    def open_map_generator_tab(self):
+        """Open the map generator in a new tab"""
+        tab_name = "Map Generator"
+        
+        # Check if tab is already open
+        for i in range(self.tab_widget.count()):
+            if self.tab_widget.tabText(i) == tab_name:
+                self.tab_widget.setCurrentIndex(i)
+                return
+        
+        # Create new map editor widget
+        map_editor = MapEditorWidget()
+        
+        # Add tab
+        tab_index = self.tab_widget.addTab(map_editor, tab_name)
+        self.tab_widget.setCurrentIndex(tab_index)
+        
+        # Store reference
+        self.open_tabs[tab_name] = map_editor
+        
+        print(f"Opened {tab_name} tab")
+    
+    def close_tab(self, index):
+        """Close a tab"""
+        if index == 0:  # Don't close welcome tab
+            return
+            
+        tab_name = self.tab_widget.tabText(index)
+        
+        # Remove from open tabs tracking
+        if tab_name in self.open_tabs:
+            del self.open_tabs[tab_name]
+        
+        # Remove the tab
+        widget = self.tab_widget.widget(index)
+        self.tab_widget.removeTab(index)
+        
+        # Clean up the widget
+        if widget:
+            widget.deleteLater()
+        
+        print(f"Closed {tab_name} tab")
     
     def create_panel(self, title, bg_color, is_center=False):
         panel = QFrame()
