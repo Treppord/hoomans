@@ -4,9 +4,363 @@ from pathlib import Path
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QGridLayout, QLabel, QPushButton, 
                                QScrollArea, QFrame, QSplitter, QStackedWidget,
-                               QGraphicsDropShadowEffect)
-from PySide6.QtCore import Qt, QSize, Signal, QPropertyAnimation, QEasingCurve, QRect
+                               QGraphicsDropShadowEffect, QSpinBox, QComboBox,
+                               QCheckBox, QGroupBox, QFormLayout)
+from PySide6.QtCore import Qt, QSize, Signal, QPropertyAnimation, QEasingCurve, QRect, QTimer
 from PySide6.QtGui import QFont, QPalette, QColor, QPixmap, QIcon, QPainter, QLinearGradient
+import pygame
+
+
+# Import map system components
+from engine.systems.map_system import (
+    MapSystem, MapGenerationConfig, MapGenerationType, TileType, BiomeType,
+    create_default_map_config, create_island_map_config, create_dungeon_map_config
+)
+
+class MapEditorWidget(QWidget):
+    """Map editor widget that integrates the map system"""
+    
+    def __init__(self):
+        super().__init__()
+        self.map_system = MapSystem(enable_chunking=False)
+        self.current_map_config = None
+        self.setup_ui()
+        self.setup_pygame()
+        
+    def setup_pygame(self):
+        """Initialize pygame for map rendering"""
+        pygame.init()
+        pygame.display.set_mode((1, 1), pygame.NOFRAME)  # Minimal pygame window
+        
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Left panel - Map generation controls
+        controls_panel = self.create_controls_panel()
+        controls_panel.setFixedWidth(300)
+        
+        # Right panel - Map preview/editor
+        preview_panel = self.create_preview_panel()
+        
+        layout.addWidget(controls_panel)
+        layout.addWidget(preview_panel)
+        
+    def create_controls_panel(self):
+        panel = QFrame()
+        panel.setStyleSheet("""
+            QFrame {
+                background-color: #f8f9fa;
+                border-right: 1px solid #e0e0e0;
+            }
+        """)
+        
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # Title
+        title = QLabel("Map Generator")
+        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        title.setStyleSheet("color: #2c3e50; padding: 10px 0px;")
+        layout.addWidget(title)
+        
+        # Map settings group
+        settings_group = QGroupBox("Map Settings")
+        settings_layout = QFormLayout(settings_group)
+        
+        # Map dimensions
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(32, 512)
+        self.width_spin.setValue(128)
+        settings_layout.addRow("Width:", self.width_spin)
+        
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(32, 512)
+        self.height_spin.setValue(128)
+        settings_layout.addRow("Height:", self.height_spin)
+        
+        # Generation type
+        self.gen_type_combo = QComboBox()
+        self.gen_type_combo.addItems([
+            "Procedural",
+            "Perlin Noise", 
+            "Cellular Automata",
+            "Island",
+            "Dungeon"
+        ])
+        settings_layout.addRow("Type:", self.gen_type_combo)
+        
+        # Seed
+        self.seed_spin = QSpinBox()
+        self.seed_spin.setRange(0, 999999)
+        self.seed_spin.setValue(12345)
+        settings_layout.addRow("Seed:", self.seed_spin)
+        
+        layout.addWidget(settings_group)
+        
+        # Generation options
+        options_group = QGroupBox("Options")
+        options_layout = QVBoxLayout(options_group)
+        
+        self.entity_generation_check = QCheckBox("Generate Entities")
+        self.entity_generation_check.setChecked(True)
+        options_layout.addWidget(self.entity_generation_check)
+        
+        self.add_borders_check = QCheckBox("Add Borders")
+        options_layout.addWidget(self.add_borders_check)
+        
+        layout.addWidget(options_group)
+        
+        # Generate button
+        self.generate_btn = ModernButton("Generate Map", primary=True)
+        self.generate_btn.clicked.connect(self.generate_map)
+        layout.addWidget(self.generate_btn)
+        
+        # Export buttons
+        export_group = QGroupBox("Export")
+        export_layout = QVBoxLayout(export_group)
+        
+        self.save_btn = ModernButton("Save Map")
+        self.save_btn.clicked.connect(self.save_map)
+        self.save_btn.setEnabled(False)
+        
+        self.export_image_btn = ModernButton("Export Image")
+        self.export_image_btn.clicked.connect(self.export_image)
+        self.export_image_btn.setEnabled(False)
+        
+        export_layout.addWidget(self.save_btn)
+        export_layout.addWidget(self.export_image_btn)
+        layout.addWidget(export_group)
+        
+        layout.addStretch()
+        return panel
+        
+    def create_preview_panel(self):
+        panel = QFrame()
+        panel.setStyleSheet("""
+            QFrame {
+                background-color: #ffffff;
+                border: none;
+            }
+        """)
+        
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Preview title
+        title = QLabel("Map Preview")
+        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        title.setStyleSheet("color: #2c3e50; padding: 10px 0px;")
+        layout.addWidget(title)
+        
+        # Map info
+        self.map_info_label = QLabel("No map generated")
+        self.map_info_label.setStyleSheet("color: #7f8c8d; padding: 5px 0px;")
+        layout.addWidget(self.map_info_label)
+        
+        # Preview area
+        self.preview_label = QLabel()
+        self.preview_label.setMinimumSize(400, 400)
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
+                border: 2px dashed rgba(149, 165, 166, 0.5);
+                border-radius: 8px;
+            }
+        """)
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setText("Generate a map to see preview")
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(self.preview_label)
+        scroll_area.setWidgetResizable(True)
+        layout.addWidget(scroll_area)
+        
+        return panel
+        
+    def generate_map(self):
+        """Generate a new map based on current settings"""
+        try:
+            # Get settings
+            width = self.width_spin.value()
+            height = self.height_spin.value()
+            seed = self.seed_spin.value()
+            gen_type_text = self.gen_type_combo.currentText()
+            
+            # Create config based on type
+            if gen_type_text == "Island":
+                config = create_island_map_config(width, height, seed)
+            elif gen_type_text == "Dungeon":
+                config = create_dungeon_map_config(width, height, seed)
+            else:
+                config = create_default_map_config(width, height, seed)
+                
+                # Set generation type
+                if gen_type_text == "Perlin Noise":
+                    config.generation_type = MapGenerationType.PERLIN_NOISE
+                elif gen_type_text == "Cellular Automata":
+                    config.generation_type = MapGenerationType.CELLULAR_AUTOMATA
+                else:
+                    config.generation_type = MapGenerationType.PROCEDURAL
+            
+            # Apply options
+            config.entity_generation = self.entity_generation_check.isChecked()
+            if self.add_borders_check.isChecked():
+                config.border_type = TileType.WALL
+            else:
+                config.border_type = None
+                
+            # Generate map
+            self.generate_btn.setText("Generating...")
+            self.generate_btn.setEnabled(False)
+            
+            success = self.map_system.create_map(config)
+            
+            if success:
+                self.current_map_config = config
+                self.update_preview()
+                self.update_map_info()
+                self.save_btn.setEnabled(True)
+                self.export_image_btn.setEnabled(True)
+                print("Map generated successfully!")
+            else:
+                print("Failed to generate map")
+                
+        except Exception as e:
+            print(f"Error generating map: {e}")
+        finally:
+            self.generate_btn.setText("Generate Map")
+            self.generate_btn.setEnabled(True)
+            
+    def update_preview(self):
+        """Update the map preview"""
+        try:
+            if not self.map_system.current_terrain:
+                return
+                
+            # Create a simple preview image
+            width = len(self.map_system.current_terrain[0])
+            height = len(self.map_system.current_terrain)
+            
+            # Create pygame surface for preview
+            preview_size = min(400, max(width * 2, height * 2))
+            tile_size = max(1, preview_size // max(width, height))
+            
+            surface = pygame.Surface((width * tile_size, height * tile_size))
+            
+            # Render tiles
+            for y in range(height):
+                for x in range(width):
+                    tile = self.map_system.current_terrain[y][x]
+                    color = tile._base_color if tile else (255, 255, 255)
+                    
+                    rect = pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size)
+                    pygame.draw.rect(surface, color, rect)
+            
+            # Convert pygame surface to QPixmap properly
+            w, h = surface.get_size()
+            raw = pygame.image.tobytes(surface, 'RGB')  # Use tobytes instead of tostring
+            
+            # Create QImage from raw bytes
+            from PySide6.QtGui import QImage
+            qimg = QImage(raw, w, h, QImage.Format_RGB888)
+            
+            # Convert QImage to QPixmap
+            pixmap = QPixmap.fromImage(qimg)
+            
+            # Scale pixmap to fit preview area while maintaining aspect ratio
+            scaled_pixmap = pixmap.scaled(400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            
+            # Update preview label
+            self.preview_label.setPixmap(scaled_pixmap)
+            self.preview_label.setText("")  # Clear text when showing image
+            self.preview_label.setStyleSheet("""
+                QLabel {
+                    background: #ffffff;
+                    border: 2px solid #4CAF50;
+                    border-radius: 8px;
+                }
+            """)
+            
+        except Exception as e:
+            print(f"Error updating preview: {e}")
+            self.preview_label.setText(f"Map Preview\n{width}x{height}\nGenerated successfully!")
+            self.preview_label.setStyleSheet("""
+                QLabel {
+                    background: #e8f5e8;
+                    border: 2px solid #4CAF50;
+                    border-radius: 8px;
+                    color: #2e7d32;
+                    font-weight: bold;
+                }
+            """)
+
+            
+    def update_map_info(self):
+        """Update map information display"""
+        if self.map_system.current_terrain:
+            info = self.map_system.get_map_info()
+            stats = self.map_system.get_performance_stats()
+            
+            info_text = (f"Size: {info['width']}x{info['height']} "
+                        f"({info['total_tiles']} tiles)\n"
+                        f"Generation time: {stats['generation_time']:.2f}s")
+            
+            if 'entity_tiles' in info:
+                info_text += f"\nEntities: {info['entity_tiles']}"
+                
+            self.map_info_label.setText(info_text)
+        else:
+            self.map_info_label.setText("No map generated")
+            
+    def save_map(self):
+        """Save the current map"""
+        if not self.map_system.current_terrain:
+            return
+            
+        try:
+            # Create maps directory if it doesn't exist
+            maps_dir = Path.home() / "hoomans" / "maps"
+            maps_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename
+            filename = f"map_{self.current_map_config.width}x{self.current_map_config.height}_{self.current_map_config.seed}.json"
+            filepath = maps_dir / filename
+            
+            success = self.map_system.save_map(str(filepath))
+            if success:
+                print(f"Map saved to {filepath}")
+            else:
+                print("Failed to save map")
+                
+        except Exception as e:
+            print(f"Error saving map: {e}")
+            
+    def export_image(self):
+        """Export map as image"""
+        if not self.map_system.current_terrain:
+            return
+            
+        try:
+            # Create maps directory if it doesn't exist
+            maps_dir = Path.home() / "hoomans" / "maps"
+            maps_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename
+            filename = f"map_{self.current_map_config.width}x{self.current_map_config.height}_{self.current_map_config.seed}.png"
+            filepath = maps_dir / filename
+            
+            success = self.map_system.export_map_image(str(filepath), tile_size=4)
+            if success:
+                print(f"Map image exported to {filepath}")
+            else:
+                print("Failed to export map image")
+                
+        except Exception as e:
+            print(f"Error exporting map image: {e}")
 
 class ProjectCard(QFrame):
     projectSelected = Signal(str)
@@ -362,8 +716,17 @@ class StudioUI(QMainWindow):
         left_panel.setMinimumWidth(280)
         left_panel.setMaximumWidth(400)
         
-        # Center panel (main editor)
-        center_panel = self.create_panel("Scene View", "#ffffff", is_center=True)
+        # Center panel (map editor)
+        center_panel = QFrame()
+        center_panel.setStyleSheet("QFrame { background-color: #ffffff; border: none; }")
+        
+        # Add map editor to center panel
+        center_layout = QVBoxLayout(center_panel)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Map editor widget
+        self.map_editor = MapEditorWidget()
+        center_layout.addWidget(self.map_editor)
         
         # Right panel (inspector)
         right_panel = self.create_panel("Inspector", "#f8f9fa")
@@ -379,7 +742,7 @@ class StudioUI(QMainWindow):
         
         layout.addWidget(splitter)
         return widget
-        
+    
     def create_panel(self, title, bg_color, is_center=False):
         panel = QFrame()
         panel.setStyleSheet(f"""
