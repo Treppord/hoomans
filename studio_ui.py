@@ -9,7 +9,17 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QSize, Signal, QPropertyAnimation, QEasingCurve, QRect, QTimer
 from PySide6.QtGui import QFont, QPalette, QColor, QPixmap, QIcon, QPainter, QLinearGradient
 import pygame
+from PySide6.QtWidgets import QSlider
+import random
 
+# Import the map creator components
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+from world.tile import Tile
+from world.map import WorldMap
+from world.entity_tile import EntityTileManager, TreeEntityTile, HouseEntityTile
+from world.biome_generator import ProceduralMapGenerator, BiomeType
 from PySide6.QtWidgets import QTabWidget, QTreeWidget, QTreeWidgetItem, QMenu
 from PySide6.QtCore import QPoint
 
@@ -20,37 +30,140 @@ from engine.systems.map_system import (
     create_default_map_config, create_island_map_config, create_dungeon_map_config
 )
 
+class CanvasWidget(QWidget):
+    def __init__(self, map_editor):
+        super().__init__()
+        self.map_editor = map_editor
+        self.pixmap = None
+        self.setMouseTracking(True)
+        
+    def paintEvent(self, event):
+        if self.pixmap:
+            painter = QPainter(self)
+            painter.drawPixmap(0, 0, self.pixmap)
+        else:
+            # Draw placeholder text
+            painter = QPainter(self)
+            painter.setPen(QColor("#2c3e50"))
+            painter.drawText(self.rect(), Qt.AlignCenter, "Map Canvas\nGenerate or create a new map to begin")
+            
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.map_editor.mouse_pressed = True
+            # Use position() instead of deprecated pos()
+            self.map_editor.paint_at_position(event.position().toPoint())
+            
+    def mouseMoveEvent(self, event):
+        if self.map_editor.mouse_pressed:
+            # Use position() instead of deprecated pos()
+            self.map_editor.paint_at_position(event.position().toPoint())
+            
+    def mouseReleaseEvent(self, event):
+        self.map_editor.mouse_pressed = False
+        self.map_editor.last_paint_pos = None
+        
+    def set_pixmap(self, pixmap):
+        self.pixmap = pixmap
+        self.setMinimumSize(pixmap.size())
+        self.update()
+        
 class MapEditorWidget(QWidget):
-    """Map editor widget that integrates the map system"""
+    """Enhanced map editor widget with full tile and entity placement capabilities"""
     
     def __init__(self):
         super().__init__()
-        self.map_system = MapSystem(enable_chunking=False)
-        self.current_map_config = None
+        self.world_map = None
+        self.current_tool = "tile_brush"
+        self.selected_tile_type = "grass"
+        self.selected_entity_type = "tree"
+        self.grid_visible = True
+        self.zoom_level = 1.0
+        self.camera_x = 0
+        self.camera_y = 0
+        self.mouse_pressed = False
+        self.last_paint_pos = None
+        
+        # Available tiles and entities
+        self.available_tiles = [
+            "empty", "wall", "grass", "water", "sand", "forest", 
+            "mountain", "deep_water", "shallow_water", "rock", "path", "snow"
+        ]
+        self.available_entities = ["tree", "house"]
+        
         self.setup_ui()
         self.setup_pygame()
         
     def setup_pygame(self):
         """Initialize pygame for map rendering"""
         pygame.init()
-        pygame.display.set_mode((1, 1), pygame.NOFRAME)  # Minimal pygame window
+        # Initialize display properly for entity image loading
+        pygame.display.set_mode((1, 1), pygame.HIDDEN)
+        # Create a surface for rendering
+        self.pygame_screen = pygame.Surface((800, 600))
+        
+        # Fix entity textures for multi-tile entities
+        self.fix_entity_textures()
+
+    def fix_entity_textures(self):
+        """Fix entity textures to proper multi-tile sizes"""
+        from world.entity_tile import IMAGES
+        
+        # Fix tree texture (should be 16x32 for 1x2 tiles)
+        if "tree" in IMAGES:
+            tree_img = IMAGES["tree"]
+            if tree_img.get_width() == 16 and tree_img.get_height() == 16:
+                # Scale to proper tree size (16x32)
+                new_tree = pygame.Surface((16, 32), pygame.SRCALPHA)
+                new_tree.fill((0, 0, 0, 0))  # Transparent
+                # Put the tree image in the bottom half (trunk area)
+                new_tree.blit(tree_img, (0, 16))
+                # Create leaves in the top half
+                leaves_surface = pygame.Surface((16, 16), pygame.SRCALPHA)
+                leaves_surface.fill((0, 120, 0, 180))  # Semi-transparent green
+                new_tree.blit(leaves_surface, (0, 0))
+                IMAGES["tree"] = new_tree
+                print("Fixed tree texture to 16x32")
+        
+        # Fix house texture (should be 32x32 for 2x2 tiles)
+        if "house" in IMAGES:
+            house_img = IMAGES["house"]
+            if house_img.get_width() == 16 and house_img.get_height() == 16:
+                # Scale to proper house size (32x32)
+                new_house = pygame.Surface((32, 32), pygame.SRCALPHA)
+                new_house.fill((0, 0, 0, 0))  # Transparent
+                
+                # Create a simple house pattern
+                # Roof (top half)
+                roof_color = (139, 69, 19)  # Brown
+                pygame.draw.rect(new_house, roof_color, (0, 0, 32, 16))
+                
+                # Walls (bottom half)
+                wall_color = (160, 82, 45)  # Saddle brown
+                pygame.draw.rect(new_house, wall_color, (0, 16, 32, 16))
+                
+                # Door (bottom right)
+                door_color = (101, 67, 33)  # Dark brown
+                pygame.draw.rect(new_house, door_color, (20, 20, 8, 12))
+                
+                IMAGES["house"] = new_house
+                print("Fixed house texture to 32x32")
         
     def setup_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Left panel - Map generation controls
-        controls_panel = self.create_controls_panel()
-        controls_panel.setFixedWidth(300)
+        # Left panel - Enhanced controls
+        controls_panel = self.create_enhanced_controls_panel()
+        controls_panel.setFixedWidth(320)
         
-        # Right panel - Map preview/editor
-        preview_panel = self.create_preview_panel()
+        # Right panel - Map canvas
+        canvas_panel = self.create_canvas_panel()
         
         layout.addWidget(controls_panel)
-        layout.addWidget(preview_panel)
+        layout.addWidget(canvas_panel)
         
-    def create_controls_panel(self):
+    def create_enhanced_controls_panel(self):
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
@@ -60,6 +173,12 @@ class MapEditorWidget(QWidget):
             QGroupBox {
                 color: #2c3e50;
                 font-weight: bold;
+                margin-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
             }
             QLabel {
                 color: #2c3e50;
@@ -67,94 +186,170 @@ class MapEditorWidget(QWidget):
             QSpinBox, QComboBox {
                 color: #2c3e50;
                 background: white;
+                border: 1px solid #ddd;
+                padding: 5px;
+                border-radius: 3px;
             }
             QCheckBox {
                 color: #2c3e50;
             }
+            QPushButton {
+                color: #2c3e50;
+                background: white;
+                border: 1px solid #ddd;
+                padding: 8px;
+                border-radius: 3px;
+            }
+            QPushButton:checked {
+                background: #4A90E2;
+                color: white;
+            }
         """)
         
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
         
         # Title
-        title = QLabel("Map Generator")
+        title = QLabel("Map Editor")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; padding: 10px 0px;")
         layout.addWidget(title)
         
-        # Map settings group
-        settings_group = QGroupBox("Map Settings")
-        settings_layout = QFormLayout(settings_group)
+        # Tools section
+        tools_group = QGroupBox("Tools")
+        tools_layout = QVBoxLayout(tools_group)
         
-        # Map dimensions
+        self.tool_buttons = {}
+        tools = [
+            ("tile_brush", "🖌️ Tile Brush"),
+            ("entity_placer", "🏠 Entity Placer"),
+            ("eraser", "🗑️ Eraser"),
+            ("selector", "👆 Selector"),
+            ("fill", "🪣 Fill Tool")
+        ]
+        
+        for tool_id, tool_name in tools:
+            btn = QPushButton(tool_name)
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, t=tool_id: self.select_tool(t))
+            self.tool_buttons[tool_id] = btn
+            tools_layout.addWidget(btn)
+            
+        # Set default tool
+        self.tool_buttons["tile_brush"].setChecked(True)
+        layout.addWidget(tools_group)
+        
+        # Tile palette
+        tiles_group = QGroupBox("Tile Palette")
+        tiles_layout = QGridLayout(tiles_group)
+        
+        self.tile_buttons = {}
+        for i, tile_type in enumerate(self.available_tiles):
+            btn = QPushButton(tile_type.replace("_", " ").title())
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, t=tile_type: self.select_tile(t))
+            self.tile_buttons[tile_type] = btn
+            tiles_layout.addWidget(btn, i // 3, i % 3)
+            
+        # Set default tile
+        self.tile_buttons["grass"].setChecked(True)
+        layout.addWidget(tiles_group)
+        
+        # Entity palette
+        entities_group = QGroupBox("Entity Palette")
+        entities_layout = QVBoxLayout(entities_group)
+        
+        self.entity_buttons = {}
+        for entity_type in self.available_entities:
+            btn = QPushButton(entity_type.replace("_", " ").title())
+            btn.setCheckable(True)
+            btn.clicked.connect(lambda checked, e=entity_type: self.select_entity(e))
+            self.entity_buttons[entity_type] = btn
+            entities_layout.addWidget(btn)
+            
+        # Set default entity
+        self.entity_buttons["tree"].setChecked(True)
+        layout.addWidget(entities_group)
+        
+        # Map generation section
+        generation_group = QGroupBox("Map Generation")
+        gen_layout = QFormLayout(generation_group)
+        
         self.width_spin = QSpinBox()
         self.width_spin.setRange(32, 512)
         self.width_spin.setValue(128)
-        settings_layout.addRow("Width:", self.width_spin)
+        gen_layout.addRow("Width:", self.width_spin)
         
         self.height_spin = QSpinBox()
         self.height_spin.setRange(32, 512)
         self.height_spin.setValue(128)
-        settings_layout.addRow("Height:", self.height_spin)
+        gen_layout.addRow("Height:", self.height_spin)
         
-        # Generation type
-        self.gen_type_combo = QComboBox()
-        self.gen_type_combo.addItems([
-            "Procedural",
-            "Perlin Noise", 
-            "Cellular Automata",
-            "Island",
-            "Dungeon"
-        ])
-        settings_layout.addRow("Type:", self.gen_type_combo)
-        
-        # Seed
         self.seed_spin = QSpinBox()
         self.seed_spin.setRange(0, 999999)
-        self.seed_spin.setValue(12345)
-        settings_layout.addRow("Seed:", self.seed_spin)
+        self.seed_spin.setValue(random.randint(0, 999999))
+        gen_layout.addRow("Seed:", self.seed_spin)
         
-        layout.addWidget(settings_group)
-        
-        # Generation options
-        options_group = QGroupBox("Options")
-        options_layout = QVBoxLayout(options_group)
-        
-        self.entity_generation_check = QCheckBox("Generate Entities")
-        self.entity_generation_check.setChecked(True)
-        options_layout.addWidget(self.entity_generation_check)
-        
-        self.add_borders_check = QCheckBox("Add Borders")
-        options_layout.addWidget(self.add_borders_check)
-        
-        layout.addWidget(options_group)
-        
-        # Generate button
         self.generate_btn = ModernButton("Generate Map", primary=True)
-        self.generate_btn.clicked.connect(self.generate_map)
-        layout.addWidget(self.generate_btn)
+        self.generate_btn.clicked.connect(self.generate_new_map)
+        gen_layout.addWidget(self.generate_btn)
         
-        # Export buttons
-        export_group = QGroupBox("Export")
-        export_layout = QVBoxLayout(export_group)
+        layout.addWidget(generation_group)
+        
+        # View controls
+        view_group = QGroupBox("View Controls")
+        view_layout = QVBoxLayout(view_group)
+        
+        self.grid_checkbox = QCheckBox("Show Grid")
+        self.grid_checkbox.setChecked(True)
+        self.grid_checkbox.toggled.connect(self.toggle_grid)
+        view_layout.addWidget(self.grid_checkbox)
+        
+        zoom_layout = QHBoxLayout()
+        zoom_layout.addWidget(QLabel("Zoom:"))
+        self.zoom_slider = QSlider(Qt.Horizontal)
+        self.zoom_slider.setRange(25, 400)
+        self.zoom_slider.setValue(100)
+        self.zoom_slider.valueChanged.connect(self.update_zoom)
+        zoom_layout.addWidget(self.zoom_slider)
+        view_layout.addLayout(zoom_layout)
+        
+        layout.addWidget(view_group)
+        
+        # File operations
+        file_group = QGroupBox("File Operations")
+        file_layout = QVBoxLayout(file_group)
+        
+        self.new_btn = ModernButton("New Map")
+        self.new_btn.clicked.connect(self.new_map)
+        file_layout.addWidget(self.new_btn)
         
         self.save_btn = ModernButton("Save Map")
         self.save_btn.clicked.connect(self.save_map)
         self.save_btn.setEnabled(False)
+        file_layout.addWidget(self.save_btn)
         
-        self.export_image_btn = ModernButton("Export Image")
-        self.export_image_btn.clicked.connect(self.export_image)
-        self.export_image_btn.setEnabled(False)
+        self.load_btn = ModernButton("Load Map")
+        self.load_btn.clicked.connect(self.load_map)
+        file_layout.addWidget(self.load_btn)
         
-        export_layout.addWidget(self.save_btn)
-        export_layout.addWidget(self.export_image_btn)
-        layout.addWidget(export_group)
+        self.export_btn = ModernButton("Export Image")
+        self.export_btn.clicked.connect(self.export_image)
+        self.export_btn.setEnabled(False)
+        file_layout.addWidget(self.export_btn)
+        
+        layout.addWidget(file_group)
         
         layout.addStretch()
-        return panel
         
-    def create_preview_panel(self):
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        return scroll_area
+        
+    def create_canvas_panel(self):
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
@@ -164,220 +359,489 @@ class MapEditorWidget(QWidget):
         """)
         
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(10, 10, 10, 10)
         
-        # Preview title
-        title = QLabel("Map Preview")
-        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        title.setStyleSheet("color: #2c3e50; padding: 10px 0px;")
-        layout.addWidget(title)
+        # Canvas info
+        self.canvas_info = QLabel("Create or generate a map to start editing")
+        self.canvas_info.setStyleSheet("color: #2c3e50; padding: 5px 0px;")
+        layout.addWidget(self.canvas_info)
         
-        # Map info
-        self.map_info_label = QLabel("No map generated")
-        self.map_info_label.setStyleSheet("color: #7f8c8d; padding: 5px 0px;")
-        layout.addWidget(self.map_info_label)
-        
-        # Preview area
-        self.preview_label = QLabel()
-        self.preview_label.setMinimumSize(400, 400)
-        self.preview_label.setStyleSheet("""
-            QLabel {
+        # Create a custom widget for the canvas that properly handles mouse events
+        self.canvas_widget = CanvasWidget(self)
+        self.canvas_widget.setMinimumSize(600, 400)
+        self.canvas_widget.setStyleSheet("""
+            QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 #f8f9fa, stop:1 #e9ecef);
                 border: 2px dashed rgba(149, 165, 166, 0.5);
                 border-radius: 8px;
             }
         """)
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setText("Generate a map to see preview")
         
         scroll_area = QScrollArea()
-        scroll_area.setWidget(self.preview_label)
+        scroll_area.setWidget(self.canvas_widget)
         scroll_area.setWidgetResizable(True)
         layout.addWidget(scroll_area)
         
         return panel
+
         
-    def generate_map(self):
-        """Generate a new map based on current settings"""
+    def select_tool(self, tool_id):
+        """Select a tool and update UI"""
+        self.current_tool = tool_id
+        for tool, btn in self.tool_buttons.items():
+            btn.setChecked(tool == tool_id)
+            
+    def select_tile(self, tile_type):
+        """Select a tile type"""
+        self.selected_tile_type = tile_type
+        for tile, btn in self.tile_buttons.items():
+            btn.setChecked(tile == tile_type)
+            
+    def select_entity(self, entity_type):
+        """Select an entity type"""
+        self.selected_entity_type = entity_type
+        for entity, btn in self.entity_buttons.items():
+            btn.setChecked(entity == entity_type)
+            
+    def toggle_grid(self, enabled):
+        """Toggle grid visibility"""
+        self.grid_visible = enabled
+        self.update_canvas()
+        
+    def update_zoom(self, value):
+        """Update zoom level"""
+        self.zoom_level = value / 100.0
+        self.update_canvas()
+        
+    def generate_new_map(self):
+        """Generate a new map using the biome generator"""
         try:
-            # Get settings
             width = self.width_spin.value()
             height = self.height_spin.value()
             seed = self.seed_spin.value()
-            gen_type_text = self.gen_type_combo.currentText()
             
-            # Create config based on type
-            if gen_type_text == "Island":
-                config = create_island_map_config(width, height, seed)
-            elif gen_type_text == "Dungeon":
-                config = create_dungeon_map_config(width, height, seed)
-            else:
-                config = create_default_map_config(width, height, seed)
-                
-                # Set generation type
-                if gen_type_text == "Perlin Noise":
-                    config.generation_type = MapGenerationType.PERLIN_NOISE
-                elif gen_type_text == "Cellular Automata":
-                    config.generation_type = MapGenerationType.CELLULAR_AUTOMATA
-                else:
-                    config.generation_type = MapGenerationType.PROCEDURAL
-            
-            # Apply options
-            config.entity_generation = self.entity_generation_check.isChecked()
-            if self.add_borders_check.isChecked():
-                config.border_type = TileType.WALL
-            else:
-                config.border_type = None
-                
-            # Generate map
             self.generate_btn.setText("Generating...")
             self.generate_btn.setEnabled(False)
             
-            success = self.map_system.create_map(config)
+            # Create new world map
+            self.world_map = WorldMap(width, height)
             
-            if success:
-                self.current_map_config = config
-                self.update_preview()
-                self.update_map_info()
-                self.save_btn.setEnabled(True)
-                self.export_image_btn.setEnabled(True)
-                print("Map generated successfully!")
-            else:
-                print("Failed to generate map")
-                
+            # Generate realistic map
+            self.world_map.generate_realistic_map(seed=seed)
+            
+            # Initialize entity system after map generation
+            if hasattr(self.world_map, 'initialize_entity_tiles'):
+                self.world_map.initialize_entity_tiles()
+            
+            self.update_canvas()
+            self.update_canvas_info()
+            self.save_btn.setEnabled(True)
+            self.export_btn.setEnabled(True)
+            
+            print(f"Generated {width}x{height} map with seed {seed}")
+
+            
         except Exception as e:
             print(f"Error generating map: {e}")
         finally:
             self.generate_btn.setText("Generate Map")
             self.generate_btn.setEnabled(True)
-            
-    def update_preview(self):
-        """Update the map preview"""
+
+    def new_map(self):
+        """Create a new empty map"""
         try:
-            if not self.map_system.current_terrain:
-                return
-                
-            # Create a simple preview image
-            width = len(self.map_system.current_terrain[0])
-            height = len(self.map_system.current_terrain)
+            width = self.width_spin.value()
+            height = self.height_spin.value()
             
-            # Create pygame surface for preview
-            preview_size = min(400, max(width * 2, height * 2))
-            tile_size = max(1, preview_size // max(width, height))
+            # Create new world map with grass tiles
+            self.world_map = WorldMap(width, height)
+            self.world_map.initialize_entity_tiles()
             
-            surface = pygame.Surface((width * tile_size, height * tile_size))
-            
-            # Render tiles
+            # Fill with grass
             for y in range(height):
                 for x in range(width):
-                    tile = self.map_system.current_terrain[y][x]
-                    color = tile._base_color if tile else (255, 255, 255)
+                    self.world_map.set_tile(x, y, "grass")
                     
-                    rect = pygame.Rect(x * tile_size, y * tile_size, tile_size, tile_size)
-                    pygame.draw.rect(surface, color, rect)
+            self.update_canvas()
+            self.update_canvas_info()
+            self.save_btn.setEnabled(True)
+            self.export_btn.setEnabled(True)
             
-            # Convert pygame surface to QPixmap properly
-            w, h = surface.get_size()
-            raw = pygame.image.tobytes(surface, 'RGB')  # Use tobytes instead of tostring
-            
-            # Create QImage from raw bytes
-            from PySide6.QtGui import QImage
-            qimg = QImage(raw, w, h, QImage.Format_RGB888)
-            
-            # Convert QImage to QPixmap
-            pixmap = QPixmap.fromImage(qimg)
-            
-            # Scale pixmap to fit preview area while maintaining aspect ratio
-            scaled_pixmap = pixmap.scaled(400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            
-            # Update preview label
-            self.preview_label.setPixmap(scaled_pixmap)
-            self.preview_label.setText("")  # Clear text when showing image
-            self.preview_label.setStyleSheet("""
-                QLabel {
-                    background: #ffffff;
-                    border: 2px solid #4CAF50;
-                    border-radius: 8px;
-                }
-            """)
+            print(f"Created new {width}x{height} map")
             
         except Exception as e:
-            print(f"Error updating preview: {e}")
-            self.preview_label.setText(f"Map Preview\n{width}x{height}\nGenerated successfully!")
-            self.preview_label.setStyleSheet("""
-                QLabel {
-                    background: #e8f5e8;
-                    border: 2px solid #4CAF50;
-                    border-radius: 8px;
-                    color: #2e7d32;
-                    font-weight: bold;
-                }
-            """)
+            print(f"Error creating new map: {e}")
+
+    def paint_at_position(self, pos):
+        """Paint at the given position based on current tool"""
+        if not self.world_map:
+            return
+            
+        # Convert screen position to tile coordinates
+        tile_x = int((pos.x() - self.camera_x) / (Tile.SIZE * self.zoom_level))
+        tile_y = int((pos.y() - self.camera_y) / (Tile.SIZE * self.zoom_level))
+        
+        # Check bounds
+        if not (0 <= tile_x < self.world_map.width and 0 <= tile_y < self.world_map.height):
+            return
+            
+        # Avoid painting same position repeatedly
+        current_pos = (tile_x, tile_y)
+        if self.last_paint_pos == current_pos:
+            return
+        self.last_paint_pos = current_pos
+        
+        try:
+            if self.current_tool == "tile_brush":
+                self.world_map.set_tile(tile_x, tile_y, self.selected_tile_type)
+                
+            elif self.current_tool == "entity_placer":
+                # Check and initialize entity manager if needed
+                if not hasattr(self.world_map, 'entity_manager') or self.world_map.entity_manager is None:
+                    print("Entity manager not found, creating new one...")
+                    from world.entity_tile import EntityTileManager
+                    self.world_map.entity_manager = EntityTileManager(self.world_map)
+                    print("Created new entity manager")
+                
+                # Verify entity manager is working
+                if hasattr(self.world_map, 'entity_manager') and self.world_map.entity_manager is not None:
+                    print(f"Entity manager available with {len(self.world_map.entity_manager.entity_tiles)} existing entities")
+                    
+                    # Remove existing entity at this position first
+                    existing_entity = self.world_map.entity_manager.get_entity_tile_at(tile_x, tile_y)
+                    if existing_entity:
+                        self.world_map.entity_manager.remove_entity_tile(existing_entity)
+                        print(f"Removed existing entity at ({tile_x}, {tile_y})")
+                    
+                    # Create and place new entity
+                    entity = None
+                    can_place = False
+                    
+                    if self.selected_entity_type == "tree":
+                        # Tree is 1x2 (width x height)
+                        print(f"Attempting to place tree at ({tile_x}, {tile_y})")
+                        
+                        # Check if we have space for the tree
+                        if (tile_x >= 0 and tile_x < self.world_map.width and 
+                            tile_y >= 0 and tile_y + 1 < self.world_map.height):
+                            
+                            entity = TreeEntityTile(tile_x, tile_y)
+                            print(f"Created tree entity at ({tile_x}, {tile_y})")
+                            print(f"Tree will occupy positions: {entity.get_all_positions()}")
+                            
+                            # Check if both positions are clear
+                            can_place = True
+                            for pos in entity.get_all_positions():
+                                existing = self.world_map.entity_manager.get_entity_tile_at(pos[0], pos[1])
+                                if existing:
+                                    can_place = False
+                                    print(f"Position ({pos[0]}, {pos[1]}) is occupied by {existing.__class__.__name__}")
+                                    break
+                            
+                            if can_place:
+                                print("All positions are clear for tree")
+                        else:
+                            print(f"Not enough space for tree at ({tile_x}, {tile_y}) - map bounds check failed")
+                            
+                    elif self.selected_entity_type == "house":
+                        # House is 2x2 (width x height)
+                        print(f"Attempting to place house at ({tile_x}, {tile_y})")
+                        
+                        # Check if we have space for the house
+                        if (tile_x >= 0 and tile_x + 1 < self.world_map.width and 
+                            tile_y >= 0 and tile_y + 1 < self.world_map.height):
+                            
+                            entity = HouseEntityTile(tile_x, tile_y)
+                            print(f"Created house entity at ({tile_x}, {tile_y})")
+                            print(f"House will occupy positions: {entity.get_all_positions()}")
+                            
+                            # Check if all 4 positions are clear
+                            can_place = True
+                            for pos in entity.get_all_positions():
+                                existing = self.world_map.entity_manager.get_entity_tile_at(pos[0], pos[1])
+                                if existing:
+                                    can_place = False
+                                    print(f"Position ({pos[0]}, {pos[1]}) is occupied by {existing.__class__.__name__}")
+                                    break
+                            
+                            if can_place:
+                                print("All positions are clear for house")
+                        else:
+                            print(f"Not enough space for house at ({tile_x}, {tile_y}) - map bounds check failed")
+                    
+                    # Place the entity if we can
+                    if entity and can_place:
+                        try:
+                            self.world_map.entity_manager.add_entity_tile(entity)
+                            print(f"Successfully placed {self.selected_entity_type} at ({tile_x}, {tile_y})")
+                            print(f"Entity manager now has {len(self.world_map.entity_manager.entity_tiles)} entities")
+                        except Exception as e:
+                            print(f"Error adding entity to manager: {e}")
+                    elif entity:
+                        print(f"Cannot place {self.selected_entity_type} - area occupied or insufficient space")
+                    else:
+                        print(f"Failed to create {self.selected_entity_type} entity")
+                else:
+                    print("Entity manager still not available after initialization attempt")
+                        
+            elif self.current_tool == "eraser":
+                # Remove entity if present
+                if hasattr(self.world_map, 'entity_manager') and self.world_map.entity_manager:
+                    existing_entity = self.world_map.entity_manager.get_entity_tile_at(tile_x, tile_y)
+                    if existing_entity:
+                        self.world_map.entity_manager.remove_entity_tile(existing_entity)
+                        print(f"Removed entity at ({tile_x}, {tile_y})")
+                # Set to empty tile
+                self.world_map.set_tile(tile_x, tile_y, "empty")
+                
+            elif self.current_tool == "selector":
+                # Get tile and entity info
+                tile = self.world_map.get_tile(tile_x, tile_y)
+                print(f"Selected tile at ({tile_x}, {tile_y}): {tile.type if tile else 'None'}")
+                
+                if hasattr(self.world_map, 'entity_manager') and self.world_map.entity_manager:
+                    entity = self.world_map.entity_manager.get_entity_tile_at(tile_x, tile_y)
+                    if entity:
+                        print(f"Entity: {entity.__class__.__name__} at base ({entity.base_x}, {entity.base_y})")
+                        print(f"Entity positions: {entity.get_all_positions()}")
+                
+            elif self.current_tool == "fill":
+                self.flood_fill(tile_x, tile_y, self.selected_tile_type)
+                
+            self.update_canvas()
+            
+        except Exception as e:
+            print(f"Error painting at position: {e}")
+            import traceback
+            traceback.print_exc()
 
             
-    def update_map_info(self):
-        """Update map information display"""
-        if self.map_system.current_terrain:
-            info = self.map_system.get_map_info()
-            stats = self.map_system.get_performance_stats()
+    def flood_fill(self, start_x, start_y, new_tile_type):
+        """Flood fill algorithm for fill tool"""
+        if not self.world_map:
+            return
             
-            info_text = (f"Size: {info['width']}x{info['height']} "
-                        f"({info['total_tiles']} tiles)\n"
-                        f"Generation time: {stats['generation_time']:.2f}s")
+        original_tile = self.world_map.get_tile(start_x, start_y)
+        if not original_tile or original_tile.type == new_tile_type:
+            return
             
-            if 'entity_tiles' in info:
-                info_text += f"\nEntities: {info['entity_tiles']}"
+        original_type = original_tile.type
+        stack = [(start_x, start_y)]
+        filled = set()
+        
+        while stack and len(filled) < 1000:  # Limit to prevent infinite loops
+            x, y = stack.pop()
+            
+            if (x, y) in filled:
+                continue
                 
-            self.map_info_label.setText(info_text)
-        else:
-            self.map_info_label.setText("No map generated")
+            if not (0 <= x < self.world_map.width and 0 <= y < self.world_map.height):
+                continue
+                
+            tile = self.world_map.get_tile(x, y)
+            if not tile or tile.type != original_type:
+                continue
+                
+            # Fill this tile
+            self.world_map.set_tile(x, y, new_tile_type)
+            filled.add((x, y))
             
-    def save_map(self):
-        """Save the current map"""
-        if not self.map_system.current_terrain:
+            # Add neighbors to stack
+            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                stack.append((x + dx, y + dy))
+                    
+    def update_canvas(self):
+        """Update the canvas display"""
+        if not self.world_map:
             return
             
         try:
-            # Create maps directory if it doesn't exist
+            # Calculate canvas size
+            canvas_width = int(self.world_map.width * Tile.SIZE * self.zoom_level)
+            canvas_height = int(self.world_map.height * Tile.SIZE * self.zoom_level)
+            
+            # Create pygame surface
+            surface = pygame.Surface((canvas_width, canvas_height))
+            surface.fill((255, 255, 255))  # White background
+            
+            # Render tiles
+            tile_size = int(Tile.SIZE * self.zoom_level)
+            for y in range(self.world_map.height):
+                for x in range(self.world_map.width):
+                    tile = self.world_map.get_tile(x, y)
+                    if tile:
+                        screen_x = x * tile_size
+                        screen_y = y * tile_size
+                        tile.render(surface, screen_x, screen_y, tile_size, tile_size)
+            
+            # Render entities using the entity manager
+            if hasattr(self.world_map, 'entity_manager') and self.world_map.entity_manager:
+                # Create a simple camera object for entity rendering
+                class SimpleCamera:
+                    def apply(self, world_x, world_y, width, height):
+                        return (int(world_x * self.zoom_level), 
+                            int(world_y * self.zoom_level), 
+                            int(width * self.zoom_level), 
+                            int(height * self.zoom_level))
+                
+                camera = SimpleCamera()
+                camera.zoom_level = self.zoom_level
+                
+                # Render all entity tiles
+                for entity in self.world_map.entity_manager.entity_tiles:
+                    entity.render(surface, camera)
+            
+            # Render grid if enabled
+            if self.grid_visible and self.zoom_level >= 0.5:
+                self.render_grid(surface, tile_size)
+            
+            # Convert to QPixmap
+            w, h = surface.get_size()
+            raw = pygame.image.tobytes(surface, 'RGB')
+            
+            from PySide6.QtGui import QImage
+            qimg = QImage(raw, w, h, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            
+            # Update canvas widget
+            self.canvas_widget.set_pixmap(pixmap)
+            
+        except Exception as e:
+            print(f"Error updating canvas: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def render_grid(self, surface, tile_size):
+        """Render grid lines on the surface"""
+        grid_color = (200, 200, 200)  # Light gray
+        
+        # Vertical lines
+        for x in range(0, self.world_map.width + 1):
+            start_pos = (x * tile_size, 0)
+            end_pos = (x * tile_size, self.world_map.height * tile_size)
+            pygame.draw.line(surface, grid_color, start_pos, end_pos, 1)
+            
+        # Horizontal lines
+        for y in range(0, self.world_map.height + 1):
+            start_pos = (0, y * tile_size)
+            end_pos = (self.world_map.width * tile_size, y * tile_size)
+            pygame.draw.line(surface, grid_color, start_pos, end_pos, 1)
+            
+    def update_canvas_info(self):
+        """Update canvas information display"""
+        if self.world_map:
+            # Get entity count from entity manager
+            entity_count = 0
+            if hasattr(self.world_map, 'entity_manager') and self.world_map.entity_manager:
+                entity_count = len(self.world_map.entity_manager.entity_tiles)
+                
+            info_text = (f"Map: {self.world_map.width}x{self.world_map.height} "
+                        f"| Entities: {entity_count} "
+                        f"| Zoom: {int(self.zoom_level * 100)}%")
+            self.canvas_info.setText(info_text)
+        else:
+            self.canvas_info.setText("No map loaded")
+
+            
+    def save_map(self):
+        """Save the current map using existing compression system"""
+        if not self.world_map:
+            return
+            
+        try:
+            # Create maps directory
             maps_dir = Path.home() / "hoomans" / "maps"
             maps_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate filename
-            filename = f"map_{self.current_map_config.width}x{self.current_map_config.height}_{self.current_map_config.seed}.json"
+            filename = f"map_{self.world_map.width}x{self.world_map.height}_{random.randint(1000, 9999)}.json"
             filepath = maps_dir / filename
             
-            success = self.map_system.save_map(str(filepath))
-            if success:
-                print(f"Map saved to {filepath}")
-            else:
-                print("Failed to save map")
-                
+            # Use the existing save_to_file method which handles compression
+            self.world_map.save_to_file(str(filepath))
+            
+            print(f"Map saved to {filepath}")
+            
         except Exception as e:
             print(f"Error saving map: {e}")
             
+    def load_map(self):
+        """Load a map using existing decompression system"""
+        try:
+            maps_dir = Path.home() / "hoomans" / "maps"
+            if not maps_dir.exists():
+                print("No maps directory found")
+                return
+                
+            # Get first available map (simplified)
+            map_files = list(maps_dir.glob("*.json"))
+            if not map_files:
+                print("No map files found")
+                return
+                
+            filepath = map_files[0]  # Load first map found
+            
+            # Create new world map and use existing load_from_file method
+            self.world_map = WorldMap(1, 1)  # Temporary size, will be updated by load
+            success = self.world_map.load_from_file(str(filepath))
+            
+            if success:
+                self.world_map.initialize_entity_tiles()  # Initialize entity system
+                self.update_canvas()
+                self.update_canvas_info()
+                self.save_btn.setEnabled(True)
+                self.export_btn.setEnabled(True)
+                print(f"Map loaded from {filepath}")
+            else:
+                print("Failed to load map")
+                
+        except Exception as e:
+            print(f"Error loading map: {e}")
+            
     def export_image(self):
-        """Export map as image"""
-        if not self.map_system.current_terrain:
+        """Export map as PNG image"""
+        if not self.world_map:
             return
             
         try:
-            # Create maps directory if it doesn't exist
             maps_dir = Path.home() / "hoomans" / "maps"
             maps_dir.mkdir(parents=True, exist_ok=True)
             
-            # Generate filename
-            filename = f"map_{self.current_map_config.width}x{self.current_map_config.height}_{self.current_map_config.seed}.png"
+            filename = f"map_{self.world_map.width}x{self.world_map.height}_{random.randint(1000, 9999)}.png"
             filepath = maps_dir / filename
             
-            success = self.map_system.export_map_image(str(filepath), tile_size=4)
-            if success:
-                print(f"Map image exported to {filepath}")
-            else:
-                print("Failed to export map image")
-                
+            # Create high-resolution surface for export
+            export_tile_size = 16  # Fixed size for export
+            surface = pygame.Surface((
+                self.world_map.width * export_tile_size,
+                self.world_map.height * export_tile_size
+            ))
+            
+            # Render tiles
+            for y in range(self.world_map.height):
+                for x in range(self.world_map.width):
+                    tile = self.world_map.get_tile(x, y)
+                    if tile:
+                        screen_x = x * export_tile_size
+                        screen_y = y * export_tile_size
+                        tile.render(surface, screen_x, screen_y, export_tile_size, export_tile_size)
+            
+            # Render entities
+            for entity in self.world_map.entity_tiles:
+                screen_x = entity.x * export_tile_size
+                screen_y = entity.y * export_tile_size
+                entity.render(surface, screen_x, screen_y, export_tile_size, export_tile_size)
+            
+            # Save image
+            pygame.image.save(surface, str(filepath))
+            print(f"Map exported to {filepath}")
+            
         except Exception as e:
-            print(f"Error exporting map image: {e}")
+            print(f"Error exporting map: {e}")
+
+
+
 
 class ProjectCard(QFrame):
     projectSelected = Signal(str)
