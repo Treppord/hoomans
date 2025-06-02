@@ -36,36 +36,54 @@ class CanvasWidget(QWidget):
         self.map_editor = map_editor
         self.pixmap = None
         self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.WheelFocus)  # Allow wheel events
         
     def paintEvent(self, event):
         if self.pixmap:
             painter = QPainter(self)
             painter.drawPixmap(0, 0, self.pixmap)
         else:
-            # Draw placeholder text
+            # Draw placeholder text with studio styling
             painter = QPainter(self)
-            painter.setPen(QColor("#2c3e50"))
-            painter.drawText(self.rect(), Qt.AlignCenter, "Map Canvas\nGenerate or create a new map to begin")
+            painter.setPen(QColor("#95a5a6"))  # Match the studio's placeholder color
+            painter.setFont(QFont("Arial", 18, QFont.Weight.Light))  # Match studio font weight
+            painter.drawText(self.rect(), Qt.AlignCenter, 
+                           "Map Canvas\nGenerate or create a new map to begin\nMouse wheel to zoom")
             
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.map_editor.mouse_pressed = True
-            # Use position() instead of deprecated pos()
             self.map_editor.paint_at_position(event.position().toPoint())
+        elif event.button() == Qt.MiddleButton:
+            self.map_editor.start_pan(event.position().toPoint())
             
     def mouseMoveEvent(self, event):
         if self.map_editor.mouse_pressed:
-            # Use position() instead of deprecated pos()
             self.map_editor.paint_at_position(event.position().toPoint())
+        elif hasattr(self.map_editor, 'panning') and self.map_editor.panning:
+            self.map_editor.update_pan(event.position().toPoint())
             
     def mouseReleaseEvent(self, event):
-        self.map_editor.mouse_pressed = False
-        self.map_editor.last_paint_pos = None
+        if event.button() == Qt.LeftButton:
+            self.map_editor.mouse_pressed = False
+            self.map_editor.last_paint_pos = None
+        elif event.button() == Qt.MiddleButton:
+            self.map_editor.stop_pan()
+        
+    def wheelEvent(self, event):
+        # Simple wheel event - just check if scrolling up or down
+        if event.angleDelta().y() > 0:
+            # Scroll up = zoom in
+            self.map_editor.handle_zoom(1, event.position().toPoint())
+        elif event.angleDelta().y() < 0:
+            # Scroll down = zoom out
+            self.map_editor.handle_zoom(-1, event.position().toPoint())
         
     def set_pixmap(self, pixmap):
         self.pixmap = pixmap
         self.setMinimumSize(pixmap.size())
         self.update()
+
         
 class MapEditorWidget(QWidget):
     """Enhanced map editor widget with full tile and entity placement capabilities"""
@@ -163,51 +181,173 @@ class MapEditorWidget(QWidget):
         layout.addWidget(controls_panel)
         layout.addWidget(canvas_panel)
         
+    def handle_zoom(self, direction, mouse_pos):
+        """Handle mouse wheel zooming - zoom towards mouse cursor"""
+        if not self.world_map:
+            return
+            
+        # Calculate zoom factor based on direction
+        zoom_factor = 1.1 if direction > 0 else 0.9
+        old_zoom = self.zoom_level
+        
+        # Apply zoom with limits
+        self.zoom_level = max(0.25, min(4.0, self.zoom_level * zoom_factor))
+        
+        if old_zoom != self.zoom_level:
+            # Calculate the world position under the mouse cursor BEFORE zoom
+            world_x = (mouse_pos.x() - self.camera_x) / (Tile.SIZE * old_zoom)
+            world_y = (mouse_pos.y() - self.camera_y) / (Tile.SIZE * old_zoom)
+            
+            # Calculate new camera position to keep the world position under the cursor AFTER zoom
+            new_screen_x = world_x * Tile.SIZE * self.zoom_level
+            new_screen_y = world_y * Tile.SIZE * self.zoom_level
+            
+            self.camera_x = mouse_pos.x() - new_screen_x
+            self.camera_y = mouse_pos.y() - new_screen_y
+            
+            # Update display
+            self.update_canvas()
+            self.update_zoom_info()
+
+
+
+    def start_pan(self, pos):
+        """Start panning with middle mouse button"""
+        self.panning = True
+        self.pan_start_pos = pos
+        self.pan_start_camera = (self.camera_x, self.camera_y)
+
+    def update_pan(self, pos):
+        """Update camera position during panning"""
+        if hasattr(self, 'panning') and self.panning:
+            # Simple delta movement
+            delta_x = pos.x() - self.pan_start_pos.x()
+            delta_y = pos.y() - self.pan_start_pos.y()
+            
+            self.camera_x = self.pan_start_camera[0] + delta_x
+            self.camera_y = self.pan_start_camera[1] + delta_y
+            
+            self.update_canvas()
+
+    def stop_pan(self):
+        """Stop panning"""
+        self.panning = False
+
+    def update_zoom_info(self):
+        """Update the zoom information display"""
+        if hasattr(self, 'zoom_info'):
+            zoom_percent = int(self.zoom_level * 100)
+            self.zoom_info.setText(f"Zoom: {zoom_percent}% (Mouse wheel to zoom)")
+
+    def toggle_grid(self, enabled):
+        """Toggle grid visibility"""
+        self.grid_visible = enabled
+        self.update_canvas()
+        
     def create_enhanced_controls_panel(self):
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
-                background-color: #f8f9fa;
-                border-right: 1px solid #e0e0e0;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
+                border-right: 1px solid rgba(0, 0, 0, 0.08);
             }
             QGroupBox {
-                color: #2c3e50;
+                color: #000000;
                 font-weight: bold;
                 margin-top: 10px;
+                background: transparent;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
+                background: transparent;
+                color: #000000;
             }
             QLabel {
-                color: #2c3e50;
+                color: #000000;
+                background: transparent;
             }
             QSpinBox, QComboBox {
-                color: #2c3e50;
+                color: #000000;
                 background: white;
                 border: 1px solid #ddd;
                 padding: 5px;
                 border-radius: 3px;
             }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background: white;
+                border: 1px solid #ddd;
+            }
+            QSpinBox::up-arrow, QSpinBox::down-arrow {
+                color: #000000;
+            }
+            QSpinBox QLineEdit {
+                color: #000000;
+                background: white;
+            }
+            QComboBox::drop-down {
+                background: white;
+                border: 1px solid #ddd;
+            }
+            QComboBox::down-arrow {
+                color: #000000;
+            }
             QCheckBox {
-                color: #2c3e50;
+                color: #000000;
+                background: transparent;
+            }
+            QCheckBox::indicator {
+                background: white;
+                border: 1px solid #ddd;
             }
             QPushButton {
-                color: #2c3e50;
+                color: #000000;
                 background: white;
                 border: 1px solid #ddd;
                 padding: 8px;
                 border-radius: 3px;
             }
+            QPushButton:hover {
+                background: rgba(74, 144, 226, 0.1);
+                border: 1px solid #4A90E2;
+                color: #000000;
+            }
             QPushButton:checked {
                 background: #4A90E2;
+                color: white;
+                border: 1px solid #4A90E2;
+            }
+            QPushButton:pressed {
+                background: #357ABD;
                 color: white;
             }
         """)
         
         scroll_area = QScrollArea()
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: rgba(0, 0, 0, 0.1);
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(74, 144, 226, 0.7);
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(74, 144, 226, 1.0);
+            }
+        """)
+        
         scroll_widget = QWidget()
+        scroll_widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(scroll_widget)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
@@ -215,7 +355,13 @@ class MapEditorWidget(QWidget):
         # Title
         title = QLabel("Map Editor")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        title.setStyleSheet("color: #2c3e50; padding: 10px 0px;")
+        title.setStyleSheet("""
+            QLabel {
+                color: #000000; 
+                padding: 10px 0px;
+                background: transparent;
+            }
+        """)
         layout.addWidget(title)
         
         # Tools section
@@ -277,26 +423,38 @@ class MapEditorWidget(QWidget):
         # Map generation section
         generation_group = QGroupBox("Map Generation")
         gen_layout = QFormLayout(generation_group)
-        
+
         self.width_spin = QSpinBox()
         self.width_spin.setRange(32, 512)
         self.width_spin.setValue(128)
-        gen_layout.addRow("Width:", self.width_spin)
-        
+        self.width_spin.setStyleSheet("color: #000000; background: white;")
+
+        width_label = QLabel("Width:")
+        width_label.setStyleSheet("color: #000000; background: transparent;")
+        gen_layout.addRow(width_label, self.width_spin)
+
         self.height_spin = QSpinBox()
         self.height_spin.setRange(32, 512)
         self.height_spin.setValue(128)
-        gen_layout.addRow("Height:", self.height_spin)
-        
+        self.height_spin.setStyleSheet("color: #000000; background: white;")
+
+        height_label = QLabel("Height:")
+        height_label.setStyleSheet("color: #000000; background: transparent;")
+        gen_layout.addRow(height_label, self.height_spin)
+
         self.seed_spin = QSpinBox()
         self.seed_spin.setRange(0, 999999)
         self.seed_spin.setValue(random.randint(0, 999999))
-        gen_layout.addRow("Seed:", self.seed_spin)
-        
+        self.seed_spin.setStyleSheet("color: #000000; background: white;")
+
+        seed_label = QLabel("Seed:")
+        seed_label.setStyleSheet("color: #000000; background: transparent;")
+        gen_layout.addRow(seed_label, self.seed_spin)
+
         self.generate_btn = ModernButton("Generate Map", primary=True)
         self.generate_btn.clicked.connect(self.generate_new_map)
         gen_layout.addWidget(self.generate_btn)
-        
+
         layout.addWidget(generation_group)
         
         # View controls
@@ -308,14 +466,17 @@ class MapEditorWidget(QWidget):
         self.grid_checkbox.toggled.connect(self.toggle_grid)
         view_layout.addWidget(self.grid_checkbox)
         
-        zoom_layout = QHBoxLayout()
-        zoom_layout.addWidget(QLabel("Zoom:"))
-        self.zoom_slider = QSlider(Qt.Horizontal)
-        self.zoom_slider.setRange(25, 400)
-        self.zoom_slider.setValue(100)
-        self.zoom_slider.valueChanged.connect(self.update_zoom)
-        zoom_layout.addWidget(self.zoom_slider)
-        view_layout.addLayout(zoom_layout)
+        # Add zoom info label
+        self.zoom_info = QLabel("Zoom: 100% (Mouse wheel to zoom)")
+        self.zoom_info.setStyleSheet("""
+            QLabel {
+                color: #000000; 
+                font-size: 11px; 
+                padding: 5px;
+                background: transparent;
+            }
+        """)
+        view_layout.addWidget(self.zoom_info)
         
         layout.addWidget(view_group)
         
@@ -348,12 +509,14 @@ class MapEditorWidget(QWidget):
         scroll_area.setWidget(scroll_widget)
         scroll_area.setWidgetResizable(True)
         return scroll_area
-        
+
+
     def create_canvas_panel(self):
         panel = QFrame()
         panel.setStyleSheet("""
             QFrame {
-                background-color: #ffffff;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
                 border: none;
             }
         """)
@@ -381,6 +544,38 @@ class MapEditorWidget(QWidget):
         scroll_area = QScrollArea()
         scroll_area.setWidget(self.canvas_widget)
         scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: rgba(0, 0, 0, 0.1);
+                width: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(74, 144, 226, 0.7);
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(74, 144, 226, 1.0);
+            }
+            QScrollBar:horizontal {
+                background: rgba(0, 0, 0, 0.1);
+                height: 8px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:horizontal {
+                background: rgba(74, 144, 226, 0.7);
+                border-radius: 4px;
+                min-width: 20px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: rgba(74, 144, 226, 1.0);
+            }
+        """)
         layout.addWidget(scroll_area)
         
         return panel
@@ -403,11 +598,7 @@ class MapEditorWidget(QWidget):
         self.selected_entity_type = entity_type
         for entity, btn in self.entity_buttons.items():
             btn.setChecked(entity == entity_type)
-            
-    def toggle_grid(self, enabled):
-        """Toggle grid visibility"""
-        self.grid_visible = enabled
-        self.update_canvas()
+
         
     def update_zoom(self, value):
         """Update zoom level"""
@@ -478,9 +669,13 @@ class MapEditorWidget(QWidget):
         if not self.world_map:
             return
             
-        # Convert screen position to tile coordinates
-        tile_x = int((pos.x() - self.camera_x) / (Tile.SIZE * self.zoom_level))
-        tile_y = int((pos.y() - self.camera_y) / (Tile.SIZE * self.zoom_level))
+        # Simple coordinate conversion like in editor_camera.py
+        world_x = (pos.x() - self.camera_x) / (Tile.SIZE * self.zoom_level)
+        world_y = (pos.y() - self.camera_y) / (Tile.SIZE * self.zoom_level)
+        
+        # Convert to tile coordinates
+        tile_x = int(world_x)
+        tile_y = int(world_y)
         
         # Check bounds
         if not (0 <= tile_x < self.world_map.width and 0 <= tile_y < self.world_map.height):
@@ -652,60 +847,90 @@ class MapEditorWidget(QWidget):
                 stack.append((x + dx, y + dy))
                     
     def update_canvas(self):
-        """Update the canvas display"""
+        """Update the canvas display with proper coordinate transformation"""
         if not self.world_map:
             return
             
         try:
-            # Calculate canvas size
-            canvas_width = int(self.world_map.width * Tile.SIZE * self.zoom_level)
-            canvas_height = int(self.world_map.height * Tile.SIZE * self.zoom_level)
+            # Calculate visible area to prevent rendering too much
+            canvas_widget_width = self.canvas_widget.width()
+            canvas_widget_height = self.canvas_widget.height()
             
-            # Create pygame surface
-            surface = pygame.Surface((canvas_width, canvas_height))
+            # Calculate which tiles are visible
+            tile_size = int(Tile.SIZE * self.zoom_level)
+            
+            # Prevent tile_size from being too small or too large
+            if tile_size < 1:
+                tile_size = 1
+            elif tile_size > 5000:  # Prevent excessive memory usage
+                tile_size = 5000
+            
+            # Calculate canvas size based on zoom, but limit it
+            canvas_width = min(self.world_map.width * tile_size, 8192)  # Max 8192 pixels
+            canvas_height = min(self.world_map.height * tile_size, 8192)  # Max 8192 pixels
+            
+            # Create pygame surface with safe dimensions
+            surface = pygame.Surface((max(canvas_width, 1), max(canvas_height, 1)))
             surface.fill((255, 255, 255))  # White background
             
-            # Render tiles
-            tile_size = int(Tile.SIZE * self.zoom_level)
-            for y in range(self.world_map.height):
-                for x in range(self.world_map.width):
-                    tile = self.world_map.get_tile(x, y)
-                    if tile:
-                        screen_x = x * tile_size
-                        screen_y = y * tile_size
-                        tile.render(surface, screen_x, screen_y, tile_size, tile_size)
+            # Only render tiles that might be visible
+            start_x = max(0, int(-self.camera_x / tile_size) - 1)
+            end_x = min(self.world_map.width, int((-self.camera_x + canvas_widget_width) / tile_size) + 2)
+            start_y = max(0, int(-self.camera_y / tile_size) - 1)
+            end_y = min(self.world_map.height, int((-self.camera_y + canvas_widget_height) / tile_size) + 2)
+            
+            # Render visible tiles only
+            for y in range(start_y, end_y):
+                for x in range(start_x, end_x):
+                    if 0 <= x < self.world_map.width and 0 <= y < self.world_map.height:
+                        tile = self.world_map.get_tile(x, y)
+                        if tile:
+                            screen_x = x * tile_size
+                            screen_y = y * tile_size
+                            
+                            # Make sure we don't render outside the surface
+                            if 0 <= screen_x < canvas_width and 0 <= screen_y < canvas_height:
+                                tile.render(surface, screen_x, screen_y, tile_size, tile_size)
             
             # Render entities using the entity manager
             if hasattr(self.world_map, 'entity_manager') and self.world_map.entity_manager:
-                # Create a simple camera object for entity rendering
                 class SimpleCamera:
+                    def __init__(self, zoom):
+                        self.zoom = zoom
+                        
                     def apply(self, world_x, world_y, width, height):
-                        return (int(world_x * self.zoom_level), 
-                            int(world_y * self.zoom_level), 
-                            int(width * self.zoom_level), 
-                            int(height * self.zoom_level))
+                        return (int(world_x * self.zoom), 
+                            int(world_y * self.zoom), 
+                            int(width * self.zoom), 
+                            int(height * self.zoom))
                 
-                camera = SimpleCamera()
-                camera.zoom_level = self.zoom_level
+                camera = SimpleCamera(self.zoom_level)
                 
-                # Render all entity tiles
+                # Render entities that are in visible area
                 for entity in self.world_map.entity_manager.entity_tiles:
-                    entity.render(surface, camera)
+                    entity_screen_x = entity.base_x * tile_size
+                    entity_screen_y = entity.base_y * tile_size
+                    
+                    # Only render if entity is in visible area
+                    if (start_x <= entity.base_x <= end_x and 
+                        start_y <= entity.base_y <= end_y):
+                        entity.render(surface, camera)
             
-            # Render grid if enabled
-            if self.grid_visible and self.zoom_level >= 0.5:
+            # Render grid if enabled and zoom is reasonable
+            if self.grid_visible and 0.5 <= self.zoom_level <= 2.0:
                 self.render_grid(surface, tile_size)
             
-            # Convert to QPixmap
+            # Convert to QPixmap safely
             w, h = surface.get_size()
-            raw = pygame.image.tobytes(surface, 'RGB')
-            
-            from PySide6.QtGui import QImage
-            qimg = QImage(raw, w, h, QImage.Format_RGB888)
-            pixmap = QPixmap.fromImage(qimg)
-            
-            # Update canvas widget
-            self.canvas_widget.set_pixmap(pixmap)
+            if w > 0 and h > 0:
+                raw = pygame.image.tobytes(surface, 'RGB')
+                
+                from PySide6.QtGui import QImage
+                qimg = QImage(raw, w, h, QImage.Format_RGB888)
+                pixmap = QPixmap.fromImage(qimg)
+                
+                # Update canvas widget
+                self.canvas_widget.set_pixmap(pixmap)
             
         except Exception as e:
             print(f"Error updating canvas: {e}")
@@ -740,8 +965,25 @@ class MapEditorWidget(QWidget):
                         f"| Entities: {entity_count} "
                         f"| Zoom: {int(self.zoom_level * 100)}%")
             self.canvas_info.setText(info_text)
+            self.canvas_info.setStyleSheet("""
+                QLabel {
+                    color: #34495e;
+                    background: transparent;
+                    padding: 5px 0px;
+                    font-weight: medium;
+                }
+            """)
         else:
             self.canvas_info.setText("No map loaded")
+            self.canvas_info.setStyleSheet("""
+                QLabel {
+                    color: #7f8c8d;
+                    background: transparent;
+                    padding: 5px 0px;
+                    font-style: italic;
+                }
+            """)
+
 
             
     def save_map(self):
