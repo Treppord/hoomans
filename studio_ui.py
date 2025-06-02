@@ -195,21 +195,9 @@ class MapEditorWidget(QWidget):
         self.zoom_level = max(0.25, min(4.0, self.zoom_level * zoom_factor))
         
         if old_zoom != self.zoom_level:
-            # Calculate the world position under the mouse cursor BEFORE zoom
-            world_x = (mouse_pos.x() - self.camera_x) / (Tile.SIZE * old_zoom)
-            world_y = (mouse_pos.y() - self.camera_y) / (Tile.SIZE * old_zoom)
-            
-            # Calculate new camera position to keep the world position under the cursor AFTER zoom
-            new_screen_x = world_x * Tile.SIZE * self.zoom_level
-            new_screen_y = world_y * Tile.SIZE * self.zoom_level
-            
-            self.camera_x = mouse_pos.x() - new_screen_x
-            self.camera_y = mouse_pos.y() - new_screen_y
-            
-            # Update display
+            # Update display without changing camera position
             self.update_canvas()
             self.update_zoom_info()
-
 
 
     def start_pan(self, pos):
@@ -671,14 +659,20 @@ class MapEditorWidget(QWidget):
             return
             
         # Convert screen coordinates to world coordinates properly
-        world_x = (pos.x() - self.camera_x) / (Tile.SIZE * self.zoom_level)
-        world_y = (pos.y() - self.camera_y) / (Tile.SIZE * self.zoom_level)
+        # Account for camera offset and zoom level
+        tile_size = int(Tile.SIZE * self.zoom_level)
+
+        # Apply same clamping as update_canvas
+        if tile_size < 1:
+            tile_size = 1
+        elif tile_size > 1000:
+            tile_size = 1000
+
+        # Convert screen coordinates to tile coordinates using the clamped tile_size
+        tile_x = int((pos.x() - self.camera_x) / tile_size)
+        tile_y = int((pos.y() - self.camera_y) / tile_size)
         
-        # Convert to tile coordinates
-        tile_x = int(world_x)
-        tile_y = int(world_y)
-        
-        # Check bounds
+        # Ensure we're within bounds
         if not (0 <= tile_x < self.world_map.width and 0 <= tile_y < self.world_map.height):
             return
             
@@ -773,6 +767,7 @@ class MapEditorWidget(QWidget):
             import traceback
             traceback.print_exc()
 
+
             
     def flood_fill(self, start_x, start_y, new_tile_type):
         """Flood fill algorithm for fill tool"""
@@ -839,11 +834,12 @@ class MapEditorWidget(QWidget):
             surface = pygame.Surface((max(canvas_width, 1), max(canvas_height, 1)))
             surface.fill((255, 255, 255))  # White background
             
-            # Render all tiles
+            # Render all tiles with consistent coordinate system
             for y in range(self.world_map.height):
                 for x in range(self.world_map.width):
                     tile = self.world_map.get_tile(x, y)
                     if tile:
+                        # Use exact same coordinate calculation as paint_at_position
                         screen_x = x * tile_size
                         screen_y = y * tile_size
                         
@@ -860,6 +856,7 @@ class MapEditorWidget(QWidget):
                         
                     def apply(self, world_x, world_y, width, height):
                         # Convert world coordinates (in pixels) to screen coordinates
+                        # Use exact same calculation as paint_at_position
                         screen_x = int((world_x / Tile.SIZE) * self.tile_size)
                         screen_y = int((world_y / Tile.SIZE) * self.tile_size)
                         screen_width = int((width / Tile.SIZE) * self.tile_size)
