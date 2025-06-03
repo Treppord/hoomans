@@ -1,0 +1,41 @@
+[
+  {
+    "name": "Stone",
+    "description": "A common building material",
+    "category": "resource",
+    "icon_path": "items/stone.png",
+    "max_stack": 64,
+    "rarity": "common",
+    "value": 1,
+    "weight": 1.0,
+    "tags": [],
+    "type": "resource",
+    "id": "stone"
+  },
+  {
+    "name": "Branch",
+    "description": "Collected from trees",
+    "category": "resource",
+    "icon_path": "items/branch.png",
+    "max_stack": 64,
+    "rarity": "common",
+    "value": 1,
+    "weight": 1.0,
+    "tags": [],
+    "type": "resource",
+    "id": "branch"
+  },
+  {
+    "name": "Plant Fiber",
+    "description": "Used for crafting",
+    "category": "resource",
+    "icon_path": "items/fiber.png",
+    "max_stack": 64,
+    "rarity": "common",
+    "value": 1,
+    "weight": 1.0,
+    "tags": [],
+    "type": "resource",
+    "id": "fiber"
+  }
+]

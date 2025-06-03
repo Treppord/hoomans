@@ -1,0 +1,42 @@
+[
+  {
+    "name": "House Schematic",
+    "description": "Blueprint for a simple house",
+    "category": "schematic",
+    "icon_path": "items/house_schematic.png",
+    "max_stack": 5,
+    "rarity": "common",
+    "value": 50,
+    "weight": 1.0,
+    "tags": [],
+    "structure_type": "house",
+    "width": 2,
+    "height": 2,
+    "required_materials": {},
+    "build_time": 0.0,
+    "skill_required": "construction",
+    "skill_level": 1,
+    "type": "schematic",
+    "id": "house_schematic"
+  },
+  {
+    "name": "Campfire Schematic",
+    "description": "Blueprint for a campfire",
+    "category": "schematic",
+    "icon_path": "items/campfire_schematic.png",
+    "max_stack": 5,
+    "rarity": "common",
+    "value": 20,
+    "weight": 1.0,
+    "tags": [],
+    "structure_type": "campfire",
+    "width": 1,
+    "height": 1,
+    "required_materials": {},
+    "build_time": 0.0,
+    "skill_required": "construction",
+    "skill_level": 1,
+    "type": "schematic",
+    "id": "campfire_schematic"
+  }
+]

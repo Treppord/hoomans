@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Apple",
+    "description": "A juicy red apple",
+    "category": "food",
+    "icon_path": "items/apple.png",
+    "max_stack": 16,
+    "rarity": "common",
+    "value": 5,
+    "weight": 1.0,
+    "tags": [],
+    "effect_value": 2,
+    "effect_type": "hunger",
+    "duration": 0.0,
+    "cooldown": 0.0,
+    "type": "food",
+    "id": "apple"
+  },
+  {
+    "name": "Berries",
+    "description": "Small wild berries",
+    "category": "food",
+    "icon_path": "items/berries.png",
+    "max_stack": 32,
+    "rarity": "common",
+    "value": 2,
+    "weight": 1.0,
+    "tags": [],
+    "effect_value": 1,
+    "effect_type": "hunger",
+    "duration": 0.0,
+    "cooldown": 0.0,
+    "type": "food",
+    "id": "berries"
+  }
+]

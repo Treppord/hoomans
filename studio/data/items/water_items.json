@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Water Bottle",
+    "description": "A bottle of fresh water",
+    "category": "water",
+    "icon_path": "items/water_bottle.png",
+    "max_stack": 16,
+    "rarity": "common",
+    "value": 3,
+    "weight": 1.0,
+    "tags": [],
+    "effect_value": 2,
+    "effect_type": "thirst",
+    "duration": 0.0,
+    "cooldown": 0.0,
+    "type": "water",
+    "id": "water_bottle"
+  },
+  {
+    "name": "Canteen",
+    "description": "A large water container",
+    "category": "water",
+    "icon_path": "items/canteen.png",
+    "max_stack": 4,
+    "rarity": "common",
+    "value": 10,
+    "weight": 1.0,
+    "tags": [],
+    "effect_value": 4,
+    "effect_type": "thirst",
+    "duration": 0.0,
+    "cooldown": 0.0,
+    "type": "water",
+    "id": "canteen"
+  }
+]

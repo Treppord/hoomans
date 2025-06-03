@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Stone Axe",
+    "description": "A crude axe made of stone",
+    "category": "tool",
+    "icon_path": "items/stone_axe.png",
+    "max_stack": 1,
+    "rarity": "common",
+    "value": 25,
+    "weight": 1.0,
+    "tags": [],
+    "tool_type": "axe",
+    "durability": 50,
+    "effectiveness": 0.8,
+    "repair_material": null,
+    "enchantments": [],
+    "type": "tool",
+    "id": "stone_axe"
+  },
+  {
+    "name": "Stone Pickaxe",
+    "description": "A crude pickaxe made of stone",
+    "category": "tool",
+    "icon_path": "items/stone_pickaxe.png",
+    "max_stack": 1,
+    "rarity": "common",
+    "value": 25,
+    "weight": 1.0,
+    "tags": [],
+    "tool_type": "pickaxe",
+    "durability": 50,
+    "effectiveness": 0.8,
+    "repair_material": null,
+    "enchantments": [],
+    "type": "tool",
+    "id": "stone_pickaxe"
+  }
+]
