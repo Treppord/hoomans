@@ -570,8 +570,14 @@ class StudioUI(QMainWindow):
                 self.tab_widget.setCurrentIndex(i)
                 return
         
-        # Create new item editor widget
-        item_editor = ItemEditorWidget()
+        # Get current project path
+        if self.current_project_name:
+            project_path = str(self.projects_path / self.current_project_name)
+        else:
+            project_path = None
+        
+        # Create new item editor widget with project path
+        item_editor = ItemEditorWidget(project_path)
         
         # Add tab
         tab_index = self.tab_widget.addTab(item_editor, tab_name)

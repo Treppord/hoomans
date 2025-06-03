@@ -28,8 +28,9 @@ from PySide6.QtCore import QPoint
 class ItemEditorWidget(QWidget):
     """Item editor widget for creating and managing game items"""
     
-    def __init__(self):
+    def __init__(self, project_path=None):
         super().__init__()
+        self.project_path = project_path
         self.item_system = None
         self.current_item = None
         self.setup_ui()
@@ -38,9 +39,12 @@ class ItemEditorWidget(QWidget):
     def setup_item_system(self):
         """Initialize the item system"""
         try:
-            # Get project root (navigate up from current file location)
-            current_file = os.path.abspath(__file__)
-            project_root = os.path.dirname(current_file)
+            # Use project path if provided, otherwise use current file directory
+            if self.project_path:
+                project_root = self.project_path
+            else:
+                current_file = os.path.abspath(__file__)
+                project_root = os.path.dirname(current_file)
             
             # Add engine path to sys.path if not already there
             engine_path = os.path.join(project_root, 'engine')
